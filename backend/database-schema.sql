@@ -1,6 +1,8 @@
 -- =====================================================
--- Spices Shop Billing System - Database Schema
+-- Spices Shop Billing System - Complete Database Schema
 -- =====================================================
+-- This is a complete schema with all features included
+-- No migrations needed - use this for fresh installations
 
 -- Create Database
 CREATE DATABASE IF NOT EXISTS spices_billing_system;
@@ -13,7 +15,7 @@ CREATE TABLE users (
     user_id INT PRIMARY KEY AUTO_INCREMENT,
     company_name VARCHAR(200) NOT NULL,
     role ENUM('ADMIN', 'CASHIER') NOT NULL,
-    password VARCHAR(255) NOT NULL, -- Will store hashed password
+    password VARCHAR(255) NOT NULL, -- Stores hashed password
     gst_number VARCHAR(50),
     fssai_license VARCHAR(50),
     address TEXT,
@@ -53,6 +55,7 @@ CREATE TABLE products (
     selling_price_per_unit DECIMAL(10, 2) NOT NULL, -- For PACKED: price per pack. For LOOSE: price per kg/gm
     quantity DECIMAL(10, 2) NOT NULL DEFAULT 0, -- Current stock quantity
     min_stock_level DECIMAL(10, 2) DEFAULT 0, -- Alert when stock goes below this
+    gst_percentage DECIMAL(5, 2) DEFAULT 0.00, -- GST percentage for the product
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -68,6 +71,26 @@ CREATE TABLE products (
 );
 
 -- =====================================================
+-- 4. B2B CUSTOMERS TABLE (For B2B invoice customers)
+-- =====================================================
+CREATE TABLE b2b_customers (
+    customer_id INT PRIMARY KEY AUTO_INCREMENT,
+    company_name VARCHAR(200) NOT NULL,
+    customer_name VARCHAR(200) NOT NULL, -- Contact person name
+    gst_number VARCHAR(50) UNIQUE,
+    address VARCHAR(500),
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    state_code VARCHAR(10), -- Extracted from GST number (first 2 digits)
+    company_name_in_invoice VARCHAR(200), -- Company name as it appears in invoice
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_gst_number (gst_number),
+    INDEX idx_company_name (company_name),
+    INDEX idx_phone (phone)
+);
+
+-- =====================================================
 -- 5. INVOICES/BILLS TABLE
 -- =====================================================
 CREATE TABLE invoices (
@@ -78,13 +101,29 @@ CREATE TABLE invoices (
     discount_amount DECIMAL(10, 2) DEFAULT 0,
     total_amount DECIMAL(10, 2) NOT NULL,
     payment_method ENUM('CASH', 'CARD', 'UPI', 'MIXED') DEFAULT 'CASH',
+    -- Mixed payment breakdown (only used when paymentMethod is MIXED)
+    cash_amount DECIMAL(10, 2) DEFAULT 0,
+    card_amount DECIMAL(10, 2) DEFAULT 0,
+    upi_amount DECIMAL(10, 2) DEFAULT 0,
     cashier_id INT NOT NULL, -- User who created the invoice
+    -- Invoice status and cancellation
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE', -- ACTIVE, CANCELLATION_REQUESTED, CANCELLED
+    cancellation_requested_at TIMESTAMP NULL,
+    cancellation_reason TEXT NULL,
+    -- B2B Invoice Fields
+    invoice_type VARCHAR(10) DEFAULT 'B2C', -- B2B or B2C
+    b2b_customer_id INT NULL, -- Foreign key to b2b_customers (for B2B invoices)
+    eway_bill_number VARCHAR(50) NULL, -- E-way bill number (different for each invoice)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (cashier_id) REFERENCES users(user_id) ON DELETE RESTRICT,
+    FOREIGN KEY (b2b_customer_id) REFERENCES b2b_customers(customer_id) ON DELETE SET NULL,
     INDEX idx_invoice_number (invoice_number),
     INDEX idx_cashier_id (cashier_id),
-    INDEX idx_created_at (created_at)
+    INDEX idx_created_at (created_at),
+    INDEX idx_invoice_type (invoice_type),
+    INDEX idx_b2b_customer_id (b2b_customer_id),
+    INDEX idx_invoice_status (status)
 );
 
 -- =====================================================
@@ -96,13 +135,13 @@ CREATE TABLE invoice_items (
     product_id INT NOT NULL,
     product_name VARCHAR(200) NOT NULL, -- Store snapshot of product name
     barcode VARCHAR(100), -- Store snapshot of barcode
-    packaging_type ENUM('PACKED', 'LOOSE') NOT NULL, -- Store snapshot
-    packaging_size DECIMAL(10, 3) NULL, -- Store snapshot (NULL for loose)
     quantity DECIMAL(10, 2) NOT NULL, -- For PACKED: number of packs. For LOOSE: weight (kg/gm)
     unit_price DECIMAL(10, 2) NOT NULL, -- Price at time of sale
     discount_percent DECIMAL(5, 2) DEFAULT 0,
     discount_amount DECIMAL(10, 2) DEFAULT 0,
     total_price DECIMAL(10, 2) NOT NULL, -- (quantity * unit_price) - discount
+    -- B2B Invoice Item Fields
+    hsn_code VARCHAR(20) NULL, -- HSN code for B2B invoices (default: 090411 for spices)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (invoice_id) REFERENCES invoices(invoice_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE RESTRICT,
@@ -154,40 +193,6 @@ CREATE TABLE monthly_sales_summary (
 );
 
 -- =====================================================
--- INSERT DEFAULT DATA
--- =====================================================
-
--- Insert default admin user (password should be hashed in application)
--- Example: company_name = "My Spices Shop", password = "admin123" (hash it)
-INSERT INTO users (company_name, role, password) VALUES
-('My Spices Shop', 'ADMIN', '$2a$10$YourHashedPasswordHere');
-
--- Insert default cashier user (password should be hashed in application)
--- Example: company_name = "My Spices Shop", password = "cashier123" (hash it)
-INSERT INTO users (company_name, role, password) VALUES
-('My Spices Shop', 'CASHIER', '$2a$10$YourHashedPasswordHere');
-
--- Insert some default categories
-INSERT INTO categories (category_name, description) VALUES
-('Whole Spices', 'Whole spices like cardamom, cinnamon, cloves'),
-('Powdered Spices', 'Ground spices like turmeric, red chili powder'),
-('Seeds', 'Spice seeds like cumin, fennel, mustard'),
-('Herbs', 'Dried herbs and leaves'),
-('Blends', 'Spice blends and masalas');
-
--- Example: Insert products (Cardamom variants)
--- Packed variants
-INSERT INTO products (product_name, category_id, product_code, barcode, packaging_type, packaging_size, packaging_unit, purchase_price, selling_price_per_unit, quantity) VALUES
-('Cardamom', 1, 'CARD-250GM', '1234567890123', 'PACKED', 0.250, 'kg', 150.00, 200.00, 100.00),
-('Cardamom', 1, 'CARD-500GM', '1234567890124', 'PACKED', 0.500, 'kg', 300.00, 380.00, 50.00),
-('Cardamom', 1, 'CARD-1KG', '1234567890125', 'PACKED', 1.000, 'kg', 580.00, 750.00, 30.00),
-('Cardamom', 1, 'CARD-2KG', '1234567890126', 'PACKED', 2.000, 'kg', 1150.00, 1450.00, 20.00);
-
--- Loose variant (sold by weight)
-INSERT INTO products (product_name, category_id, product_code, barcode, packaging_type, packaging_size, packaging_unit, purchase_price, selling_price_per_unit, quantity) VALUES
-('Cardamom', 1, 'CARD-LOOSE', '1234567890127', 'LOOSE', NULL, 'kg', 600.00, 750.00, 50.00);
-
--- =====================================================
 -- VIEWS FOR REPORTING
 -- =====================================================
 
@@ -225,6 +230,7 @@ SELECT
     SUM(discount_amount) as total_discount,
     SUM(total_amount - tax_amount - discount_amount) as net_sales
 FROM invoices
+WHERE status = 'ACTIVE'
 GROUP BY DATE(created_at);
 
 -- View: Product Sales Summary
@@ -242,6 +248,7 @@ SELECT
 FROM products p
 INNER JOIN invoice_items ii ON p.product_id = ii.product_id
 INNER JOIN invoices i ON ii.invoice_id = i.invoice_id
+WHERE i.status = 'ACTIVE'
 GROUP BY p.product_id, p.product_code, p.product_name, p.packaging_type, p.packaging_size;
 
 -- =====================================================
