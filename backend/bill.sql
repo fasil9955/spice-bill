@@ -94,6 +94,29 @@ CREATE TABLE `categories` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `courier_requests`
+--
+
+DROP TABLE IF EXISTS `courier_requests`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `courier_requests` (
+  `courier_id` int NOT NULL AUTO_INCREMENT,
+  `address` text,
+  `company_name` varchar(200) NOT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `customer_name` varchar(200) NOT NULL,
+  `invoice_id` int DEFAULT NULL,
+  `invoice_number` varchar(50) DEFAULT NULL,
+  `phone_1` varchar(20) DEFAULT NULL,
+  `phone_2` varchar(20) DEFAULT NULL,
+  `status` varchar(20) DEFAULT NULL,
+  `tracking_id` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`courier_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `daily_sales_report`
 --
 
@@ -177,7 +200,7 @@ CREATE TABLE `invoice_items` (
   KEY `idx_product_id` (`product_id`),
   CONSTRAINT `invoice_items_ibfk_1` FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`invoice_id`) ON DELETE CASCADE,
   CONSTRAINT `invoice_items_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `products` (`product_id`) ON DELETE RESTRICT
-) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -217,7 +240,7 @@ CREATE TABLE `invoices` (
   KEY `idx_invoice_status` (`status`),
   CONSTRAINT `invoices_ibfk_1` FOREIGN KEY (`cashier_id`) REFERENCES `users` (`user_id`) ON DELETE RESTRICT,
   CONSTRAINT `invoices_ibfk_2` FOREIGN KEY (`b2b_customer_id`) REFERENCES `b2b_customers` (`customer_id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -463,4 +486,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-01-15 15:34:15
+-- Dump completed on 2026-01-15 18:15:22
