@@ -1,0 +1,192 @@
+package com.spicesshop.billing.service;
+
+import com.spicesshop.billing.dto.BarcodeParseResult;
+import com.spicesshop.billing.model.Category;
+import com.spicesshop.billing.model.InvoiceItem;
+import com.spicesshop.billing.model.Product;
+import com.spicesshop.billing.repository.CategoryRepository;
+import com.spicesshop.billing.repository.InvoiceItemRepository;
+import com.spicesshop.billing.repository.ProductRepository;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class ProductService {
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    @Autowired
+    private InvoiceItemRepository invoiceItemRepository;
+
+    public List<Product> getAllProducts(String companyName) {
+        return this.productRepository.findByCompanyNameAndIsActiveTrue(companyName);
+    }
+
+    public Optional<Product> getProductById(Integer id, String companyName) {
+        Optional<Product> product = this.productRepository.findById(id);
+        if (product.isPresent() && product.get().getCompanyName().equals(companyName)) {
+            return product;
+        }
+        return Optional.empty();
+    }
+
+    public Optional<Product> getProductByBarcode(String barcode, String companyName) {
+        return this.productRepository.findByCompanyNameAndBarcode(companyName, barcode);
+    }
+
+    public Optional<BarcodeParseResult> parseBarcodeWithWeight(String fullBarcode, String companyName) {
+        if (fullBarcode == null || fullBarcode.trim().isEmpty()) {
+            return Optional.empty();
+        }
+
+        Optional<Product> exactMatch = this.productRepository.findByCompanyNameAndBarcode(companyName, fullBarcode);
+        if (exactMatch.isPresent()) {
+            return Optional.of(new BarcodeParseResult(exactMatch.get(), BigDecimal.ZERO, fullBarcode, fullBarcode));
+        }
+
+        Pattern pattern = Pattern.compile("^(.+?[A-Za-z])(\\d+)$");
+        Matcher matcher = pattern.matcher(fullBarcode);
+
+        if (matcher.matches()) {
+            String baseBarcode = matcher.group(1);
+            String weightStr = matcher.group(2);
+            try {
+                BigDecimal weight = new BigDecimal(weightStr);
+                Optional<Product> product = this.productRepository.findByCompanyNameAndBarcode(companyName, baseBarcode);
+                if (product.isPresent()) {
+                    return Optional.of(new BarcodeParseResult(product.get(), weight, baseBarcode, fullBarcode));
+                }
+            } catch (NumberFormatException ignored) {}
+        }
+
+        Optional<Product> baseMatch = this.productRepository.findByCompanyNameAndBarcode(companyName, fullBarcode);
+        if (baseMatch.isPresent()) {
+            return Optional.of(new BarcodeParseResult(baseMatch.get(), BigDecimal.ZERO, fullBarcode, fullBarcode));
+        }
+
+        return Optional.empty();
+    }
+
+    public List<Product> getProductsByName(String productName, String companyName) {
+        return this.productRepository.findByCompanyNameAndProductName(companyName, productName);
+    }
+
+    public List<Product> getLowStockProducts(String companyName) {
+        return this.productRepository.findLowStockProductsByCompany(companyName);
+    }
+
+    @Transactional
+    public Product createProduct(Product product) {
+        String companyName = product.getCompanyName();
+        if (companyName == null || companyName.trim().isEmpty()) {
+            throw new RuntimeException("Company name is required");
+        }
+
+        if (product.getBarcode() != null && this.productRepository.findByCompanyNameAndBarcode(companyName, product.getBarcode()).isPresent()) {
+            throw new RuntimeException("Product with barcode '" + product.getBarcode() + "' already exists");
+        }
+
+        if (product.getProductCode() != null && this.productRepository.findByCompanyNameAndProductCode(companyName, product.getProductCode()).isPresent()) {
+            throw new RuntimeException("Product with product code '" + product.getProductCode() + "' already exists");
+        }
+
+        if (product.getCategory() != null && product.getCategory().getCategoryId() != null) {
+            Category category = this.categoryRepository.findById(product.getCategory().getCategoryId())
+                .orElseThrow(() -> new RuntimeException("Category with ID " + product.getCategory().getCategoryId() + " not found"));
+            product.setCategory(category);
+        } else {
+            product.setCategory(null);
+        }
+
+        return this.productRepository.save(product);
+    }
+
+    @Transactional
+    public Product updateProduct(Integer id, Product product, String companyName) {
+        Product existingProduct = this.productRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        if (!existingProduct.getCompanyName().equals(companyName)) {
+            throw new RuntimeException("Product not found or access denied");
+        }
+
+        if (product.getBarcode() != null && !product.getBarcode().equals(existingProduct.getBarcode()) && 
+            this.productRepository.findByCompanyNameAndBarcode(companyName, product.getBarcode()).isPresent()) {
+            throw new RuntimeException("Product with barcode '" + product.getBarcode() + "' already exists");
+        }
+
+        if (product.getProductCode() != null && !product.getProductCode().equals(existingProduct.getProductCode()) && 
+            this.productRepository.findByCompanyNameAndProductCode(companyName, product.getProductCode()).isPresent()) {
+            throw new RuntimeException("Product with product code '" + product.getProductCode() + "' already exists");
+        }
+
+        existingProduct.setCompanyName(companyName);
+
+        if (product.getCategory() != null && product.getCategory().getCategoryId() != null) {
+            Category category = this.categoryRepository.findById(product.getCategory().getCategoryId())
+                .orElseThrow(() -> new RuntimeException("Category with ID " + product.getCategory().getCategoryId() + " not found"));
+            existingProduct.setCategory(category);
+        } else {
+            existingProduct.setCategory(null);
+        }
+
+        existingProduct.setProductName(product.getProductName());
+        existingProduct.setProductCode(product.getProductCode());
+        existingProduct.setBarcode(product.getBarcode());
+        existingProduct.setSellingPricePerUnit(product.getSellingPricePerUnit());
+        existingProduct.setGstPercentage(product.getGstPercentage());
+        existingProduct.setHsnCode(product.getHsnCode());
+        existingProduct.setPackagingType(product.getPackagingType());
+        existingProduct.setUnit(product.getUnit());
+        existingProduct.setQuantity(product.getQuantity());
+        existingProduct.setMinStockLevel(product.getMinStockLevel());
+        existingProduct.setIsActive(product.getIsActive());
+
+        return this.productRepository.save(existingProduct);
+    }
+
+    @Transactional
+    public void deleteProduct(Integer id, String companyName) {
+        Product product = this.productRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        if (!product.getCompanyName().equals(companyName)) {
+            throw new RuntimeException("Product not found or access denied");
+        }
+
+        List<InvoiceItem> invoiceItems = this.invoiceItemRepository.findByProduct_ProductId(id);
+        if (!invoiceItems.isEmpty()) {
+            throw new RuntimeException("Cannot delete product: It is referenced in " + invoiceItems.size() + " invoice item(s).");
+        }
+
+        try {
+            this.productRepository.delete(product);
+        } catch (DataIntegrityViolationException e) {
+            throw new RuntimeException("Cannot delete product: Database constraint prevents deletion.");
+        }
+    }
+
+    @Transactional
+    public void updateStock(Integer productId, BigDecimal quantity, String companyName) {
+        Product product = this.productRepository.findById(productId)
+            .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        if (!product.getCompanyName().equals(companyName)) {
+            throw new RuntimeException("Product not found or access denied");
+        }
+
+        product.setQuantity(quantity);
+        this.productRepository.save(product);
+    }
+}
