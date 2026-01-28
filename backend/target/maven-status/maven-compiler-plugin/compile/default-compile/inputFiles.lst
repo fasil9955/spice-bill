@@ -1,7 +1,6 @@
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\dto\SignupRequest.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\ReportService.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\dto\LoginRequest.java
-D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\ReportService$1.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\controller\ReportController.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\dto\AccountingDaySummaryResponse.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\B2BCustomer.java
@@ -12,7 +11,6 @@ D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\controll
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\Category.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\ExpenseService.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\util\JwtUtil.java
-D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\PaymentMethod.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\dto\CompanyDetailsRequest.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\repository\InvoiceRepository.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\CategoryService.java
@@ -59,7 +57,6 @@ D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\dto\Cour
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\Invoice.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\MonthlySalesSummary.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\controller\AuthController.java
-D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\AttendanceStatus.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\EmployeeAdvance.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\InvoiceSequence.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\SpicesBillingApplication.java
@@ -68,9 +65,7 @@ D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\reposito
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\security\CustomUserDetailsService.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\AttendanceService.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\controller\AccountingController.java
-D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\Role.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\controller\ReactController.java
-D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\InvoiceStatus.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\EmployeeSalaryClearance.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\repository\AttendanceRepository.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\User.java
