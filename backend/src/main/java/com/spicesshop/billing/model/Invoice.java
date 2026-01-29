@@ -24,6 +24,12 @@ public class Invoice {
     @Column(name = "tax_amount", precision = 10, scale = 2)
     private BigDecimal taxAmount;
 
+    @Column(name = "cgst_amount", precision = 10, scale = 2)
+    private BigDecimal cgstAmount;
+
+    @Column(name = "sgst_amount", precision = 10, scale = 2)
+    private BigDecimal sgstAmount;
+
     @Column(name = "discount_amount", precision = 10, scale = 2)
     private BigDecimal discountAmount;
 
@@ -89,6 +95,8 @@ public class Invoice {
     public Invoice() {
         this.subtotal = BigDecimal.ZERO;
         this.taxAmount = BigDecimal.ZERO;
+        this.cgstAmount = BigDecimal.ZERO;
+        this.sgstAmount = BigDecimal.ZERO;
         this.discountAmount = BigDecimal.ZERO;
         this.paymentMethod = PaymentMethod.CASH;
         this.cashAmount = BigDecimal.ZERO;
@@ -98,11 +106,13 @@ public class Invoice {
         this.invoiceType = "B2C";
     }
 
-    public Invoice(Integer invoiceId, String invoiceNumber, BigDecimal subtotal, BigDecimal taxAmount, BigDecimal discountAmount, BigDecimal totalAmount, PaymentMethod paymentMethod, BigDecimal cashAmount, BigDecimal cardAmount, BigDecimal upiAmount, User cashier, List<InvoiceItem> items, LocalDateTime createdAt, LocalDateTime updatedAt, InvoiceStatus status, LocalDateTime cancellationRequestedAt, String cancellationReason, String invoiceType, B2BCustomer b2bCustomer, String ewayBillNumber) {
+    public Invoice(Integer invoiceId, String invoiceNumber, BigDecimal subtotal, BigDecimal taxAmount, BigDecimal cgstAmount, BigDecimal sgstAmount, BigDecimal discountAmount, BigDecimal totalAmount, PaymentMethod paymentMethod, BigDecimal cashAmount, BigDecimal cardAmount, BigDecimal upiAmount, User cashier, List<InvoiceItem> items, LocalDateTime createdAt, LocalDateTime updatedAt, InvoiceStatus status, LocalDateTime cancellationRequestedAt, String cancellationReason, String invoiceType, B2BCustomer b2bCustomer, String ewayBillNumber) {
         this.invoiceId = invoiceId;
         this.invoiceNumber = invoiceNumber;
         this.subtotal = subtotal != null ? subtotal : BigDecimal.ZERO;
         this.taxAmount = taxAmount != null ? taxAmount : BigDecimal.ZERO;
+        this.cgstAmount = cgstAmount != null ? cgstAmount : BigDecimal.ZERO;
+        this.sgstAmount = sgstAmount != null ? sgstAmount : BigDecimal.ZERO;
         this.discountAmount = discountAmount != null ? discountAmount : BigDecimal.ZERO;
         this.totalAmount = totalAmount;
         this.paymentMethod = paymentMethod != null ? paymentMethod : PaymentMethod.CASH;
@@ -135,6 +145,14 @@ public class Invoice {
 
     public void setTaxAmount(BigDecimal taxAmount) {
         this.taxAmount = taxAmount;
+    }
+
+    public void setCgstAmount(BigDecimal cgstAmount) {
+        this.cgstAmount = cgstAmount;
+    }
+
+    public void setSgstAmount(BigDecimal sgstAmount) {
+        this.sgstAmount = sgstAmount;
     }
 
     public void setDiscountAmount(BigDecimal discountAmount) {
@@ -215,6 +233,14 @@ public class Invoice {
 
     public BigDecimal getTaxAmount() {
         return this.taxAmount;
+    }
+
+    public BigDecimal getCgstAmount() {
+        return this.cgstAmount;
+    }
+
+    public BigDecimal getSgstAmount() {
+        return this.sgstAmount;
     }
 
     public BigDecimal getDiscountAmount() {
@@ -306,6 +332,10 @@ public class Invoice {
         if ((this$subtotal == null) ? (other$subtotal != null) : !this$subtotal.equals(other$subtotal)) return false;
         Object this$taxAmount = getTaxAmount(), other$taxAmount = other.getTaxAmount();
         if ((this$taxAmount == null) ? (other$taxAmount != null) : !this$taxAmount.equals(other$taxAmount)) return false;
+        Object this$cgstAmount = getCgstAmount(), other$cgstAmount = other.getCgstAmount();
+        if ((this$cgstAmount == null) ? (other$cgstAmount != null) : !this$cgstAmount.equals(other$cgstAmount)) return false;
+        Object this$sgstAmount = getSgstAmount(), other$sgstAmount = other.getSgstAmount();
+        if ((this$sgstAmount == null) ? (other$sgstAmount != null) : !this$sgstAmount.equals(other$sgstAmount)) return false;
         Object this$discountAmount = getDiscountAmount(), other$discountAmount = other.getDiscountAmount();
         if ((this$discountAmount == null) ? (other$discountAmount != null) : !this$discountAmount.equals(other$discountAmount)) return false;
         Object this$totalAmount = getTotalAmount(), other$totalAmount = other.getTotalAmount();
@@ -356,6 +386,10 @@ public class Invoice {
         result = result * PRIME + (($subtotal == null) ? 43 : $subtotal.hashCode());
         Object $taxAmount = getTaxAmount();
         result = result * PRIME + (($taxAmount == null) ? 43 : $taxAmount.hashCode());
+        Object $cgstAmount = getCgstAmount();
+        result = result * PRIME + (($cgstAmount == null) ? 43 : $cgstAmount.hashCode());
+        Object $sgstAmount = getSgstAmount();
+        result = result * PRIME + (($sgstAmount == null) ? 43 : $sgstAmount.hashCode());
         Object $discountAmount = getDiscountAmount();
         result = result * PRIME + (($discountAmount == null) ? 43 : $discountAmount.hashCode());
         Object $totalAmount = getTotalAmount();
@@ -392,6 +426,6 @@ public class Invoice {
 
     @Override
     public String toString() {
-        return "Invoice(invoiceId=" + getInvoiceId() + ", invoiceNumber=" + getInvoiceNumber() + ", subtotal=" + getSubtotal() + ", taxAmount=" + getTaxAmount() + ", discountAmount=" + getDiscountAmount() + ", totalAmount=" + getTotalAmount() + ", paymentMethod=" + getPaymentMethod() + ", cashAmount=" + getCashAmount() + ", cardAmount=" + getCardAmount() + ", upiAmount=" + getUpiAmount() + ", cashier=" + getCashier() + ", items=" + getItems() + ", createdAt=" + getCreatedAt() + ", updatedAt=" + getUpdatedAt() + ", status=" + getStatus() + ", cancellationRequestedAt=" + getCancellationRequestedAt() + ", cancellationReason=" + getCancellationReason() + ", invoiceType=" + getInvoiceType() + ", b2bCustomer=" + getB2bCustomer() + ", ewayBillNumber=" + getEwayBillNumber() + ")";
+        return "Invoice(invoiceId=" + getInvoiceId() + ", invoiceNumber=" + getInvoiceNumber() + ", subtotal=" + getSubtotal() + ", taxAmount=" + getTaxAmount() + ", cgstAmount=" + getCgstAmount() + ", sgstAmount=" + getSgstAmount() + ", discountAmount=" + getDiscountAmount() + ", totalAmount=" + getTotalAmount() + ", paymentMethod=" + getPaymentMethod() + ", cashAmount=" + getCashAmount() + ", cardAmount=" + getCardAmount() + ", upiAmount=" + getUpiAmount() + ", cashier=" + getCashier() + ", items=" + getItems() + ", createdAt=" + getCreatedAt() + ", updatedAt=" + getUpdatedAt() + ", status=" + getStatus() + ", cancellationRequestedAt=" + getCancellationRequestedAt() + ", cancellationReason=" + getCancellationReason() + ", invoiceType=" + getInvoiceType() + ", b2bCustomer=" + getB2bCustomer() + ", ewayBillNumber=" + getEwayBillNumber() + ")";
     }
 }

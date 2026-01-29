@@ -49,6 +49,18 @@ public class InvoiceItem {
     @Column(name = "hsn_code", length = 20)
     private String hsnCode;
 
+    @Column(name = "unit", length = 20)
+    private String unit;
+
+    @Column(name = "gst_percentage", precision = 5, scale = 2)
+    private BigDecimal gstPercentage;
+
+    @Column(name = "cgst_amount", precision = 10, scale = 2)
+    private BigDecimal cgstAmount;
+
+    @Column(name = "sgst_amount", precision = 10, scale = 2)
+    private BigDecimal sgstAmount;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -118,6 +130,22 @@ public class InvoiceItem {
         this.hsnCode = hsnCode;
     }
 
+    public void setUnit(String unit) {
+        this.unit = unit;
+    }
+
+    public void setGstPercentage(BigDecimal gstPercentage) {
+        this.gstPercentage = gstPercentage;
+    }
+
+    public void setCgstAmount(BigDecimal cgstAmount) {
+        this.cgstAmount = cgstAmount;
+    }
+
+    public void setSgstAmount(BigDecimal sgstAmount) {
+        this.sgstAmount = sgstAmount;
+    }
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
@@ -166,6 +194,22 @@ public class InvoiceItem {
         return this.hsnCode;
     }
 
+    public String getUnit() {
+        return this.unit;
+    }
+
+    public BigDecimal getGstPercentage() {
+        return this.gstPercentage;
+    }
+
+    public BigDecimal getCgstAmount() {
+        return this.cgstAmount;
+    }
+
+    public BigDecimal getSgstAmount() {
+        return this.sgstAmount;
+    }
+
     public LocalDateTime getCreatedAt() {
         return this.createdAt;
     }
@@ -203,6 +247,14 @@ public class InvoiceItem {
         if ((this$totalPrice == null) ? (other$totalPrice != null) : !this$totalPrice.equals(other$totalPrice)) return false;
         Object this$hsnCode = getHsnCode(), other$hsnCode = other.getHsnCode();
         if ((this$hsnCode == null) ? (other$hsnCode != null) : !this$hsnCode.equals(other$hsnCode)) return false;
+        Object this$unit = getUnit(), other$unit = other.getUnit();
+        if ((this$unit == null) ? (other$unit != null) : !this$unit.equals(other$unit)) return false;
+        Object this$gstPercentage = getGstPercentage(), other$gstPercentage = other.getGstPercentage();
+        if ((this$gstPercentage == null) ? (other$gstPercentage != null) : !this$gstPercentage.equals(other$gstPercentage)) return false;
+        Object this$cgstAmount = getCgstAmount(), other$cgstAmount = other.getCgstAmount();
+        if ((this$cgstAmount == null) ? (other$cgstAmount != null) : !this$cgstAmount.equals(other$cgstAmount)) return false;
+        Object this$sgstAmount = getSgstAmount(), other$sgstAmount = other.getSgstAmount();
+        if ((this$sgstAmount == null) ? (other$sgstAmount != null) : !this$sgstAmount.equals(other$sgstAmount)) return false;
         Object this$createdAt = getCreatedAt(), other$createdAt = other.getCreatedAt();
         return !((this$createdAt == null) ? (other$createdAt != null) : !this$createdAt.equals(other$createdAt));
     }
@@ -237,12 +289,20 @@ public class InvoiceItem {
         result = result * PRIME + (($totalPrice == null) ? 43 : $totalPrice.hashCode());
         Object $hsnCode = getHsnCode();
         result = result * PRIME + (($hsnCode == null) ? 43 : $hsnCode.hashCode());
+        Object $unit = getUnit();
+        result = result * PRIME + (($unit == null) ? 43 : $unit.hashCode());
+        Object $gstPercentage = getGstPercentage();
+        result = result * PRIME + (($gstPercentage == null) ? 43 : $gstPercentage.hashCode());
+        Object $cgstAmount = getCgstAmount();
+        result = result * PRIME + (($cgstAmount == null) ? 43 : $cgstAmount.hashCode());
+        Object $sgstAmount = getSgstAmount();
+        result = result * PRIME + (($sgstAmount == null) ? 43 : $sgstAmount.hashCode());
         Object $createdAt = getCreatedAt();
         return result * PRIME + (($createdAt == null) ? 43 : $createdAt.hashCode());
     }
 
     @Override
     public String toString() {
-        return "InvoiceItem(itemId=" + getItemId() + ", invoice=" + getInvoice() + ", product=" + getProduct() + ", productName=" + getProductName() + ", barcode=" + getBarcode() + ", quantity=" + getQuantity() + ", unitPrice=" + getUnitPrice() + ", discountPercent=" + getDiscountPercent() + ", discountAmount=" + getDiscountAmount() + ", totalPrice=" + getTotalPrice() + ", hsnCode=" + getHsnCode() + ", createdAt=" + getCreatedAt() + ")";
+        return "InvoiceItem(itemId=" + getItemId() + ", invoice=" + getInvoice() + ", product=" + getProduct() + ", productName=" + getProductName() + ", barcode=" + getBarcode() + ", quantity=" + getQuantity() + ", unitPrice=" + getUnitPrice() + ", discountPercent=" + getDiscountPercent() + ", discountAmount=" + getDiscountAmount() + ", totalPrice=" + getTotalPrice() + ", hsnCode=" + getHsnCode() + ", unit=" + getUnit() + ", gstPercentage=" + getGstPercentage() + ", cgstAmount=" + getCgstAmount() + ", sgstAmount=" + getSgstAmount() + ", createdAt=" + getCreatedAt() + ")";
     }
 }

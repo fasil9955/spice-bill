@@ -40,3 +40,390 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Settings page */
+.settings-message {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+.settings-message.error {
+  background: #fee;
+  color: #c00;
+  border: 1px solid #fcc;
+}
+.settings-message.success {
+  background: #efe;
+  color: #070;
+  border: 1px solid #cfc;
+}
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.settings-section {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  padding: 24px;
+}
+.settings-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  font-size: 18px;
+  color: #333;
+}
+.settings-section h3.settings-subheading {
+  margin: 20px 0 12px;
+  font-size: 14px;
+  color: #666;
+}
+.settings-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.settings-form .form-actions {
+  margin-top: 20px;
+}
+.readonly-input {
+  background: #f5f5f5;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.nav-link-button {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #667eea;
+  background: #eef2ff;
+  border: 2px solid #c7d2fe;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.nav-link-button:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.bills-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Bills page – modals and actions */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.modal-content {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  max-width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+}
+.bills-detail-modal,
+.bills-cancel-modal {
+  min-width: 320px;
+  max-width: 520px;
+  padding: 0;
+}
+.bills-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.bills-detail-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #111827;
+}
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-close:hover {
+  color: #111827;
+}
+.bills-detail-body {
+  padding: 20px;
+  text-align: left;
+}
+.bills-detail-body p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #374151;
+}
+.bills-detail-items {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.bills-detail-items th,
+.bills-detail-items td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+.bills-detail-items th {
+  font-weight: 600;
+  color: #374151;
+}
+.bills-detail-modal-wide {
+  max-width: 640px;
+}
+.bills-edit-row {
+  margin: 12px 0;
+}
+.bills-edit-row label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.bills-edit-select,
+.bills-edit-input {
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  min-width: 120px;
+}
+.bills-edit-mixed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+.bills-edit-mixed label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.bills-edit-mixed .bills-edit-input {
+  width: 80px;
+}
+.bills-edit-items-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+.bills-add-item-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.bills-add-item-btn:hover {
+  background: #5a67d8;
+}
+.bills-add-product-list {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bills-add-product-item {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.bills-add-product-item:hover {
+  background: #eef2ff;
+  border-color: #667eea;
+}
+.bills-edit-items .bills-edit-qty,
+.bills-edit-items .bills-edit-rate {
+  width: 72px;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
+.bills-remove-item {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bills-remove-item:hover {
+  background: #fee2e2;
+}
+.bills-detail-actions {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+.bills-detail-actions .back-button,
+.bills-detail-actions .print-btn,
+.bills-detail-actions .cancel-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.bills-detail-actions .cancel-btn {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+.bills-detail-actions .cancel-btn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
+}
+.bills-detail-actions .print-btn {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.bills-detail-actions .print-btn:hover:not(:disabled) {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+.bills-cancel-hint {
+  margin: 0 0 8px !important;
+  font-size: 13px;
+  color: #6b7280;
+}
+.bills-cancel-reason {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+  margin-bottom: 16px;
+}
+.bills-table-container .action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bills-table-container .view-btn,
+.bills-table-container .edit-btn,
+.bills-table-container .print-btn,
+.bills-table-container .cancel-btn {
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #f3f4f6;
+  color: #374151;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bills-table-container .view-btn:hover,
+.bills-table-container .edit-btn:hover {
+  background: #e5e7ff;
+  color: #4f46e5;
+}
+.bills-table-container .print-btn:hover:not(:disabled) {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.bills-table-container .print-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.bills-table-container .cancel-btn:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.bills-table-container .approve-btn {
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #f3f4f6;
+  color: #374151;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bills-table-container .approve-btn:hover:not(:disabled) {
+  background: #d1fae5;
+  color: #059669;
+}
+.bills-table-container .approve-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.reason-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bills-detail-actions .approve-btn {
+  background: #d1fae5;
+  color: #059669;
+  border: 1px solid #6ee7b7;
+}
+.bills-detail-actions .approve-btn:hover:not(:disabled) {
+  background: #a7f3d0;
+  border-color: #34d399;
+}
+.cancellation-approve-body {
+  padding: 20px;
+  text-align: left;
+}
+.cancellation-approve-body p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #374151;
+}
+.cancellation-approve-body p:last-child {
+  margin-bottom: 0;
+  color: #6b7280;
+}

@@ -16,10 +16,14 @@ import {
 
 import Inventory from './Inventory';
 import Billing from './Billing';
+import B2BBilling from './B2BBilling';
+import B2BBillsPage from './B2BBillsPage';
+import CancellationRequestsPage from './CancellationRequestsPage';
 import Attendance from './Attendance';
 import Staff from './Staff';
 import BillsPage from './BillsPage';
 import Categories from './Categories';
+import SettingsPage from './Settings';
 
 // Sub-components for the Dashboard Grid
 const DashboardHome = ({ user, menuItems }) => {
@@ -87,9 +91,9 @@ const Dashboard = () => {
   const isAdmin = user.role === 'ADMIN';
 
   const adminMenu = [
-    { path: '/dashboard/billing', displayIcon: '🧾', label: 'Quick Billing', description: 'Generate receipts for walk-in customers' },
-    { path: '/dashboard/b2b', displayIcon: '🏢', label: 'B2B Invoices', description: 'Create and manage formal tax invoices' },
-    { path: '/dashboard/bills', displayIcon: '📚', label: 'Bills Page', description: 'View and manage all previous bills' },
+    { path: '/dashboard/bills', displayIcon: '📚', label: 'Bills', description: 'View and manage all previous bills' },
+    { path: '/dashboard/b2b-bills', displayIcon: '🏢', label: 'B2B Bills Report', description: 'View and manage B2B invoices' },
+    { path: '/dashboard/cancellation-requests', displayIcon: '⚠️', label: 'Cancellation Requests', description: 'Review and approve invoice cancellations' },
     { path: '/dashboard/inventory', displayIcon: '📦', label: 'Product Management', description: 'Manage products, stock and categories' },
     { path: '/dashboard/staff', displayIcon: '👥', label: 'Staff & HR', description: 'Manage employee accounts and salaries' },
     { path: '/dashboard/attendance', displayIcon: '📅', label: 'Attendance', description: 'View and mark daily attendance' },
@@ -99,11 +103,13 @@ const Dashboard = () => {
   ];
 
   const cashierMenu = [
-    { path: '/dashboard/billing', displayIcon: '🧾', label: 'Billing Terminal', description: 'Start new billing session' },
+    { path: '/dashboard/billing', displayIcon: '🧾', label: 'Create Invoice', description: 'Start new billing session' },
     { path: '/dashboard/b2b', displayIcon: '🏢', label: 'B2B Billing', description: 'Generate B2B invoices' },
-    { path: '/dashboard/bills', displayIcon: '📚', label: 'Bills Page', description: 'View and reprint recent bills' },
+    { path: '/dashboard/bills', displayIcon: '📚', label: 'Bills', description: 'View and reprint recent bills' },
+    { path: '/dashboard/b2b-bills', displayIcon: '🏢', label: 'B2B Bills Report', description: 'View and manage B2B invoices' },
     { path: '/dashboard/inventory-view', displayIcon: '📦', label: 'Product Management', description: 'Search and check product availability' },
     { path: '/dashboard/attendance', displayIcon: '📅', label: 'My Attendance', description: 'Mark your daily attendance' },
+    { path: '/dashboard/courier', displayIcon: '🚚', label: 'Courier', description: 'Track courier requests' },
   ];
 
   const menuItems = isAdmin ? adminMenu : cashierMenu;
@@ -117,12 +123,14 @@ const Dashboard = () => {
           <Route path="/inventory-view" element={<Inventory />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/billing" element={<Billing />} />
-          <Route path="/b2b" element={<div className="dashboard-content"><button onClick={() => navigate('/dashboard')} className="back-button">← Back</button><h1>B2B Bills Management</h1></div>} />
+          <Route path="/b2b" element={<B2BBilling />} />
           <Route path="/bills" element={<BillsPage />} />
+          <Route path="/b2b-bills" element={<B2BBillsPage />} />
+          <Route path="/cancellation-requests" element={<CancellationRequestsPage />} />
           <Route path="/staff" element={<Staff />} />
           <Route path="/attendance" element={<Attendance />} />
           <Route path="/reports" element={<div className="dashboard-content"><button onClick={() => navigate('/dashboard')} className="back-button">← Back</button><h1>Reports</h1></div>} />
-          <Route path="/settings" element={<div className="dashboard-content"><button onClick={() => navigate('/dashboard')} className="back-button">← Back</button><h1>Settings</h1></div>} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/courier" element={<div className="dashboard-content"><button onClick={() => navigate('/dashboard')} className="back-button">← Back</button><h1>Courier Requests</h1></div>} />
         </Routes>
       </main>

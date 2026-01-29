@@ -868,7 +868,7 @@ const Inventory = () => {
         minStockLevel: currentProduct.minStockLevel,
         hsnCode: currentProduct.hsnCode,
         packagingType: currentProduct.packagingType,
-        unit: currentProduct.unit,
+        unit: (currentProduct.unit ?? '').trim(),
         isActive: true
       };
 
@@ -1007,7 +1007,7 @@ const Inventory = () => {
                     </span>
                   </td>
                   <td>₹{product.sellingPricePerUnit}</td>
-                  <td>{product.gstPercentage}%</td>
+                  <td>{product.category?.gstPercentage != null ? `${product.category.gstPercentage}%` : '-'}</td>
                   <td className="action-buttons">
                     <button
                       className="edit-btn"
@@ -1134,14 +1134,14 @@ const Inventory = () => {
                 <div className="form-group">
                   <label>Unit</label>
                   <select
-                    value={currentProduct.unit || ''}
+                    value={currentProduct.unit ?? ''}
                     onChange={e => setCurrentProduct({ ...currentProduct, unit: e.target.value })}
                   >
                     <option value="">Select</option>
                     <option value="kg">kg</option>
                     <option value="ml">ml</option>
                     <option value="l">l</option>
-                    <option value="pcs">pcs</option>
+                    <option value="pcs">Pieces (pcs)</option>
                   </select>
                 </div>
               </div>

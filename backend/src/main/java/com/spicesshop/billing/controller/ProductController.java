@@ -1,5 +1,6 @@
 package com.spicesshop.billing.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spicesshop.billing.dto.BarcodeParseResult;
 import com.spicesshop.billing.model.Product;
 import com.spicesshop.billing.service.ProductService;
@@ -21,6 +22,9 @@ public class ProductController {
 
     @Autowired
     private CompanyExtractor companyExtractor;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @GetMapping
     public ResponseEntity<List<Product>> getAllProducts(HttpServletRequest request) {
@@ -69,10 +73,17 @@ public class ProductController {
     }
 
     @PostMapping
-    public ResponseEntity<?> createProduct(@RequestBody Product product, HttpServletRequest request) {
+    public ResponseEntity<?> createProduct(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            Product product = this.objectMapper.convertValue(body, Product.class);
             product.setCompanyName(companyName);
+            // Explicitly set unit from request so it is never lost (e.g. "pcs" not overwritten by default)
+            if (body.containsKey("unit")) {
+                Object u = body.get("unit");
+                String unitVal = (u == null || "".equals(u)) ? null : u.toString().trim();
+                product.setUnit("".equals(unitVal) ? null : unitVal);
+            }
             return ResponseEntity.ok(this.productService.createProduct(product));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -80,9 +91,16 @@ public class ProductController {
     }
 
     @PutMapping({"/{id}"})
-    public ResponseEntity<?> updateProduct(@PathVariable Integer id, @RequestBody Product product, HttpServletRequest request) {
+    public ResponseEntity<?> updateProduct(@PathVariable Integer id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            Product product = this.objectMapper.convertValue(body, Product.class);
+            // Explicitly set unit from request so it is never lost
+            if (body.containsKey("unit")) {
+                Object u = body.get("unit");
+                String unitVal = (u == null || "".equals(u)) ? null : u.toString().trim();
+                product.setUnit("".equals(unitVal) ? null : unitVal);
+            }
             return ResponseEntity.ok(this.productService.updateProduct(id, product, companyName));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

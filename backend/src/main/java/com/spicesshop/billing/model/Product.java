@@ -34,9 +34,6 @@ public class Product {
     @Column(name = "selling_price_per_unit", nullable = false, precision = 10, scale = 2)
     private BigDecimal sellingPricePerUnit;
 
-    @Column(name = "gst_percentage", precision = 5, scale = 2)
-    private BigDecimal gstPercentage;
-
     @Column(name = "hsn_code", length = 20)
     private String hsnCode;
 
@@ -62,13 +59,12 @@ public class Product {
     private LocalDateTime updatedAt;
 
     public Product() {
-        this.gstPercentage = BigDecimal.ZERO;
         this.quantity = BigDecimal.ZERO;
         this.minStockLevel = BigDecimal.ZERO;
         this.isActive = true;
     }
 
-    public Product(Integer productId, String companyName, String productName, Category category, String productCode, String barcode, BigDecimal sellingPricePerUnit, BigDecimal gstPercentage, String hsnCode, String packagingType, String unit, BigDecimal quantity, BigDecimal minStockLevel, Boolean isActive, LocalDateTime createdAt, LocalDateTime updatedAt) {
+    public Product(Integer productId, String companyName, String productName, Category category, String productCode, String barcode, BigDecimal sellingPricePerUnit, String hsnCode, String packagingType, String unit, BigDecimal quantity, BigDecimal minStockLevel, Boolean isActive, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.productId = productId;
         this.companyName = companyName;
         this.productName = productName;
@@ -76,7 +72,6 @@ public class Product {
         this.productCode = productCode;
         this.barcode = barcode;
         this.sellingPricePerUnit = sellingPricePerUnit;
-        this.gstPercentage = gstPercentage != null ? gstPercentage : BigDecimal.ZERO;
         this.hsnCode = hsnCode;
         this.packagingType = packagingType;
         this.unit = unit;
@@ -113,10 +108,6 @@ public class Product {
 
     public void setSellingPricePerUnit(BigDecimal sellingPricePerUnit) {
         this.sellingPricePerUnit = sellingPricePerUnit;
-    }
-
-    public void setGstPercentage(BigDecimal gstPercentage) {
-        this.gstPercentage = gstPercentage;
     }
 
     public void setHsnCode(String hsnCode) {
@@ -183,10 +174,6 @@ public class Product {
         return this.sellingPricePerUnit;
     }
 
-    public BigDecimal getGstPercentage() {
-        return this.gstPercentage;
-    }
-
     public String getHsnCode() {
         return this.hsnCode;
     }
@@ -248,8 +235,6 @@ public class Product {
         if ((this$barcode == null) ? (other$barcode != null) : !this$barcode.equals(other$barcode)) return false;
         Object this$sellingPricePerUnit = getSellingPricePerUnit(), other$sellingPricePerUnit = other.getSellingPricePerUnit();
         if ((this$sellingPricePerUnit == null) ? (other$sellingPricePerUnit != null) : !this$sellingPricePerUnit.equals(other$sellingPricePerUnit)) return false;
-        Object this$gstPercentage = getGstPercentage(), other$gstPercentage = other.getGstPercentage();
-        if ((this$gstPercentage == null) ? (other$gstPercentage != null) : !this$gstPercentage.equals(other$gstPercentage)) return false;
         Object this$hsnCode = getHsnCode(), other$hsnCode = other.getHsnCode();
         if ((this$hsnCode == null) ? (other$hsnCode != null) : !this$hsnCode.equals(other$hsnCode)) return false;
         Object this$packagingType = getPackagingType(), other$packagingType = other.getPackagingType();
@@ -290,8 +275,6 @@ public class Product {
         result = result * PRIME + (($barcode == null) ? 43 : $barcode.hashCode());
         Object $sellingPricePerUnit = getSellingPricePerUnit();
         result = result * PRIME + (($sellingPricePerUnit == null) ? 43 : $sellingPricePerUnit.hashCode());
-        Object $gstPercentage = getGstPercentage();
-        result = result * PRIME + (($gstPercentage == null) ? 43 : $gstPercentage.hashCode());
         Object $hsnCode = getHsnCode();
         result = result * PRIME + (($hsnCode == null) ? 43 : $hsnCode.hashCode());
         Object $packagingType = getPackagingType();
@@ -310,6 +293,6 @@ public class Product {
 
     @Override
     public String toString() {
-        return "Product(productId=" + getProductId() + ", companyName=" + getCompanyName() + ", productName=" + getProductName() + ", category=" + getCategory() + ", productCode=" + getProductCode() + ", barcode=" + getBarcode() + ", sellingPricePerUnit=" + getSellingPricePerUnit() + ", gstPercentage=" + getGstPercentage() + ", hsnCode=" + getHsnCode() + ", packagingType=" + getPackagingType() + ", unit=" + getUnit() + ", quantity=" + getQuantity() + ", minStockLevel=" + getMinStockLevel() + ", isActive=" + getIsActive() + ", createdAt=" + getCreatedAt() + ", updatedAt=" + getUpdatedAt() + ")";
+        return "Product(productId=" + getProductId() + ", companyName=" + getCompanyName() + ", productName=" + getProductName() + ", category=" + getCategory() + ", productCode=" + getProductCode() + ", barcode=" + getBarcode() + ", sellingPricePerUnit=" + getSellingPricePerUnit() + ", hsnCode=" + getHsnCode() + ", packagingType=" + getPackagingType() + ", unit=" + getUnit() + ", quantity=" + getQuantity() + ", minStockLevel=" + getMinStockLevel() + ", isActive=" + getIsActive() + ", createdAt=" + getCreatedAt() + ", updatedAt=" + getUpdatedAt() + ")";
     }
 }

@@ -131,13 +131,13 @@ public class ProductService {
             Category category = this.categoryRepository.findById(product.getCategory().getCategoryId())
                 .orElseThrow(() -> new RuntimeException("Category with ID " + product.getCategory().getCategoryId() + " not found"));
             product.setCategory(category);
-
-            // If product GST% is not provided, inherit from Category
-            if (product.getGstPercentage() == null) {
-                product.setGstPercentage(category.getGstPercentage());
-            }
         } else {
             product.setCategory(null);
+        }
+
+        // Persist unit exactly as sent from client (no default override)
+        if (product.getUnit() != null) {
+            product.setUnit(product.getUnit().trim());
         }
 
         return this.productRepository.save(product);
@@ -184,15 +184,12 @@ public class ProductService {
 
         existingProduct.setProductName(product.getProductName());
         existingProduct.setSellingPricePerUnit(product.getSellingPricePerUnit());
-        // If GST% not provided, inherit from Category (if available) or keep existing
-        if (product.getGstPercentage() != null) {
-            existingProduct.setGstPercentage(product.getGstPercentage());
-        } else if (existingProduct.getCategory() != null) {
-            existingProduct.setGstPercentage(existingProduct.getCategory().getGstPercentage());
-        }
         existingProduct.setHsnCode(product.getHsnCode());
         existingProduct.setPackagingType(product.getPackagingType());
-        existingProduct.setUnit(product.getUnit());
+        // Only update unit when client sends it (non-null); persist exact value so "pcs" is not overwritten
+        if (product.getUnit() != null) {
+            existingProduct.setUnit(product.getUnit().trim());
+        }
         existingProduct.setQuantity(product.getQuantity());
         existingProduct.setMinStockLevel(product.getMinStockLevel());
         existingProduct.setIsActive(product.getIsActive());

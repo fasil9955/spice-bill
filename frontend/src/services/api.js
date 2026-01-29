@@ -40,12 +40,16 @@ export const authService = {
   login: (credentials) => api.post('/auth/login', credentials),
   signup: (userData) => api.post('/auth/signup', userData),
   changePassword: (data) => api.post('/auth/change-password', data),
+  getCompanyDetails: () => api.get('/auth/company-details'),
+  updateCompanyDetails: (data) => api.put('/auth/company-details', data),
 };
 
 export const productService = {
   getAll: () => api.get('/products'),
   getById: (id) => api.get(`/products/${id}`),
   getByBarcode: (barcode) => api.get(`/products/barcode/${barcode}`),
+  /** Parse barcode (e.g. "1000A250") and return { product, weight } — weight in grams. */
+  parseBarcode: (fullBarcode) => api.get(`/products/barcode/parse/${encodeURIComponent(fullBarcode)}`),
   create: (data) => api.post('/products', data),
   update: (id, data) => api.put(`/products/${id}`, data),
   delete: (id) => api.delete(`/products/${id}`),
@@ -59,14 +63,26 @@ export const categoryService = {
   delete: (id) => api.delete(`/categories/${id}`),
 };
 
+export const b2bCustomerService = {
+  getAll: () => api.get('/b2b-customers'),
+  search: (query) => api.get(`/b2b-customers/search?query=${encodeURIComponent(query || '')}`),
+  getById: (id) => api.get(`/b2b-customers/${id}`),
+  create: (data) => api.post('/b2b-customers', data),
+};
+
 export const invoiceService = {
   create: (data) => api.post('/invoices', data),
+  update: (id, data) => api.put(`/invoices/${id}`, data),
+  getNextInvoiceNumber: (invoiceType = 'RETAIL') => api.get(`/invoices/next-invoice-number?invoiceType=${encodeURIComponent(invoiceType)}`),
+  getNextB2BInvoiceNumber: () => api.get('/invoices/b2b/next-invoice-number'),
   getAll: () => api.get('/invoices'),
   getById: (id) => api.get(`/invoices/${id}`),
   getByNumber: (number) => api.get(`/invoices/number/${number}`),
   getB2B: () => api.get('/invoices/b2b'),
   deleteB2B: (id) => api.delete(`/invoices/b2b/${id}`),
+  getCancellationRequests: () => api.get('/invoices/cancellation-requests'),
   requestCancellation: (id, reason) => api.post(`/invoices/${id}/cancel`, { reason }),
+  approveCancellation: (id) => api.post(`/invoices/${id}/approve-cancellation`),
 };
 
 export const attendanceService = {
