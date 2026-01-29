@@ -19,6 +19,15 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
     
     @Query("SELECT p FROM Product p WHERE p.companyName = :companyName AND p.quantity <= p.minStockLevel AND p.isActive = true")
     List<Product> findLowStockProductsByCompany(String companyName);
+
+    // Used for auto-generating barcodes in the old format: 1000A, 1001A, ...
+    // Matches barcodes like 1234 or 1234A and returns the MAX numeric prefix.
+    @Query(
+        value = "SELECT MAX(CAST(CASE WHEN UPPER(RIGHT(barcode, 1)) = 'A' THEN LEFT(barcode, LENGTH(barcode) - 1) ELSE barcode END AS UNSIGNED)) " +
+                "FROM products WHERE company_name = ?1 AND barcode REGEXP '^[0-9]+[Aa]?$'",
+        nativeQuery = true
+    )
+    Integer findMaxNumericBarcodeByCompanyName(String companyName);
     
     Optional<Product> findByBarcode(String barcode);
     

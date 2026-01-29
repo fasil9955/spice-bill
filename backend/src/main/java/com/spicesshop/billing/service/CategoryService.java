@@ -42,6 +42,7 @@ public class CategoryService {
 
         existing.setCategoryName(category.getCategoryName());
         existing.setDescription(category.getDescription());
+        existing.setGstPercentage(category.getGstPercentage());
 
         return this.categoryRepository.save(existing);
     }

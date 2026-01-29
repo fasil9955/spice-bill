@@ -1,6 +1,7 @@
 package com.spicesshop.billing.model;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -19,6 +20,9 @@ public class Category {
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "gst_percentage", precision = 5, scale = 2)
+    private BigDecimal gstPercentage;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -44,6 +48,10 @@ public class Category {
         this.description = description;
     }
 
+    public void setGstPercentage(BigDecimal gstPercentage) {
+        this.gstPercentage = gstPercentage;
+    }
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
@@ -58,6 +66,10 @@ public class Category {
 
     public String getDescription() {
         return this.description;
+    }
+
+    public BigDecimal getGstPercentage() {
+        return this.gstPercentage;
     }
 
     public LocalDateTime getCreatedAt() {

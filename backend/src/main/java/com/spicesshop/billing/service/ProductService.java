@@ -93,7 +93,33 @@ public class ProductService {
             throw new RuntimeException("Company name is required");
         }
 
-        if (product.getBarcode() != null && this.productRepository.findByCompanyNameAndBarcode(companyName, product.getBarcode()).isPresent()) {
+        // Auto-generate barcode in the old format: 1000A, 1001A, ...
+        if (product.getBarcode() == null || product.getBarcode().trim().isEmpty()) {
+            Integer maxPrefix = this.productRepository.findMaxNumericBarcodeByCompanyName(companyName);
+            int base = (maxPrefix != null) ? maxPrefix : 999;
+            if (base < 1000) base = 999;
+            int next = base + 1; // -> first becomes 1000
+            product.setBarcode(String.valueOf(next) + "A");
+        } else {
+            String raw = product.getBarcode().trim();
+            // Normalize common inputs: if numeric-only, convert to numeric + 'A'
+            if (raw.matches("^[0-9]+$")) {
+                product.setBarcode(raw + "A");
+            } else if (raw.matches("^[0-9]+a$")) {
+                product.setBarcode(raw.substring(0, raw.length() - 1) + "A");
+            } else {
+                product.setBarcode(raw);
+            }
+        }
+
+        // Product code is not used in UI; keep it consistent for DB/legacy usage
+        if (product.getProductCode() == null || product.getProductCode().trim().isEmpty()) {
+            product.setProductCode(product.getBarcode());
+        } else {
+            product.setProductCode(product.getProductCode().trim());
+        }
+
+        if (this.productRepository.findByCompanyNameAndBarcode(companyName, product.getBarcode()).isPresent()) {
             throw new RuntimeException("Product with barcode '" + product.getBarcode() + "' already exists");
         }
 
@@ -105,6 +131,11 @@ public class ProductService {
             Category category = this.categoryRepository.findById(product.getCategory().getCategoryId())
                 .orElseThrow(() -> new RuntimeException("Category with ID " + product.getCategory().getCategoryId() + " not found"));
             product.setCategory(category);
+
+            // If product GST% is not provided, inherit from Category
+            if (product.getGstPercentage() == null) {
+                product.setGstPercentage(category.getGstPercentage());
+            }
         } else {
             product.setCategory(null);
         }
@@ -121,14 +152,24 @@ public class ProductService {
             throw new RuntimeException("Product not found or access denied");
         }
 
-        if (product.getBarcode() != null && !product.getBarcode().equals(existingProduct.getBarcode()) && 
-            this.productRepository.findByCompanyNameAndBarcode(companyName, product.getBarcode()).isPresent()) {
-            throw new RuntimeException("Product with barcode '" + product.getBarcode() + "' already exists");
+        // Barcode: if provided, validate uniqueness; else keep existing
+        if (product.getBarcode() != null && !product.getBarcode().trim().isEmpty()) {
+            String newBarcode = product.getBarcode().trim();
+            if (!newBarcode.equals(existingProduct.getBarcode()) &&
+                this.productRepository.findByCompanyNameAndBarcode(companyName, newBarcode).isPresent()) {
+                throw new RuntimeException("Product with barcode '" + newBarcode + "' already exists");
+            }
+            existingProduct.setBarcode(newBarcode);
         }
 
-        if (product.getProductCode() != null && !product.getProductCode().equals(existingProduct.getProductCode()) && 
-            this.productRepository.findByCompanyNameAndProductCode(companyName, product.getProductCode()).isPresent()) {
-            throw new RuntimeException("Product with product code '" + product.getProductCode() + "' already exists");
+        // Product code is not used; keep existing unless explicitly provided
+        if (product.getProductCode() != null && !product.getProductCode().trim().isEmpty()) {
+            String newCode = product.getProductCode().trim();
+            if (!newCode.equals(existingProduct.getProductCode()) &&
+                this.productRepository.findByCompanyNameAndProductCode(companyName, newCode).isPresent()) {
+                throw new RuntimeException("Product with product code '" + newCode + "' already exists");
+            }
+            existingProduct.setProductCode(newCode);
         }
 
         existingProduct.setCompanyName(companyName);
@@ -142,10 +183,13 @@ public class ProductService {
         }
 
         existingProduct.setProductName(product.getProductName());
-        existingProduct.setProductCode(product.getProductCode());
-        existingProduct.setBarcode(product.getBarcode());
         existingProduct.setSellingPricePerUnit(product.getSellingPricePerUnit());
-        existingProduct.setGstPercentage(product.getGstPercentage());
+        // If GST% not provided, inherit from Category (if available) or keep existing
+        if (product.getGstPercentage() != null) {
+            existingProduct.setGstPercentage(product.getGstPercentage());
+        } else if (existingProduct.getCategory() != null) {
+            existingProduct.setGstPercentage(existingProduct.getCategory().getGstPercentage());
+        }
         existingProduct.setHsnCode(product.getHsnCode());
         existingProduct.setPackagingType(product.getPackagingType());
         existingProduct.setUnit(product.getUnit());
