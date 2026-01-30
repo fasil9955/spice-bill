@@ -20,14 +20,17 @@ public class AccountingDaySummaryService {
     }
 
     @Transactional
-    public AccountingDaySummary upsertSummary(String companyName, LocalDate reportDate, BigDecimal billingBookSales) {
+    public AccountingDaySummary upsertSummary(String companyName, LocalDate reportDate, BigDecimal billingBookSales,
+            BigDecimal closingCash, BigDecimal closingGpayTotal) {
         AccountingDaySummary summary = this.accountingDaySummaryRepository
             .findByCompanyNameAndReportDate(companyName, reportDate)
             .orElseGet(AccountingDaySummary::new);
 
         summary.setCompanyName(companyName);
         summary.setReportDate(reportDate);
-        summary.setBillingBookSales(billingBookSales);
+        summary.setBillingBookSales(billingBookSales != null ? billingBookSales : java.math.BigDecimal.ZERO);
+        if (closingCash != null) summary.setClosingCash(closingCash);
+        if (closingGpayTotal != null) summary.setClosingGpayTotal(closingGpayTotal);
 
         return this.accountingDaySummaryRepository.save(summary);
     }

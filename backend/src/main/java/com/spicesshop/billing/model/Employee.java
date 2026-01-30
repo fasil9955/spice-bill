@@ -35,6 +35,9 @@ public class Employee {
     @Column(name = "designation", length = 100)
     private String designation;
 
+    @Column(name = "address", length = 500)
+    private String address;
+
     @Column(name = "aadhar_document", length = 500)
     private String aadharDocument;
 
@@ -102,6 +105,10 @@ public class Employee {
         this.designation = designation;
     }
 
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
     public void setAadharDocument(String aadharDocument) {
         this.aadharDocument = aadharDocument;
     }
@@ -158,6 +165,10 @@ public class Employee {
         return this.designation;
     }
 
+    public String getAddress() {
+        return this.address;
+    }
+
     public String getAadharDocument() {
         return this.aadharDocument;
     }
@@ -209,6 +220,8 @@ public class Employee {
         if ((this$department == null) ? (other$department != null) : !this$department.equals(other$department)) return false;
         Object this$designation = getDesignation(), other$designation = other.getDesignation();
         if ((this$designation == null) ? (other$designation != null) : !this$designation.equals(other$designation)) return false;
+        Object this$address = getAddress(), other$address = other.getAddress();
+        if ((this$address == null) ? (other$address != null) : !this$address.equals(other$address)) return false;
         Object this$aadharDocument = getAadharDocument(), other$aadharDocument = other.getAadharDocument();
         if ((this$aadharDocument == null) ? (other$aadharDocument != null) : !this$aadharDocument.equals(other$aadharDocument)) return false;
         Object this$photo = getPhoto(), other$photo = other.getPhoto();
@@ -245,6 +258,8 @@ public class Employee {
         result = result * PRIME + (($department == null) ? 43 : $department.hashCode());
         Object $designation = getDesignation();
         result = result * PRIME + (($designation == null) ? 43 : $designation.hashCode());
+        Object $address = getAddress();
+        result = result * PRIME + (($address == null) ? 43 : $address.hashCode());
         Object $aadharDocument = getAadharDocument();
         result = result * PRIME + (($aadharDocument == null) ? 43 : $aadharDocument.hashCode());
         Object $photo = getPhoto();
@@ -257,6 +272,6 @@ public class Employee {
 
     @Override
     public String toString() {
-        return "Employee(employeeId=" + getEmployeeId() + ", companyName=" + getCompanyName() + ", employeeCode=" + getEmployeeCode() + ", employeeName=" + getEmployeeName() + ", phone=" + getPhone() + ", email=" + getEmail() + ", department=" + getDepartment() + ", designation=" + getDesignation() + ", aadharDocument=" + getAadharDocument() + ", photo=" + getPhoto() + ", isActive=" + getIsActive() + ", createdAt=" + getCreatedAt() + ", updatedAt=" + getUpdatedAt() + ")";
+        return "Employee(employeeId=" + getEmployeeId() + ", companyName=" + getCompanyName() + ", employeeCode=" + getEmployeeCode() + ", employeeName=" + getEmployeeName() + ", phone=" + getPhone() + ", email=" + getEmail() + ", department=" + getDepartment() + ", designation=" + getDesignation() + ", address=" + getAddress() + ", aadharDocument=" + getAadharDocument() + ", photo=" + getPhoto() + ", isActive=" + getIsActive() + ", createdAt=" + getCreatedAt() + ", updatedAt=" + getUpdatedAt() + ")";
     }
 }

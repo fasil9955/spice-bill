@@ -13,7 +13,8 @@ import {
   Banknote, 
   QrCode,
   ArrowLeft,
-  X
+  X,
+  Phone
 } from 'lucide-react';
 
 const DISCOUNT_PERCENT_MAX = 30;
@@ -307,18 +308,21 @@ const Billing = () => {
     const companyName = invoice.cashier?.companyName || 'Our Spices Shop';
     const address = invoice.cashier?.address || '';
     const gstNumber = invoice.cashier?.gstNumber || '';
+    const phoneNumber = invoice.cashier?.phoneNumber || '';
+    const fssaiLicense = invoice.cashier?.fssaiLicense || '';
     const createdAt = formatInvoiceDateTime(invoice.createdAt);
     const discountAmt = Number(invoice.discountAmount) || 0;
     const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
     const payment = invoice.paymentMethod || 'CASH';
-    const subtotalBeforeTax = Math.max(0, (Number(invoice.subtotal) || 0) - (Number(invoice.cgstAmount) || 0) - (Number(invoice.sgstAmount) || 0));
+    const baseAmount = Math.max(0, (Number(invoice.subtotal) || 0) - (Number(invoice.cgstAmount) || 0) - (Number(invoice.sgstAmount) || 0));
     const cgstAmt = Number(invoice.cgstAmount) || 0;
     const sgstAmt = Number(invoice.sgstAmount) || 0;
+    const subtotalVal = baseAmount + cgstAmt + sgstAmt;
     const discountRow = discountAmt > 0
-      ? `<div class="totals-row totals-discount"><span>Discount</span><span>- ₹${discountAmt.toFixed(2)}</span></div>`
+      ? `<div class="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹${discountAmt.toFixed(2)}</span></div>`
       : '';
-    const cgstRow = cgstAmt > 0 ? `<div class="totals-row"><span>CGST</span><span>₹${cgstAmt.toFixed(2)}</span></div>` : '';
-    const sgstRow = sgstAmt > 0 ? `<div class="totals-row"><span>SGST</span><span>₹${sgstAmt.toFixed(2)}</span></div>` : '';
+    const cgstRow = cgstAmt > 0 ? `<div class="btoc-totals-row"><span>CGST</span><span>₹${cgstAmt.toFixed(2)}</span></div>` : '';
+    const sgstRow = sgstAmt > 0 ? `<div class="btoc-totals-row"><span>SGST</span><span>₹${sgstAmt.toFixed(2)}</span></div>` : '';
 
     const itemsHtml = (invoice.items || [])
       .map((item) => {
@@ -326,45 +330,62 @@ const Billing = () => {
         const qty = item.quantity ?? 0;
         const unit = item.unit || item.product?.unit || '';
         const qtyDisplay = unit ? `${qty} ${unit}` : String(qty);
-        const price = item.unitPrice ?? item.sellingPricePerUnit ?? 0;
-        const total = item.totalPrice ?? qty * price;
+        const total = item.totalPrice ?? qty * (item.unitPrice ?? item.sellingPricePerUnit ?? 0);
         return `
           <tr>
-            <td class="item-name">${name}</td>
-            <td class="item-qty">${qtyDisplay}</td>
-            <td class="item-price">₹${Math.round(Number(price))}</td>
-            <td class="item-total">₹${Math.round(Number(total))}</td>
+            <td class="btoc-col-item">${name}</td>
+            <td class="btoc-col-qty">${qtyDisplay}</td>
+            <td class="btoc-col-total">₹${Number(total).toFixed(2)}</td>
           </tr>
         `;
       })
       .join('');
 
-    const oneCopy = `
-      <div class="invoice-print-copy">
-        <div class="invoice-header">
-          <h2>${companyName}</h2>
-          ${address ? `<p>${address}</p>` : ''}
-          ${gstNumber ? `<p>GST: ${gstNumber}</p>` : ''}
+    const buildOneCopy = (copyHeading) => `
+      <div class="btoc-print-copy">
+        <div class="btoc-company">
+          <div class="btoc-company-name">${companyName}</div>
+          ${address ? `<div class="btoc-company-line">${address.replace(/</g, '&lt;')}</div>` : ''}
+          ${phoneNumber ? `<div class="btoc-company-line">Ph. no.: ${phoneNumber.replace(/</g, '&lt;')}</div>` : ''}
+          ${gstNumber ? `<div class="btoc-company-line">GST: ${gstNumber.replace(/</g, '&lt;')}</div>` : ''}
+          ${fssaiLicense ? `<div class="btoc-company-line">FSSAI: ${fssaiLicense.replace(/</g, '&lt;')}</div>` : ''}
         </div>
-        <div class="meta-row"><strong>Date:</strong> ${createdAt}</div>
-        <div class="meta-row"><strong>Inv #:</strong> ${invoice.invoiceNumber || ''}</div>
-        <table class="invoice-items">
-          <thead><tr><th>Item</th><th class="col-qty">Qty</th><th class="col-rate">Rate</th><th class="col-amount">Amount</th></tr></thead>
+        ${copyHeading ? `<div class="btoc-print-heading">${copyHeading}</div>` : ''}
+        <div class="btoc-divider-dashed"></div>
+        <div class="btoc-meta">
+          <div class="btoc-meta-row"><span>Invoice #:</span><span>${invoice.invoiceNumber || ''}</span></div>
+          <div class="btoc-meta-row"><span>Date:</span><span>${createdAt}</span></div>
+        </div>
+        <div class="btoc-divider-dashed"></div>
+        <table class="btoc-items">
+          <thead><tr><th class="btoc-col-item">Item</th><th class="btoc-col-qty">Qty</th><th class="btoc-col-total">Total</th></tr></thead>
           <tbody>${itemsHtml}</tbody>
         </table>
-        <div class="totals-block">
-          <div class="totals-row"><span>Subtotal</span><span>₹${subtotalBeforeTax.toFixed(2)}</span></div>
+        <div class="btoc-divider-dashed"></div>
+        <div class="btoc-totals">
+          <div class="btoc-totals-row"><span>Base Amount</span><span>₹${baseAmount.toFixed(2)}</span></div>
           ${cgstRow}
           ${sgstRow}
+          <div class="btoc-totals-row"><span>Subtotal</span><span>₹${subtotalVal.toFixed(2)}</span></div>
           ${discountRow}
-          <div class="totals-row total-amount"><span>Total</span><span>₹${totalAmount}</span></div>
+          <div class="btoc-totals-row btoc-total-amount"><span>Total Amount</span><span>₹${totalAmount}</span></div>
         </div>
-        <p class="payment-row">Payment: ${payment}</p>
-        <p class="thanks">Thank you for shopping!</p>
+        <div class="btoc-divider-solid"></div>
+        <div class="btoc-divider-dashed"></div>
+        <div class="btoc-payment">
+          <div class="btoc-totals-row"><span>Payment Method</span><span>${payment}</span></div>
+          <div class="btoc-totals-row"><span>Amount Paid</span><span>₹${totalAmount}</span></div>
+        </div>
+        <div class="btoc-footer">
+          <div>Thank you for your business!</div>
+          <div>Visit us again</div>
+        </div>
       </div>
     `;
 
-    const copiesHtml = twoCopies ? oneCopy + oneCopy : oneCopy;
+    const copiesHtml = twoCopies
+      ? buildOneCopy() + '<div class="btoc-copy-sep"></div>' + buildOneCopy('Gate Pass')
+      : buildOneCopy();
     return `
       <!DOCTYPE html>
       <html>
@@ -374,20 +395,29 @@ const Billing = () => {
           <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; padding: 16px; color: #111; }
-            .invoice-print-copy { margin-bottom: 24px; break-after: page; }
-            .invoice-header { text-align: center; margin-bottom: 8px; }
-            .invoice-header h2 { font-size: 16px; margin-bottom: 4px; }
-            .meta-row { margin: 4px 0; font-size: 11px; }
-            table.invoice-items { width: 100%; border-collapse: collapse; margin: 8px 0; }
-            table.invoice-items th, table.invoice-items td { padding: 4px 6px; text-align: left; border-bottom: 1px solid #e5e7eb; }
-            table.invoice-items th { font-size: 11px; font-weight: 600; }
-            .col-qty { text-align: center; width: 15%; }
-            .col-rate, .col-amount { text-align: right; }
-            .totals-block { margin-top: 12px; font-size: 13px; }
-            .totals-row { display: flex; justify-content: space-between; padding: 2px 0; }
-            .totals-row.total-amount { font-weight: 700; font-size: 14px; margin-top: 4px; }
-            .payment-row { margin-top: 8px; font-size: 11px; }
-            .thanks { margin-top: 12px; text-align: center; font-size: 12px; }
+            .btoc-print-copy { margin-bottom: 24px; }
+            .btoc-copy-sep { break-after: page; margin-bottom: 24px; }
+            .btoc-print-heading { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 4px; }
+            .btoc-company { text-align: center; margin-bottom: 8px; }
+            .btoc-company-name { font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 4px; }
+            .btoc-company-line { font-size: 11px; color: #374151; margin: 2px 0; }
+            .btoc-divider-dashed { border: none; border-top: 1px dashed #9ca3af; margin: 8px 0; }
+            .btoc-divider-solid { border: none; border-top: 1px solid #374151; margin: 4px 0; }
+            .btoc-meta { font-size: 11px; margin: 4px 0; }
+            .btoc-meta-row { display: flex; justify-content: space-between; padding: 2px 0; }
+            table.btoc-items { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+            table.btoc-items th, table.btoc-items td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; }
+            table.btoc-items th { font-weight: 600; }
+            .btoc-col-item { text-align: left; }
+            .btoc-col-qty { text-align: center; width: 22%; }
+            .btoc-col-total { text-align: right; width: 28%; }
+            .btoc-totals { font-size: 12px; margin-top: 4px; }
+            .btoc-totals-row { display: flex; justify-content: space-between; padding: 3px 0; }
+            .btoc-totals-row.btoc-total-amount { font-weight: 700; font-size: 14px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #111; }
+            .btoc-discount { color: #059669; }
+            .btoc-payment { margin-top: 8px; font-size: 11px; }
+            .btoc-footer { margin-top: 14px; text-align: center; font-size: 12px; color: #4b5563; }
+            .btoc-footer div { margin: 2px 0; }
           </style>
         </head>
         <body>${copiesHtml}</body>
@@ -430,7 +460,9 @@ const Billing = () => {
             ...invoice.cashier,
             companyName: invoice.cashier?.companyName || company.companyName || 'Our Spices Shop',
             address: invoice.cashier?.address || company.address || '',
-            gstNumber: invoice.cashier?.gstNumber || company.gstNumber || ''
+            gstNumber: invoice.cashier?.gstNumber || company.gstNumber || '',
+            phoneNumber: invoice.cashier?.phoneNumber ?? company.phoneNumber ?? '',
+            fssaiLicense: invoice.cashier?.fssaiLicense ?? company.fssaiLicense ?? ''
           }
         };
       } catch (e) {}
@@ -464,7 +496,9 @@ const Billing = () => {
         cashier: {
           companyName: company.companyName || user?.companyName || 'Our Spices Shop',
           address: company.address || '',
-          gstNumber: company.gstNumber || ''
+          gstNumber: company.gstNumber || '',
+          phoneNumber: company.phoneNumber || '',
+          fssaiLicense: company.fssaiLicense || ''
         },
         items: cart.map(item => ({
           productName: item.productName,
@@ -822,41 +856,58 @@ const Billing = () => {
     {showPreview && (previewDraft || lastInvoice) && (() => {
         const display = previewDraft ?? lastInvoice;
         const isDraft = !!previewDraft;
+        const subRaw = Number(display.subtotal);
+        const subVal = Number.isFinite(subRaw) ? subRaw : (display.items || []).reduce((s, it) => s + (Number(it.totalPrice) || 0), 0);
+        const baseAmount = Math.max(0, subVal - (Number(display.cgstAmount) || 0) - (Number(display.sgstAmount) || 0));
+        const cgstAmt = Number(display.cgstAmount) || 0;
+        const sgstAmt = Number(display.sgstAmount) || 0;
+        const subtotalVal = baseAmount + cgstAmt + sgstAmt;
+        const discountAmt = Number(display.discountAmount) || 0;
+        const totalAmt = Number(display.totalAmount) || 0;
         return (
         <div className="bill-preview-overlay">
-          <div className="bill-preview-container">
-            <div className="bill-preview-header">
-              <h2>{isDraft ? 'Invoice Preview' : 'Invoice'}</h2>
-              <button className="close-btn" onClick={() => { setPreviewDraft(null); setShowPreview(false); }}>×</button>
+          <div className="bill-preview-container btoc-preview-container">
+            <div className="bill-preview-header btoc-preview-header">
+              <h2 className="btoc-preview-title">Bill Preview</h2>
+              <div className="btoc-preview-header-btns">
+                {!isDraft && (
+                  <button type="button" className="btoc-btn-print" onClick={() => handlePrintInvoice(lastInvoice)}>
+                    <Printer size={18} /> Print Bill
+                  </button>
+                )}
+                <button type="button" className="btoc-btn-close" onClick={() => { setPreviewDraft(null); setShowPreview(false); }}>X Close</button>
+              </div>
             </div>
-            <div className="bill-preview-content" id="printable-bill">
-              <div className="bill-header">
-                <p className="bill-header-name">{display.cashier?.companyName || 'Our Spices Shop'}</p>
-                {display.cashier?.address && (
-                  <p className="bill-header-address">{display.cashier.address}</p>
+            <div className="bill-preview-content btoc-preview-content" id="printable-bill">
+              <div className="btoc-company">
+                <div className="btoc-company-name">{display.cashier?.companyName || 'Our Spices Shop'}</div>
+                {display.cashier?.address && <div className="btoc-company-line">{display.cashier.address}</div>}
+                {display.cashier?.phoneNumber && (
+                  <div className="btoc-company-line btoc-company-phone">
+                    <Phone size={14} className="btoc-phone-icon" /> {display.cashier.phoneNumber}
+                  </div>
                 )}
-                {display.cashier?.gstNumber && (
-                  <p className="bill-header-gst">GST: {display.cashier.gstNumber}</p>
-                )}
+                {display.cashier?.gstNumber && <div className="btoc-company-line">GST: {display.cashier.gstNumber}</div>}
+                {display.cashier?.fssaiLicense && <div className="btoc-company-line">FSSAI: {display.cashier.fssaiLicense}</div>}
               </div>
-              <div className="bill-meta-row">
-                <div className="bill-meta-col">
-                  <div><strong>Date:</strong> {new Date(display.createdAt).toLocaleString()}</div>
-                  <div><strong>Inv #:</strong> {display.invoiceNumber}</div>
+              <div className="btoc-divider-dashed" />
+              <div className="btoc-meta">
+                <div className="btoc-meta-row">
+                  <span>Invoice #:</span>
+                  <span>{display.invoiceNumber}</span>
                 </div>
-                <div className="bill-meta-col bill-meta-right">
-                  <div><strong>Type:</strong> {display.invoiceType || 'RETAIL'}</div>
-                  <div><strong>Payment:</strong> {display.paymentMethod || 'CASH'}</div>
+                <div className="btoc-meta-row">
+                  <span>Date:</span>
+                  <span>{new Date(display.createdAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}</span>
                 </div>
               </div>
-              <div className="bill-divider"></div>
-              <table className="bill-items-table">
+              <div className="btoc-divider-dashed" />
+              <table className="btoc-items-table">
                 <thead>
                   <tr>
-                    <th>Item</th>
-                    <th className="col-qty">Qty</th>
-                    <th className="col-rate">Rate</th>
-                    <th className="col-amount">Amount</th>
+                    <th className="btoc-col-item">Item</th>
+                    <th className="btoc-col-qty">Qty</th>
+                    <th className="btoc-col-total">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -864,50 +915,35 @@ const Billing = () => {
                     const qty = item.quantity ?? 0;
                     const unit = item.unit || '';
                     const qtyDisplay = unit ? `${qty} ${unit}` : String(qty);
-                    const rate = item.unitPrice ?? (item.totalPrice / (qty || 1));
-                    const total = item.totalPrice ?? qty * rate;
+                    const total = item.totalPrice ?? qty * (item.unitPrice ?? 0);
                     return (
                       <tr key={item.itemId ?? idx}>
-                        <td>{item.productName}</td>
-                        <td className="col-qty">{qtyDisplay}</td>
-                        <td className="col-rate">₹{Number(rate).toFixed(2)}</td>
-                        <td className="col-amount">₹{Number(total).toFixed(2)}</td>
+                        <td className="btoc-col-item">{item.productName}</td>
+                        <td className="btoc-col-qty">{qtyDisplay}</td>
+                        <td className="btoc-col-total">₹{Number(total).toFixed(2)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <div className="bill-divider"></div>
-              <div className="bill-totals">
-                <div className="bill-total-row">
-                  <span>Subtotal</span>
-                  <span>₹{(Math.max(0, (display.subtotal ?? (display.items || []).reduce((s, it) => s + (Number(it.totalPrice) || 0), 0)) - (Number(display.cgstAmount) || 0) - (Number(display.sgstAmount) || 0))).toFixed(2)}</span>
-                </div>
-                {(display.cgstAmount ?? 0) > 0 && (
-                  <div className="bill-total-row">
-                    <span>CGST</span>
-                    <span>₹{Number(display.cgstAmount).toFixed(2)}</span>
-                  </div>
-                )}
-                {(display.sgstAmount ?? 0) > 0 && (
-                  <div className="bill-total-row">
-                    <span>SGST</span>
-                    <span>₹{Number(display.sgstAmount).toFixed(2)}</span>
-                  </div>
-                )}
-                {(display.discountAmount ?? 0) > 0 && (
-                  <div className="bill-total-row bill-discount-row">
-                    <span>Discount</span>
-                    <span>- ₹{Number(display.discountAmount).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="bill-total-row">
-                  <span>Total</span>
-                  <span>₹{(display.totalAmount ?? 0).toFixed(2)}</span>
-                </div>
+              <div className="btoc-divider-dashed" />
+              <div className="btoc-totals">
+                <div className="btoc-totals-row"><span>Base Amount</span><span>₹{baseAmount.toFixed(2)}</span></div>
+                {cgstAmt > 0 && <div className="btoc-totals-row"><span>CGST</span><span>₹{cgstAmt.toFixed(2)}</span></div>}
+                {sgstAmt > 0 && <div className="btoc-totals-row"><span>SGST</span><span>₹{sgstAmt.toFixed(2)}</span></div>}
+                <div className="btoc-totals-row"><span>Subtotal</span><span>₹{subtotalVal.toFixed(2)}</span></div>
+                {discountAmt > 0 && <div className="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹{discountAmt.toFixed(2)}</span></div>}
+                <div className="btoc-divider-solid" />
+                <div className="btoc-totals-row btoc-total-amount"><span>Total Amount</span><span>₹{totalAmt.toFixed(2)}</span></div>
               </div>
-              <div className="bill-footer">
-                <p>Thank you for shopping!</p>
+              <div className="btoc-divider-dashed" />
+              <div className="btoc-payment">
+                <div className="btoc-totals-row"><span>Payment Method</span><span>{display.paymentMethod || 'CASH'}</span></div>
+                <div className="btoc-totals-row"><span>Amount Paid</span><span>₹{totalAmt.toFixed(2)}</span></div>
+              </div>
+              <div className="btoc-footer">
+                <div>Thank you for your business!</div>
+                <div>Visit us again</div>
               </div>
             </div>
             <div className="bill-preview-actions">
@@ -926,7 +962,7 @@ const Billing = () => {
               ) : (
                 <>
                   <button className="print-btn" onClick={() => handlePrintInvoice(lastInvoice)}>
-                    <Printer size={18} /> Print Invoice
+                    <Printer size={18} /> Print Bill
                   </button>
                   <button className="secondary-btn" onClick={() => setShowPreview(false)}>
                     Done

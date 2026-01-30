@@ -42,6 +42,9 @@ public class CourierRequest {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     public CourierRequest() {
         this.status = "PENDING";
     }
@@ -102,6 +105,14 @@ public class CourierRequest {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return this.updatedAt;
     }
 
     public Integer getCourierId() {

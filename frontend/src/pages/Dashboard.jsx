@@ -22,46 +22,59 @@ import CancellationRequestsPage from './CancellationRequestsPage';
 import Attendance from './Attendance';
 import Staff from './Staff';
 import BillsPage from './BillsPage';
+import EditInvoicePage from './EditInvoicePage';
 import Categories from './Categories';
 import SettingsPage from './Settings';
+import CourierPage from './CourierPage';
+import ExpensePage from './ExpensePage';
+import DailyAccountingPage from './DailyAccountingPage';
+import ReportsPage from './ReportsPage';
+import BossReportPage from './BossReportPage';
+import './Dashboard.css';
 
-// Sub-components for the Dashboard Grid
+// Sub-components for the Dashboard Grid – styled like old spices dashboard
 const DashboardHome = ({ user, menuItems }) => {
   const navigate = useNavigate();
   const isAdmin = user.role === 'ADMIN';
+  const companyName = user.companyName || user.company || '—';
 
   return (
     <div className="dashboard-content">
-      <div className="dashboard-header">
-        <div>
-          <h1>🌶️ Spices Billing System</h1>
-          <p>Welcome back, {user.username} ({user.role})</p>
+      <div className="dashboard-main-area">
+        <div className="dashboard-header-wrap">
+          <div className="dashboard-header">
+            <h1>Welcome to your Dashboard!</h1>
+            <p className="dashboard-subtitle">Manage your spices business efficiently</p>
+          </div>
+          <div className="dashboard-header-actions">
+            <button className="logout-button" onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              window.location.href = '/login';
+            }}>
+              <LogOut size={18} /> Logout
+            </button>
+          </div>
         </div>
-        <div className="header-actions">
-          <button className="logout-button" onClick={() => {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            window.location.href = '/login';
-          }}>
-            <LogOut size={18} /> Logout
-          </button>
+
+        <div className="dashboard-user-info">
+          <p>User ID: {user.id ?? user.userId ?? '—'}</p>
+          <p>Role: {user.role}</p>
+          <p>Company: {companyName}</p>
         </div>
-      </div>
 
-      <div className="welcome-card" style={{marginBottom: '30px'}}>
-        <h2>Dashboard Overview</h2>
-        <p>Select a module to get started with your billing and management tasks.</p>
-      </div>
+        <h2 className="dashboard-features-heading">
+          {isAdmin ? 'Admin Features' : 'Cashier Features'}
+        </h2>
 
-      <div className={isAdmin ? "admin-features" : "cashier-features"}>
-        <div className="feature-cards">
+        <div className="dashboard-feature-cards">
           {menuItems.map((item) => (
-            <div 
-              key={item.path} 
-              className="feature-card" 
+            <div
+              key={item.path}
+              className="dashboard-feature-card"
               onClick={() => navigate(item.path)}
             >
-              <div className="feature-icon">{item.displayIcon}</div>
+              <div className="dashboard-feature-icon">{item.displayIcon}</div>
               <h3>{item.label}</h3>
               <p>{item.description}</p>
             </div>
@@ -98,6 +111,8 @@ const Dashboard = () => {
     { path: '/dashboard/staff', displayIcon: '👥', label: 'Staff & HR', description: 'Manage employee accounts and salaries' },
     { path: '/dashboard/attendance', displayIcon: '📅', label: 'Attendance', description: 'View and mark daily attendance' },
     { path: '/dashboard/courier', displayIcon: '🚚', label: 'Courier', description: 'Track courier requests' },
+    { path: '/dashboard/accounting', displayIcon: '💰', label: 'Accounting & Day Close', description: 'Daily accounting and payment splits' },
+    { path: '/dashboard/boss-report', displayIcon: '📈', label: 'Boss Report', description: 'Most sale items & month-wise sales charts' },
     { path: '/dashboard/reports', displayIcon: '📊', label: 'Reports', description: 'Sales, GST and accounting reports' },
     { path: '/dashboard/settings', displayIcon: '⚙️', label: 'Settings', description: 'Company and system configuration' },
   ];
@@ -107,6 +122,7 @@ const Dashboard = () => {
     { path: '/dashboard/b2b', displayIcon: '🏢', label: 'B2B Billing', description: 'Generate B2B invoices' },
     { path: '/dashboard/bills', displayIcon: '📚', label: 'Bills', description: 'View and reprint recent bills' },
     { path: '/dashboard/b2b-bills', displayIcon: '🏢', label: 'B2B Bills Report', description: 'View and manage B2B invoices' },
+    { path: '/dashboard/expenses', displayIcon: '💰', label: 'Expenses', description: 'Record and view daily expenses' },
     { path: '/dashboard/inventory-view', displayIcon: '📦', label: 'Product Management', description: 'Search and check product availability' },
     { path: '/dashboard/attendance', displayIcon: '📅', label: 'My Attendance', description: 'Mark your daily attendance' },
     { path: '/dashboard/courier', displayIcon: '🚚', label: 'Courier', description: 'Track courier requests' },
@@ -124,14 +140,19 @@ const Dashboard = () => {
           <Route path="/categories" element={<Categories />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/b2b" element={<B2BBilling />} />
+          <Route path="/dashboard/b2b/edit/:invoiceId" element={<B2BBilling />} />
           <Route path="/bills" element={<BillsPage />} />
+          <Route path="/bills/:invoiceId/edit" element={<EditInvoicePage />} />
           <Route path="/b2b-bills" element={<B2BBillsPage />} />
           <Route path="/cancellation-requests" element={<CancellationRequestsPage />} />
           <Route path="/staff" element={<Staff />} />
           <Route path="/attendance" element={<Attendance />} />
-          <Route path="/reports" element={<div className="dashboard-content"><button onClick={() => navigate('/dashboard')} className="back-button">← Back</button><h1>Reports</h1></div>} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/boss-report" element={<BossReportPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/courier" element={<div className="dashboard-content"><button onClick={() => navigate('/dashboard')} className="back-button">← Back</button><h1>Courier Requests</h1></div>} />
+          <Route path="/courier" element={<CourierPage />} />
+          <Route path="/expenses" element={<ExpensePage />} />
+          <Route path="/accounting" element={<DailyAccountingPage />} />
         </Routes>
       </main>
     </div>

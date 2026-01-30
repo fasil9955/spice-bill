@@ -5,12 +5,30 @@ import java.math.BigDecimal;
 public class AccountingDaySummaryResponse {
     private String reportDate;
     private BigDecimal billingBookSales;
+    /** Opening CASH = yesterday's closing cash. */
+    private BigDecimal openingCash;
+    /** Opening UPI = yesterday's closing GPay total. */
+    private BigDecimal openingUpi;
+    /** This day's closing cash (saved Cash Balance). */
+    private BigDecimal closingCash;
+    /** This day's closing GPay total. */
+    private BigDecimal closingGpayTotal;
 
     public AccountingDaySummaryResponse() {}
 
     public AccountingDaySummaryResponse(String reportDate, BigDecimal billingBookSales) {
         this.reportDate = reportDate;
-        this.billingBookSales = billingBookSales;
+        this.billingBookSales = billingBookSales != null ? billingBookSales : BigDecimal.ZERO;
+    }
+
+    public AccountingDaySummaryResponse(String reportDate, BigDecimal billingBookSales,
+            BigDecimal openingCash, BigDecimal openingUpi, BigDecimal closingCash, BigDecimal closingGpayTotal) {
+        this.reportDate = reportDate;
+        this.billingBookSales = billingBookSales != null ? billingBookSales : BigDecimal.ZERO;
+        this.openingCash = openingCash != null ? openingCash : BigDecimal.ZERO;
+        this.openingUpi = openingUpi != null ? openingUpi : BigDecimal.ZERO;
+        this.closingCash = closingCash;
+        this.closingGpayTotal = closingGpayTotal;
     }
 
     public String getReportDate() {
@@ -27,6 +45,38 @@ public class AccountingDaySummaryResponse {
 
     public void setBillingBookSales(BigDecimal billingBookSales) {
         this.billingBookSales = billingBookSales;
+    }
+
+    public BigDecimal getOpeningCash() {
+        return this.openingCash;
+    }
+
+    public void setOpeningCash(BigDecimal openingCash) {
+        this.openingCash = openingCash;
+    }
+
+    public BigDecimal getOpeningUpi() {
+        return this.openingUpi;
+    }
+
+    public void setOpeningUpi(BigDecimal openingUpi) {
+        this.openingUpi = openingUpi;
+    }
+
+    public BigDecimal getClosingCash() {
+        return this.closingCash;
+    }
+
+    public void setClosingCash(BigDecimal closingCash) {
+        this.closingCash = closingCash;
+    }
+
+    public BigDecimal getClosingGpayTotal() {
+        return this.closingGpayTotal;
+    }
+
+    public void setClosingGpayTotal(BigDecimal closingGpayTotal) {
+        this.closingGpayTotal = closingGpayTotal;
     }
 
     @Override

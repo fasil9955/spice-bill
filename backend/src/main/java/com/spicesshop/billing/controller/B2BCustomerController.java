@@ -4,17 +4,16 @@ import com.spicesshop.billing.model.B2BCustomer;
 import com.spicesshop.billing.repository.B2BCustomerRepository;
 import com.spicesshop.billing.util.CompanyExtractor;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -79,6 +78,31 @@ public class B2BCustomerController {
             customer.setCompanyName(companyName);
             B2BCustomer saved = this.b2bCustomerRepository.save(customer);
             return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping({"/{id}"})
+    public ResponseEntity<?> updateCustomer(@PathVariable Integer id, @RequestBody B2BCustomer body, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            Optional<B2BCustomer> existing = this.b2bCustomerRepository.findById(id);
+            if (existing.isEmpty() || !existing.get().getCompanyName().equals(companyName)) {
+                return ResponseEntity.notFound().build();
+            }
+            B2BCustomer customer = existing.get();
+            if (body.getCustomerName() != null) customer.setCustomerName(body.getCustomerName());
+            if (body.getGstNumber() != null) customer.setGstNumber(body.getGstNumber());
+            if (body.getBillingAddress() != null) customer.setBillingAddress(body.getBillingAddress());
+            if (body.getShippingAddress() != null) customer.setShippingAddress(body.getShippingAddress());
+            if (body.getAddress() != null) customer.setAddress(body.getAddress());
+            if (body.getPhone() != null) customer.setPhone(body.getPhone());
+            if (body.getEmail() != null) customer.setEmail(body.getEmail());
+            if (body.getCompanyNameInInvoice() != null) customer.setCompanyNameInInvoice(body.getCompanyNameInInvoice());
+            customer.setUpdatedAt(java.time.LocalDateTime.now());
+            B2BCustomer updated = this.b2bCustomerRepository.save(customer);
+            return ResponseEntity.ok(updated);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

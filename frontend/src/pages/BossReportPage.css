@@ -1,0 +1,146 @@
+/* Boss Report – visual charts for bosses */
+
+.boss-report-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.boss-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.boss-report-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.boss-report-subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #64748b;
+}
+
+.boss-report-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #475569;
+  background: #e2e8f0;
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.boss-report-back-btn:hover {
+  background: #cbd5e1;
+  border-color: #94a3b8;
+}
+
+.boss-report-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.boss-report-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.boss-report-field label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.boss-report-field select {
+  padding: 8px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  min-width: 120px;
+  background: #fff;
+}
+
+.boss-report-field select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.boss-report-loading {
+  text-align: center;
+  padding: 48px 24px;
+  font-size: 1rem;
+  color: #64748b;
+}
+
+.boss-report-section {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.boss-report-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.boss-report-section-desc {
+  margin: 0 0 20px;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.boss-report-chart-wrap {
+  min-height: 280px;
+  width: 100%;
+}
+
+.boss-report-empty {
+  margin: 0;
+  padding: 48px 24px;
+  text-align: center;
+  font-size: 0.95rem;
+  color: #94a3b8;
+}
+
+.boss-report-bar-month .boss-report-section-title {
+  margin-bottom: 16px;
+}
+
+.boss-report-bar-month .boss-report-section-desc {
+  display: none;
+}
+
+/* Recharts overrides for cleaner look */
+.boss-report-page .recharts-cartesian-grid-horizontal line,
+.boss-report-page .recharts-cartesian-grid-vertical line {
+  stroke: #f1f5f9;
+}
+
+.boss-report-page .recharts-tooltip-wrapper {
+  outline: none;
+}

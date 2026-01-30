@@ -22,6 +22,11 @@ public class EmployeeService {
     }
 
     public Employee createEmployee(Employee employee) {
+        String code = employee.getEmployeeCode();
+        if (code == null || code.trim().isEmpty()) {
+            code = "EMP-" + System.currentTimeMillis();
+            employee.setEmployeeCode(code);
+        }
         if (this.employeeRepository.existsByCompanyNameAndEmployeeCode(employee.getCompanyName(), employee.getEmployeeCode())) {
             throw new RuntimeException("Employee code already exists: " + employee.getEmployeeCode());
         }
@@ -46,6 +51,7 @@ public class EmployeeService {
         existing.setEmail(employee.getEmail());
         existing.setDepartment(employee.getDepartment());
         existing.setDesignation(employee.getDesignation());
+        existing.setAddress(employee.getAddress());
         existing.setAadharDocument(employee.getAadharDocument());
         existing.setPhoto(employee.getPhoto());
         existing.setIsActive(employee.getIsActive());

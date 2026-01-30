@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { productService, invoiceService, authService, b2bCustomerService } from '../services/api';
-import { buildInvoicePrintHtml, printHtmlViaIframe } from '../utils/invoicePrint';
+import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees } from '../utils/invoicePrint';
 import './Billing.css';
-import { Search, Plus, Minus, ShoppingCart, Printer, ArrowLeft, X, UserPlus } from 'lucide-react';
+import { Search, Plus, Minus, ShoppingCart, Printer, ArrowLeft, X, UserPlus, Pencil } from 'lucide-react';
 
 const DISCOUNT_PERCENT_MAX = 30;
 
@@ -28,6 +28,7 @@ const B2BBilling = () => {
   const [selectedQtyInput, setSelectedQtyInput] = useState('1');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [showEditCustomer, setShowEditCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     customerName: '',
     gstNumber: '',
@@ -37,11 +38,25 @@ const B2BBilling = () => {
     phone: '',
     email: ''
   });
+  const [editCustomerForm, setEditCustomerForm] = useState({
+    customerName: '',
+    gstNumber: '',
+    billingAddress: '',
+    shippingAddress: '',
+    address: '',
+    phone: '',
+    email: ''
+  });
   const [ewayBillNumber, setEwayBillNumber] = useState('');
+  const [totalPackages, setTotalPackages] = useState('');
   const [nextBillNumber, setNextBillNumber] = useState('');
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
   const navigate = useNavigate();
+  const { invoiceId: editInvoiceId } = useParams();
+  const editMode = !!editInvoiceId;
+  const [editLoading, setEditLoading] = useState(!!editInvoiceId);
+  const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
 
   const fetchNextBillNumber = async () => {
     try {
@@ -64,8 +79,56 @@ const B2BBilling = () => {
 
   useEffect(() => {
     fetchB2bCustomers();
-    fetchNextBillNumber();
-  }, []);
+    if (!editMode) fetchNextBillNumber();
+  }, [editMode]);
+
+  useEffect(() => {
+    if (!editMode || !editInvoiceId) return;
+    let cancelled = false;
+    setEditLoading(true);
+    invoiceService.getById(editInvoiceId)
+      .then((res) => {
+        if (cancelled) return;
+        const inv = res.data;
+        if (!inv) return;
+        setEditInvoiceNumber(inv.invoiceNumber || '');
+        if (inv.b2bCustomer) setSelectedCustomer(inv.b2bCustomer);
+        setEwayBillNumber(inv.ewayBillNumber || '');
+        setTotalPackages(inv.totalPackages != null ? String(inv.totalPackages) : '');
+        setPaymentMethod(inv.paymentMethod || 'CASH');
+        setAmounts({
+          cash: Number(inv.cashAmount) || 0,
+          card: Number(inv.cardAmount) || 0,
+          upi: Number(inv.upiAmount) || 0
+        });
+        const discountAmt = Number(inv.discountAmount) || 0;
+        setDiscountType('amount');
+        setDiscountAmount(discountAmt);
+        setDiscountPercent(0);
+        const cartItems = (inv.items || []).map((it) => {
+          const p = it.product || {};
+          const productId = p.productId != null ? p.productId : it.productId;
+          return {
+            ...p,
+            productId,
+            productName: it.productName || p.productName || '',
+            unit: it.unit || p.unit || '',
+            quantity: Number(it.quantity) || 0,
+            unitPrice: Number(it.unitPrice) || 0,
+            hsnCode: (it.hsnCode || p.hsnCode || '').trim(),
+            gstPercentage: Number(it.gstPercentage) ?? Number(p.category?.gstPercentage) ?? 0
+          };
+        });
+        setCart(cartItems);
+      })
+      .catch((err) => {
+        if (!cancelled) alert(err.response?.data?.error || 'Failed to load invoice.');
+      })
+      .finally(() => {
+        if (!cancelled) setEditLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [editMode, editInvoiceId]);
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -334,24 +397,72 @@ const B2BBilling = () => {
     }
   };
 
+  const openEditCustomer = () => {
+    if (!selectedCustomer) return;
+    setEditCustomerForm({
+      customerName: selectedCustomer.customerName || '',
+      gstNumber: selectedCustomer.gstNumber || '',
+      billingAddress: selectedCustomer.billingAddress || '',
+      shippingAddress: selectedCustomer.shippingAddress || '',
+      address: selectedCustomer.address || '',
+      phone: selectedCustomer.phone || '',
+      email: selectedCustomer.email || ''
+    });
+    setShowEditCustomer(true);
+  };
+
+  const handleEditCustomer = async (e) => {
+    e.preventDefault();
+    if (!selectedCustomer) return;
+    const name = (editCustomerForm.customerName || '').trim();
+    const gst = (editCustomerForm.gstNumber || '').trim();
+    if (!name || !gst) {
+      alert('Customer name and GST number are required.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await b2bCustomerService.update(selectedCustomer.customerId, {
+        customerName: name,
+        gstNumber: gst,
+        billingAddress: (editCustomerForm.billingAddress || '').trim() || null,
+        shippingAddress: (editCustomerForm.shippingAddress || '').trim() || null,
+        address: (editCustomerForm.address || '').trim() || null,
+        phone: (editCustomerForm.phone || '').trim() || null,
+        email: (editCustomerForm.email || '').trim() || null
+      });
+      await fetchB2bCustomers();
+      setSelectedCustomer(res.data);
+      setShowEditCustomer(false);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update customer.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePrintInvoice = async (invoice) => {
     if (!invoice) return;
     let toPrint = invoice;
-    if (!invoice.cashier?.address || !invoice.cashier?.gstNumber) {
-      try {
-        const companyRes = await authService.getCompanyDetails();
-        const company = companyRes?.data || {};
-        toPrint = {
-          ...invoice,
-          cashier: {
-            ...invoice.cashier,
-            companyName: invoice.cashier?.companyName || company.companyName || 'Our Spices Shop',
-            address: invoice.cashier?.address || company.address || '',
-            gstNumber: invoice.cashier?.gstNumber || company.gstNumber || ''
-          }
-        };
-      } catch {}
-    }
+    try {
+      const companyRes = await authService.getCompanyDetails();
+      const company = companyRes?.data || {};
+      const cashier = invoice.cashier || {};
+      toPrint = {
+        ...invoice,
+        placeOfSupply: invoice.placeOfSupply || getStateLabel(invoice.b2bCustomer?.stateCode || (invoice.b2bCustomer?.gstNumber || '').substring(0, 2)),
+        cashier: {
+          companyName: cashier.companyName || company.companyName || 'Our Spices Shop',
+          address: cashier.address || company.address || '',
+          gstNumber: cashier.gstNumber || company.gstNumber || '',
+          phoneNumber: cashier.phoneNumber || company.phoneNumber || '',
+          bankName: cashier.bankName || company.bankName || '',
+          accountNumber: cashier.accountNumber || company.accountNumber || '',
+          ifscCode: cashier.ifscCode || company.ifscCode || '',
+          branchName: cashier.branchName || company.branchName || ''
+        }
+      };
+    } catch {}
     const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
     if (html) printHtmlViaIframe(html);
   };
@@ -376,17 +487,25 @@ const B2BBilling = () => {
       const gstTotal = calculateCartGstB2B();
       const discountVal = getDiscountValue();
       const total = calculateTotalB2B();
+      const custState = getStateLabel(selectedCustomer.stateCode || (selectedCustomer.gstNumber || '').substring(0, 2));
       const draft = {
         invoiceNumber,
         createdAt: new Date().toISOString(),
         invoiceType: 'B2B',
         ewayBillNumber: ewayBillNumber.trim() || null,
         paymentMethod,
+        placeOfSupply: custState,
+        totalPackages: (totalPackages !== '' && totalPackages != null) ? parseInt(totalPackages, 10) : null,
         b2bCustomer: selectedCustomer,
         cashier: {
           companyName: company.companyName || user?.companyName || 'Our Spices Shop',
           address: company.address || '',
-          gstNumber: company.gstNumber || ''
+          gstNumber: company.gstNumber || '',
+          phoneNumber: company.phoneNumber || '',
+          bankName: company.bankName || '',
+          accountNumber: company.accountNumber || '',
+          ifscCode: company.ifscCode || '',
+          branchName: company.branchName || ''
         },
         items: cart.map(item => ({
           productName: item.productName,
@@ -424,6 +543,7 @@ const B2BBilling = () => {
         b2bCustomerId: selectedCustomer.customerId,
         invoiceNumber: previewDraft.invoiceNumber,
         ...(ewayBillNumber.trim() && { ewayBillNumber: ewayBillNumber.trim() }),
+        ...((totalPackages !== '' && totalPackages != null) ? { totalPackages: parseInt(totalPackages, 10) } : {}),
         paymentMethod,
         cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
         cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
@@ -444,6 +564,7 @@ const B2BBilling = () => {
       setPreviewDraft(null);
       setCart([]);
       setEwayBillNumber('');
+      setTotalPackages('');
       setShowPreview(true);
       if (andPrint) handlePrintInvoice(response.data);
     } catch (err) {
@@ -453,20 +574,67 @@ const B2BBilling = () => {
     }
   };
 
+  const handleUpdate = async (andPrint = false) => {
+    if (!editInvoiceId || !selectedCustomer || cart.length === 0) return;
+    const total = calculateTotalB2B();
+    setLoading(true);
+    try {
+      const payload = {
+        paymentMethod,
+        cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
+        cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
+        upiAmount: paymentMethod === 'MIXED' ? Number(amounts.upi) || 0 : (paymentMethod === 'UPI' ? total : 0),
+        discountAmount: getDiscountValue(),
+        ...(ewayBillNumber.trim() && { ewayBillNumber: ewayBillNumber.trim() }),
+        ...((totalPackages !== '' && totalPackages != null) ? { totalPackages: parseInt(totalPackages, 10) } : {}),
+        items: cart.map(item => ({
+          product: { productId: item.productId },
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          hsnCode: (item.hsnCode || '').trim() || undefined,
+          gstPercentage: Number(item.gstPercentage) ?? 0,
+          discountAmount: 0
+        }))
+      };
+      const response = await invoiceService.update(parseInt(editInvoiceId, 10), payload);
+      const updated = response.data;
+      if (andPrint) handlePrintInvoice(updated);
+      else alert('Invoice updated successfully.');
+    } catch (err) {
+      alert(err.response?.data?.error || err.response?.data?.message || 'Failed to update invoice');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const cartGstB2B = calculateCartGstB2B();
   const isDraft = previewDraft && !lastInvoice;
+
+  if (editMode && editLoading) {
+    return (
+      <div className="billing-container">
+        <div className="billing-header">
+          <button className="back-button" onClick={() => navigate('/dashboard/b2b-bills')}><ArrowLeft size={18} /> Back</button>
+          <h1>🏢 Edit B2B Invoice</h1>
+        </div>
+        <p className="loading">Loading invoice...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="billing-container">
       <div className="billing-header">
         <div className="billing-header-main">
           <div className="billing-header-actions">
-            <button className="back-button" onClick={() => navigate('/dashboard')}>
+            <button className="back-button" onClick={() => navigate(editMode ? '/dashboard/b2b-bills' : '/dashboard')}>
               <ArrowLeft size={18} /> Back
             </button>
-            <h1>🏢 B2B Billing</h1>
-            {nextBillNumber && (
-              <span className="b2b-bill-number-badge">Bill #: {nextBillNumber}</span>
+            <h1>{editMode ? '🏢 Edit B2B Invoice' : '🏢 B2B Billing'}</h1>
+            {editMode ? (
+              editInvoiceNumber && <span className="b2b-bill-number-badge">Inv #: {editInvoiceNumber}</span>
+            ) : (
+              nextBillNumber && <span className="b2b-bill-number-badge">Bill #: {nextBillNumber}</span>
             )}
           </div>
           <div className="billing-header-actions">
@@ -501,7 +669,38 @@ const B2BBilling = () => {
             {selectedCustomer.gstNumber && <span> GST: {selectedCustomer.gstNumber}</span>}
             {selectedCustomer.billingAddress && <p className="b2b-address"><strong>Billing:</strong> {selectedCustomer.billingAddress}</p>}
             {selectedCustomer.shippingAddress && <p className="b2b-address"><strong>Shipping:</strong> {selectedCustomer.shippingAddress}</p>}
-            <button type="button" className="clear-customer-btn" onClick={() => setSelectedCustomer(null)}>Change</button>
+            <div className="b2b-selected-card-fields">
+              <div className="b2b-eway-on-card">
+                <label htmlFor="b2b-eway-bill">E-way Bill No.</label>
+                <input
+                  id="b2b-eway-bill"
+                  type="text"
+                  className="eway-bill-input"
+                  value={ewayBillNumber}
+                  onChange={(e) => setEwayBillNumber(e.target.value)}
+                  placeholder="Optional – e.g. EWB123456789012"
+                />
+              </div>
+              <div className="b2b-total-packages-on-card">
+                <label htmlFor="b2b-total-packages">Total packages (for reference)</label>
+                <input
+                  id="b2b-total-packages"
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="total-packages-input"
+                  value={totalPackages}
+                  onChange={(e) => setTotalPackages(e.target.value)}
+                  placeholder="e.g. 10"
+                />
+              </div>
+            </div>
+            <div className="b2b-selected-card-actions">
+              <button type="button" className="edit-customer-btn" onClick={openEditCustomer} title="Edit customer">
+                <Pencil size={16} /> Edit customer
+              </button>
+              <button type="button" className="clear-customer-btn" onClick={() => setSelectedCustomer(null)}>Change</button>
+            </div>
           </div>
         )}
         {!selectedCustomer && filteredCustomers.length > 0 && (
@@ -521,7 +720,7 @@ const B2BBilling = () => {
         )}
       </div>
 
-      <div className="billing-content">
+      <div className="billing-content b2b-billing-layout">
         <div className="billing-main-content">
           <div className="cart-section">
             <div className="billing-search-bar cart-search-bar">
@@ -691,18 +890,6 @@ const B2BBilling = () => {
                 <span>₹{calculateTotalB2B().toFixed(2)}</span>
               </div>
 
-              <div className="eway-bill-section">
-                <label htmlFor="b2b-eway-bill">E-way Bill No.</label>
-                <input
-                  id="b2b-eway-bill"
-                  type="text"
-                  className="eway-bill-input"
-                  value={ewayBillNumber}
-                  onChange={(e) => setEwayBillNumber(e.target.value)}
-                  placeholder="Optional – e.g. EWB123456789012"
-                />
-              </div>
-
               <div className="payment-section">
                 <h3>Payment Method</h3>
                 <select className="payment-select" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
@@ -740,9 +927,20 @@ const B2BBilling = () => {
                 )}
               </div>
 
-              <button className="preview-invoice-btn" onClick={handlePreview} disabled={!selectedCustomer || cart.length === 0 || loading}>
-                {loading ? 'Loading...' : 'Preview Invoice'}
-              </button>
+              {editMode ? (
+                <>
+                  <button className="print-btn" onClick={() => handleUpdate(false)} disabled={!selectedCustomer || cart.length === 0 || loading}>
+                    {loading ? 'Updating...' : 'Update'}
+                  </button>
+                  <button className="print-btn" onClick={() => handleUpdate(true)} disabled={!selectedCustomer || cart.length === 0 || loading}>
+                    {loading ? 'Updating...' : 'Update & Print'}
+                  </button>
+                </>
+              ) : (
+                <button className="preview-invoice-btn" onClick={handlePreview} disabled={!selectedCustomer || cart.length === 0 || loading}>
+                  {loading ? 'Loading...' : 'Preview Invoice'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -790,91 +988,189 @@ const B2BBilling = () => {
         </div>
       )}
 
+      {/* Edit B2B Customer modal */}
+      {showEditCustomer && selectedCustomer && (
+        <div className="modal-overlay" onClick={() => setShowEditCustomer(false)}>
+          <div className="modal-content b2b-add-modal b2b-edit-modal" onClick={e => e.stopPropagation()}>
+            <div className="bills-detail-header">
+              <h2>Edit B2B Customer</h2>
+              <button type="button" className="modal-close" onClick={() => setShowEditCustomer(false)}><X size={20}/></button>
+            </div>
+            <form onSubmit={handleEditCustomer} className="b2b-add-form">
+              <div className="form-group">
+                <label>Customer Name *</label>
+                <input type="text" value={editCustomerForm.customerName} onChange={(e) => setEditCustomerForm(c => ({ ...c, customerName: e.target.value }))} required />
+              </div>
+              <div className="form-group">
+                <label>GST Number *</label>
+                <input type="text" value={editCustomerForm.gstNumber} onChange={(e) => setEditCustomerForm(c => ({ ...c, gstNumber: e.target.value }))} required placeholder="e.g. 29AAAAA0000A1Z5" />
+              </div>
+              <div className="form-group">
+                <label>Billing Address</label>
+                <textarea value={editCustomerForm.billingAddress} onChange={(e) => setEditCustomerForm(c => ({ ...c, billingAddress: e.target.value }))} rows={2} placeholder="Full billing address" />
+              </div>
+              <div className="form-group">
+                <label>Shipping Address</label>
+                <textarea value={editCustomerForm.shippingAddress} onChange={(e) => setEditCustomerForm(c => ({ ...c, shippingAddress: e.target.value }))} rows={2} placeholder="Delivery / shipping address (if different)" />
+              </div>
+              <div className="form-group">
+                <label>Phone</label>
+                <input type="text" value={editCustomerForm.phone} onChange={(e) => setEditCustomerForm(c => ({ ...c, phone: e.target.value }))} placeholder="Phone" />
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input type="email" value={editCustomerForm.email} onChange={(e) => setEditCustomerForm(c => ({ ...c, email: e.target.value }))} placeholder="Email" />
+              </div>
+              <div className="bills-detail-actions">
+                <button type="submit" className="print-btn" disabled={loading}>{loading ? 'Saving...' : 'Save Changes'}</button>
+                <button type="button" className="back-button" onClick={() => setShowEditCustomer(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Preview / success modal – A4 sheet format */}
       {showPreview && (previewDraft || lastInvoice) && (() => {
         const draft = previewDraft || lastInvoice;
         const cust = draft.b2bCustomer;
+        const companyState = getStateLabel(draft.cashier?.gstNumber ? draft.cashier.gstNumber.substring(0, 2) : '');
+        const placeSupply = draft.placeOfSupply || getStateLabel(cust?.stateCode || (cust?.gstNumber || '').substring(0, 2));
+        const createdDate = draft.createdAt ? (() => {
+          const d = new Date(draft.createdAt);
+          return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        })() : '';
+        const createdTime = draft.createdAt ? (() => {
+          const d = new Date(draft.createdAt);
+          const h = d.getHours();
+          const m = String(d.getMinutes()).padStart(2, '0');
+          const h12 = h % 12 || 12;
+          return `${String(h12).padStart(2, '0')}:${m} ${h >= 12 ? 'pm' : 'am'}`;
+        })() : '';
+        const gstTotal = (Number(draft.cgstAmount) || 0) + (Number(draft.sgstAmount) || 0);
+        const taxPct = (Number(draft.subtotal) || 0) > 0 && gstTotal > 0 ? Math.round((gstTotal * 100) / (Number(draft.subtotal) || 1)) : 0;
+        const totalAmt = Number(draft.totalAmount) || 0;
+        const totalQty = (draft.items || []).reduce((s, it) => s + (Number(it.quantity) || 0), 0);
+        const totalItemsAmt = (draft.items || []).reduce((s, it) => s + (Number(it.totalPrice) || 0), 0);
+        const amountWords = numberToWordsRupees(totalAmt);
+        const companyName = draft.cashier?.companyName || 'Our Spices Shop';
+        const handlePrintOnly = () => {
+          const toPrint = draft.placeOfSupply ? draft : { ...draft, placeOfSupply: placeSupply };
+          const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
+          if (html) printHtmlViaIframe(html);
+        };
         return (
           <div className="modal-overlay b2b-preview-overlay" onClick={() => { if (!isDraft) setShowPreview(false); }}>
             <div className="bill-preview-modal b2b-bill-preview-modal" onClick={e => e.stopPropagation()}>
-              <div className="bill-preview-header">
-                <h2>{isDraft ? 'B2B Tax Invoice – Preview' : 'B2B Tax Invoice'}</h2>
-                <button type="button" className="modal-close" onClick={() => { setPreviewDraft(null); setShowPreview(false); }}>×</button>
+              <div className="bill-preview-header b2b-preview-header">
+                <h2>B2B Tax Invoice Preview</h2>
+                <div className="b2b-preview-header-actions">
+                  {isDraft && (
+                    <>
+                      <button type="button" className="print-btn b2b-btn-save-print" onClick={() => saveInvoice(true)} disabled={loading}>
+                        <Printer size={16} /> Save & Print
+                      </button>
+                      <button type="button" className="print-btn b2b-btn-print-only" onClick={handlePrintOnly}>
+                        <Printer size={16} /> Print Only
+                      </button>
+                    </>
+                  )}
+                  {!isDraft && (
+                    <button type="button" className="print-btn" onClick={() => handlePrintInvoice(lastInvoice)}>
+                      <Printer size={16} /> Print Invoice
+                    </button>
+                  )}
+                  <button type="button" className="b2b-btn-close" onClick={() => { setPreviewDraft(null); setShowPreview(false); }}>× Close</button>
+                </div>
               </div>
               <div className="b2b-a4-wrapper">
-                <div className="b2b-a4-sheet" id="b2b-print-area">
-                  <div className="b2b-a4-invoice-no">Invoice No: <strong>{draft.invoiceNumber}</strong></div>
-                  <div className="b2b-a4-header">
-                    <div className="b2b-a4-company">
-                      <p className="b2b-a4-company-name">{draft.cashier?.companyName || 'Our Spices Shop'}</p>
-                      {draft.cashier?.address && <p className="b2b-a4-address">{draft.cashier.address}</p>}
-                      {draft.cashier?.gstNumber && <p className="b2b-a4-gst">GST: {draft.cashier.gstNumber}</p>}
-                    </div>
-                    <div className="b2b-a4-title">TAX INVOICE (B2B)</div>
+                <div className="b2b-a4-sheet b2b-old-style-sheet" id="b2b-print-area">
+                  <div className="b2b-old-company">
+                    <div className="b2b-old-company-name">{companyName}</div>
+                    {draft.cashier?.address && <div className="b2b-old-company-address">{draft.cashier.address}</div>}
+                    {draft.cashier?.phoneNumber && <div className="b2b-old-company-meta">Phone No.: {draft.cashier.phoneNumber}</div>}
+                    {draft.cashier?.gstNumber && <div className="b2b-old-company-meta">GSTIN: {draft.cashier.gstNumber}</div>}
+                    {companyState && <div className="b2b-old-company-meta">State: {companyState}</div>}
                   </div>
-                  <div className="b2b-a4-meta">
-                    <div className="b2b-a4-meta-row">
-                      <span><strong>Date:</strong> {new Date(draft.createdAt).toLocaleDateString()}</span>
-                      <span><strong>Invoice #:</strong> {draft.invoiceNumber}</span>
+                  <div className="b2b-old-title">TAX INVOICE</div>
+
+                  <div className="b2b-old-top-row">
+                    <div className="b2b-old-billto-box">
+                      <div className="b2b-old-billto-head">BILL TO:</div>
+                      <div className="b2b-old-billto-name">{cust?.customerName || 'Customer'}</div>
+                      {cust?.billingAddress && <div className="b2b-old-billto-addr">Billing Address: {cust.billingAddress}</div>}
+                      {cust?.phone && <div>Contact No.: {cust.phone}</div>}
+                      {cust?.gstNumber && <div className="b2b-old-gst">GSTIN: {cust.gstNumber}</div>}
+                      {(cust?.stateCode || (cust?.gstNumber && cust.gstNumber.length >= 2)) && (
+                        <div>State: {getStateLabel(cust.stateCode || cust.gstNumber?.substring(0, 2))}</div>
+                      )}
                     </div>
-                    {draft.ewayBillNumber && (
-                      <div className="b2b-a4-meta-row">
-                        <span><strong>E-way Bill No:</strong> {draft.ewayBillNumber}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="b2b-a4-parties">
-                    <div className="b2b-a4-party">
-                      <strong>Bill To</strong>
-                      <p>{cust?.customerName || 'Customer'}</p>
-                      {cust?.gstNumber && <p>GST: {cust.gstNumber}</p>}
-                      {cust?.billingAddress && <p className="b2b-a4-address-block">{cust.billingAddress}</p>}
+                    <div className="b2b-old-inv-box">
+                      <div>Invoice No.: {draft.invoiceNumber}</div>
+                      <div>Date: {createdDate}</div>
+                      <div>Time: {createdTime}</div>
+                      {placeSupply && <div>Place of supply: {placeSupply}</div>}
+                      {draft.ewayBillNumber && <div>E-way Bill: {draft.ewayBillNumber}</div>}
+                      {draft.totalPackages != null && <div>Total packages: {draft.totalPackages}</div>}
                     </div>
-                    {cust?.shippingAddress && (
-                      <div className="b2b-a4-party">
-                        <strong>Ship To</strong>
-                        <p className="b2b-a4-address-block">{cust.shippingAddress}</p>
-                      </div>
-                    )}
                   </div>
-                  <table className="b2b-a4-table">
+
+                  <table className="b2b-old-table">
                     <thead>
                       <tr>
                         <th>#</th>
-                        <th>Description</th>
-                        <th>HSN</th>
-                        <th>Qty</th>
-                        <th>Rate</th>
-                        <th>GST %</th>
-                        <th>Amount</th>
+                        <th>ITEM NAME</th>
+                        <th>HSN/SAC</th>
+                        <th>QUANTITY</th>
+                        <th>UNIT</th>
+                        <th>PRICE/UNIT</th>
+                        <th>AMOUNT</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(draft.items || []).map((it, i) => (
                         <tr key={i}>
                           <td>{i + 1}</td>
-                          <td>{it.productName}{it.unit ? ` (${it.unit})` : ''}</td>
+                          <td>{it.productName}</td>
                           <td>{it.hsnCode || '–'}</td>
                           <td>{Number(it.quantity)}</td>
+                          <td>{it.unit || '–'}</td>
                           <td>₹{Number(it.unitPrice).toFixed(2)}</td>
-                          <td>{Number(it.gstPercentage) ?? 0}%</td>
                           <td>₹{Number(it.totalPrice).toFixed(2)}</td>
                         </tr>
                       ))}
+                      <tr className="b2b-old-total-row">
+                        <td colSpan="3"><strong>Total</strong></td>
+                        <td>{Number(totalQty).toFixed(3)}</td>
+                        <td></td>
+                        <td></td>
+                        <td><strong>₹{Number(totalItemsAmt).toFixed(2)}</strong></td>
+                      </tr>
                     </tbody>
                   </table>
-                  <div className="b2b-a4-totals">
-                    <div className="b2b-a4-totals-row"><span>Subtotal (taxable)</span><span>₹{(Number(draft.subtotal) || 0).toFixed(2)}</span></div>
-                    {((Number(draft.cgstAmount) || 0) + (Number(draft.sgstAmount) || 0)) > 0 && (
-                      <div className="b2b-a4-totals-row"><span>GST</span><span>₹{((Number(draft.cgstAmount) || 0) + (Number(draft.sgstAmount) || 0)).toFixed(2)}</span></div>
-                    )}
-                    {(Number(draft.discountAmount) || 0) > 0 && (
-                      <div className="b2b-a4-totals-row"><span>Discount</span><span>- ₹{(Number(draft.discountAmount) || 0).toFixed(2)}</span></div>
-                    )}
-                    <div className="b2b-a4-totals-row b2b-a4-total"><span>Total</span><span>₹{(Number(draft.totalAmount) || 0).toFixed(2)}</span></div>
+
+                  <div className="b2b-old-words-box b2b-old-words"><strong>Invoice Amount In Words:</strong> {amountWords}</div>
+
+                  <div className="b2b-old-bottom-row">
+                    <div className="b2b-old-bank-box">
+                      {draft.cashier?.bankName && <div>Bank Name: {draft.cashier.bankName}</div>}
+                      {draft.cashier?.accountNumber && <div>Account No.: {draft.cashier.accountNumber}</div>}
+                      {draft.cashier?.ifscCode && <div>IFSC Code: {draft.cashier.ifscCode}</div>}
+                      {draft.cashier?.branchName && <div>Branch: {draft.cashier.branchName}</div>}
+                      <div>Account Holder: {companyName}</div>
+                    </div>
+                    <div className="b2b-old-summary-box">
+                      <div className="b2b-old-summary-line"><span>Sub Total:</span><span>₹{(Number(draft.subtotal) || 0).toFixed(2)}</span></div>
+                      {gstTotal > 0 && (
+                        <div className="b2b-old-summary-line"><span>Tax ({taxPct}%):</span><span>₹{gstTotal.toFixed(2)}</span></div>
+                      )}
+                      <div className="b2b-old-summary-line b2b-old-total"><span>Total:</span><span>₹{totalAmt.toFixed(2)}</span></div>
+                    </div>
                   </div>
-                  <div className="b2b-a4-footer">
-                    <p>Thank you for your business</p>
+
+                  <div className="b2b-old-sign">
+                    <div>For : {companyName}</div>
+                    <div className="b2b-old-sign-line">Authorized Signatory</div>
                   </div>
                 </div>
               </div>

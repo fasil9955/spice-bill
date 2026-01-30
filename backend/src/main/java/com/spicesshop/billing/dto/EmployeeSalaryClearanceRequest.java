@@ -7,6 +7,8 @@ public class EmployeeSalaryClearanceRequest {
     private String month;
     private BigDecimal salaryAmount;
     private BigDecimal totalTaken;
+    /** Total amount given to employee this month (for closing balance = netPay - totalPaymentsGiven). */
+    private BigDecimal totalPaymentsGiven;
 
     public EmployeeSalaryClearanceRequest() {}
 
@@ -47,6 +49,14 @@ public class EmployeeSalaryClearanceRequest {
 
     public void setTotalTaken(BigDecimal totalTaken) {
         this.totalTaken = totalTaken;
+    }
+
+    public BigDecimal getTotalPaymentsGiven() {
+        return this.totalPaymentsGiven;
+    }
+
+    public void setTotalPaymentsGiven(BigDecimal totalPaymentsGiven) {
+        this.totalPaymentsGiven = totalPaymentsGiven;
     }
 
     @Override

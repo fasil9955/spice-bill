@@ -63,4 +63,18 @@ public class CourierRequestController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    @DeleteMapping({"/{id}"})
+    public ResponseEntity<?> deleteCourier(@PathVariable Integer id, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            this.courierRequestService.deleteCourierRequest(companyName, id);
+            return ResponseEntity.ok(Map.of("message", "Courier request deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

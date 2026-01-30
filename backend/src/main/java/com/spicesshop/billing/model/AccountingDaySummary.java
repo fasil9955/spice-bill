@@ -23,6 +23,12 @@ public class AccountingDaySummary {
     @Column(name = "billing_book_sales", precision = 12, scale = 2)
     private BigDecimal billingBookSales;
 
+    @Column(name = "closing_cash", precision = 12, scale = 2)
+    private BigDecimal closingCash;
+
+    @Column(name = "closing_gpay_total", precision = 12, scale = 2)
+    private BigDecimal closingGpayTotal;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -56,6 +62,14 @@ public class AccountingDaySummary {
         this.billingBookSales = billingBookSales;
     }
 
+    public void setClosingCash(BigDecimal closingCash) {
+        this.closingCash = closingCash;
+    }
+
+    public void setClosingGpayTotal(BigDecimal closingGpayTotal) {
+        this.closingGpayTotal = closingGpayTotal;
+    }
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
@@ -78,6 +92,14 @@ public class AccountingDaySummary {
 
     public BigDecimal getBillingBookSales() {
         return this.billingBookSales;
+    }
+
+    public BigDecimal getClosingCash() {
+        return this.closingCash;
+    }
+
+    public BigDecimal getClosingGpayTotal() {
+        return this.closingGpayTotal;
     }
 
     public LocalDateTime getCreatedAt() {

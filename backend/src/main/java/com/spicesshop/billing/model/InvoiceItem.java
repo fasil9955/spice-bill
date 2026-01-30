@@ -61,6 +61,9 @@ public class InvoiceItem {
     @Column(name = "sgst_amount", precision = 10, scale = 2)
     private BigDecimal sgstAmount;
 
+    @Column(name = "number_of_packages")
+    private Integer numberOfPackages;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -208,6 +211,14 @@ public class InvoiceItem {
 
     public BigDecimal getSgstAmount() {
         return this.sgstAmount;
+    }
+
+    public Integer getNumberOfPackages() {
+        return this.numberOfPackages;
+    }
+
+    public void setNumberOfPackages(Integer numberOfPackages) {
+        this.numberOfPackages = numberOfPackages;
     }
 
     public LocalDateTime getCreatedAt() {

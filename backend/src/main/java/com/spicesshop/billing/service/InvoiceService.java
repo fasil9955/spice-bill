@@ -37,14 +37,27 @@ public class InvoiceService {
     @Autowired
     private InvoiceSequenceRepository invoiceSequenceRepository;
 
-    /** Returns the next invoice number (reserves it for RETAIL). Used for preview-before-save. */
-    @Transactional
+    /** Returns the next invoice number for preview only – does NOT increment (peek). */
     public String getNextInvoiceNumber(String companyName, String invoiceType) {
-        return generateInvoiceNumber(companyName, invoiceType != null ? invoiceType : "RETAIL");
+        return peekNextInvoiceNumber(companyName, invoiceType != null ? invoiceType : "RETAIL");
     }
 
+    /** Peek: returns what the next number would be without incrementing. Used for preview. */
+    public String peekNextInvoiceNumber(String companyName, String invoiceType) {
+        if ("B2B".equals(invoiceType)) {
+            return generateNextB2BInvoiceNumber(companyName);
+        }
+        LocalDate today = LocalDate.now();
+        String datePart = today.format(DateTimeFormatter.ofPattern("yyyy-MMdd"));
+        int seqNum = this.invoiceSequenceRepository.findByCompanyNameAndSequenceDate(companyName, today)
+            .map(InvoiceSequence::getNextSequence)
+            .orElse(1);
+        return String.format("INV-%s-%04d", datePart, seqNum);
+    }
+
+    /** Generates and reserves the next invoice number (increments sequence). Call only when saving an invoice. */
     @Transactional
-    private String generateInvoiceNumber(String companyName, String invoiceType) {
+    public String generateInvoiceNumber(String companyName, String invoiceType) {
         if ("B2B".equals(invoiceType)) {
             return generateNextB2BInvoiceNumber(companyName);
         }
@@ -110,10 +123,15 @@ public class InvoiceService {
                 copy.setUnitPrice(item.getUnitPrice());
                 copy.setDiscountAmount(discountAmount);
                 copy.setHsnCode(item.getHsnCode());
+                copy.setGstPercentage(item.getGstPercentage());
+                copy.setNumberOfPackages(item.getNumberOfPackages());
                 normalized.put(key, copy);
             } else {
                 existing.setQuantity(existing.getQuantity().add(quantity));
                 existing.setDiscountAmount(existing.getDiscountAmount().add(discountAmount));
+                Integer pkg = (existing.getNumberOfPackages() != null ? existing.getNumberOfPackages() : 0)
+                    + (item.getNumberOfPackages() != null ? item.getNumberOfPackages() : 0);
+                existing.setNumberOfPackages(pkg > 0 ? pkg : null);
             }
         }
         return new ArrayList<>(normalized.values());
@@ -126,13 +144,19 @@ public class InvoiceService {
         invoice.setCashier(cashier);
 
         String companyName = cashier.getCompanyName();
+        String type = invoice.getInvoiceType() != null ? invoice.getInvoiceType() : "RETAIL";
 
-        if (invoice.getInvoiceNumber() == null || invoice.getInvoiceNumber().trim().isEmpty()) {
-            invoice.setInvoiceNumber(generateInvoiceNumber(companyName, invoice.getInvoiceType()));
+        // RETAIL: always generate and increment on save (never use number from preview)
+        if ("RETAIL".equals(type)) {
+            invoice.setInvoiceNumber(generateInvoiceNumber(companyName, type));
         } else {
-            Optional<Invoice> existingInvoice = this.invoiceRepository.findByInvoiceNumber(invoice.getInvoiceNumber());
-            if (existingInvoice.isPresent()) {
-                throw new RuntimeException("Invoice number " + invoice.getInvoiceNumber() + " already exists");
+            if (invoice.getInvoiceNumber() == null || invoice.getInvoiceNumber().trim().isEmpty()) {
+                invoice.setInvoiceNumber(generateInvoiceNumber(companyName, type));
+            } else {
+                Optional<Invoice> existingInvoice = this.invoiceRepository.findByInvoiceNumber(invoice.getInvoiceNumber());
+                if (existingInvoice.isPresent()) {
+                    throw new RuntimeException("Invoice number " + invoice.getInvoiceNumber() + " already exists");
+                }
             }
         }
 
@@ -306,6 +330,7 @@ public class InvoiceService {
         if (updatedInvoice.getEwayBillNumber() != null) {
             existingInvoice.setEwayBillNumber(updatedInvoice.getEwayBillNumber());
         }
+        existingInvoice.setTotalPackages(updatedInvoice.getTotalPackages());
 
         if (updatedInvoice.getB2bCustomer() != null) {
             B2BCustomer updatedCust = updatedInvoice.getB2bCustomer();

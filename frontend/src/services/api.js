@@ -68,6 +68,7 @@ export const b2bCustomerService = {
   search: (query) => api.get(`/b2b-customers/search?query=${encodeURIComponent(query || '')}`),
   getById: (id) => api.get(`/b2b-customers/${id}`),
   create: (data) => api.post('/b2b-customers', data),
+  update: (id, data) => api.put(`/b2b-customers/${id}`, data),
 };
 
 export const invoiceService = {
@@ -76,6 +77,7 @@ export const invoiceService = {
   getNextInvoiceNumber: (invoiceType = 'RETAIL') => api.get(`/invoices/next-invoice-number?invoiceType=${encodeURIComponent(invoiceType)}`),
   getNextB2BInvoiceNumber: () => api.get('/invoices/b2b/next-invoice-number'),
   getAll: () => api.get('/invoices'),
+  getByDate: (date) => api.get(`/invoices/date?date=${encodeURIComponent(date)}`),
   getById: (id) => api.get(`/invoices/${id}`),
   getByNumber: (number) => api.get(`/invoices/number/${number}`),
   getB2B: () => api.get('/invoices/b2b'),
@@ -86,8 +88,12 @@ export const invoiceService = {
 };
 
 export const attendanceService = {
-  mark: (data) => api.post('/attendance/mark', data),
-  getMonthly: (year, month) => api.get(`/attendance/monthly?year=${year}&month=${month}`),
+  mark: (data) => api.post('/attendance', data),
+  getByDate: (date) => api.get(`/attendance?date=${date}`),
+  getByDateRange: (startDate, endDate) => api.get(`/attendance/range?startDate=${startDate}&endDate=${endDate}`),
+  update: (id, data) => api.put(`/attendance/${id}`, data),
+  delete: (id) => api.delete(`/attendance/${id}`),
+  getMonthly: (year, month) => api.get(`/attendance/report/monthly?year=${year}&month=${month}`),
   getStaffMonthly: (userId, year, month) => api.get(`/attendance/staff/${userId}?year=${year}&month=${month}`),
 };
 
@@ -99,9 +105,62 @@ export const employeeService = {
   delete: (id) => api.delete(`/employees/${id}`),
 };
 
+export const employeeAccountService = {
+  getAdvances: (employeeId) => api.get(`/employee-accounts/advances/${employeeId}`),
+  createAdvance: (data) => api.post('/employee-accounts/advances', data),
+  deleteAdvance: (advanceId) => api.delete(`/employee-accounts/advances/${advanceId}`),
+  getPayments: (employeeId) => api.get(`/employee-accounts/payments/${employeeId}`),
+  addPayment: (data) => api.post('/employee-accounts/payments', data),
+  deletePayment: (paymentId) => api.delete(`/employee-accounts/payments/${paymentId}`),
+  getSalaryClearances: (employeeId) => api.get(`/employee-accounts/salary-clearances/${employeeId}`),
+  clearSalary: (data) => api.post('/employee-accounts/clear-salary', data),
+};
+
+export const fileUploadService = {
+  uploadEmployeePhoto: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/upload/employee-photo', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  uploadEmployeeAadhar: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/upload/employee-aadhar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+};
+
 export const accountingService = {
-  getDaySummary: (date) => api.get(`/accounting/day-summary?date=${date}`),
-  closeDay: (data) => api.post('/accounting/close-day', data),
+  getDaySummary: (date) => api.get(`/accounting/summary?date=${date}`),
+  updateDaySummary: (date, data) => api.post(`/accounting/summary?date=${date}`, data),
+};
+
+export const expenseService = {
+  getByDate: (date) => api.get(`/expenses?date=${date || ''}`),
+  getByEmployee: (employeeId) => api.get(`/expenses/employee?employeeId=${employeeId}`),
+  create: (data) => api.post('/expenses', data),
+  update: (id, data) => api.put(`/expenses/${id}`, data),
+  delete: (id) => api.delete(`/expenses/${id}`),
+};
+
+export const expenseCategoryService = {
+  getAll: () => api.get('/expense-categories'),
+  create: (data) => api.post('/expense-categories', data),
+  delete: (id) => api.delete(`/expense-categories/${id}`),
+};
+
+export const courierService = {
+  getAll: () => api.get('/couriers'),
+  create: (data) => api.post('/couriers', data),
+  update: (id, data) => api.put(`/couriers/${id}`, data),
+  delete: (id) => api.delete(`/couriers/${id}`),
+};
+
+export const reportService = {
+  getGSTR1Export: (year, month) =>
+    api.get(`/reports/gstr1-export?year=${year}&month=${month}`, { responseType: 'blob' }),
+  getMonthlyByYear: (year) => api.get(`/reports/monthly-by-year?year=${year}`),
+  getTopSellingItems: (year, month, limit = 15) =>
+    api.get(`/reports/top-selling-items?year=${year}&month=${month}&limit=${limit}`),
 };
 
 export default api;

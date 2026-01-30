@@ -81,12 +81,17 @@ public class InvoiceController {
                     invoice.setCashier(cashier);
                 }
             }
-            if (payload.get("invoiceNumber") != null && !payload.get("invoiceNumber").toString().trim().isEmpty()) {
+            // RETAIL: invoice number is generated only on save (do not use preview number from payload)
+            if ("B2B".equals(invoice.getInvoiceType()) && payload.get("invoiceNumber") != null && !payload.get("invoiceNumber").toString().trim().isEmpty()) {
                 invoice.setInvoiceNumber(payload.get("invoiceNumber").toString().trim());
             }
             if (payload.get("ewayBillNumber") != null) {
                 String eway = payload.get("ewayBillNumber").toString().trim();
                 invoice.setEwayBillNumber(eway.isEmpty() ? null : eway);
+            }
+            if (payload.get("totalPackages") != null) {
+                Object tp = payload.get("totalPackages");
+                invoice.setTotalPackages(tp instanceof Number ? ((Number) tp).intValue() : Integer.parseInt(tp.toString()));
             }
             Object b2bCustomerIdObj = payload.get("b2bCustomerId");
             if (b2bCustomerIdObj != null && "B2B".equals(invoice.getInvoiceType())) {
@@ -197,6 +202,10 @@ public class InvoiceController {
             updatedInvoice.setCashAmount(toBigDecimal(payload.get("cashAmount")));
             updatedInvoice.setCardAmount(toBigDecimal(payload.get("cardAmount")));
             updatedInvoice.setUpiAmount(toBigDecimal(payload.get("upiAmount")));
+            if (payload.get("ewayBillNumber") != null) {
+                String eway = payload.get("ewayBillNumber").toString().trim();
+                updatedInvoice.setEwayBillNumber(eway.isEmpty() ? null : eway);
+            }
             List<InvoiceItem> items = mapPayloadToInvoiceItems(payload.get("items"));
             return ResponseEntity.ok(this.invoiceService.updateInvoice(id, updatedInvoice, items, companyName));
         } catch (Exception e) {

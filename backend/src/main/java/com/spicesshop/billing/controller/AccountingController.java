@@ -43,8 +43,17 @@ public class AccountingController {
             AccountingDaySummary summary = this.accountingDaySummaryService.getSummary(companyName, date).orElse(null);
             BigDecimal billingBookSales = (summary != null && summary.getBillingBookSales() != null) ? 
                 summary.getBillingBookSales() : BigDecimal.ZERO;
+            BigDecimal closingCash = (summary != null && summary.getClosingCash() != null) ? summary.getClosingCash() : null;
+            BigDecimal closingGpayTotal = (summary != null && summary.getClosingGpayTotal() != null) ? summary.getClosingGpayTotal() : null;
 
-            return ResponseEntity.ok(new AccountingDaySummaryResponse(date.toString(), billingBookSales));
+            // Opening = yesterday's closing
+            LocalDate yesterday = date.minusDays(1);
+            java.util.Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
+            BigDecimal openingCash = yesterdaySummary.map(s -> s.getClosingCash()).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            BigDecimal openingUpi = yesterdaySummary.map(s -> s.getClosingGpayTotal()).filter(v -> v != null).orElse(BigDecimal.ZERO);
+
+            return ResponseEntity.ok(new AccountingDaySummaryResponse(
+                date.toString(), billingBookSales, openingCash, openingUpi, closingCash, closingGpayTotal));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -53,7 +62,7 @@ public class AccountingController {
     @PostMapping({"/summary"})
     public ResponseEntity<?> updateDaySummary(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, 
-            @RequestBody Map<String, BigDecimal> payload, 
+            @RequestBody Map<String, Object> payload, 
             HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
@@ -61,15 +70,37 @@ public class AccountingController {
                 return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
             }
 
-            BigDecimal billingBookSales = payload.get("billingBookSales");
+            BigDecimal billingBookSales = toBigDecimal(payload.get("billingBookSales"));
             if (billingBookSales == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "billingBookSales is required"));
+                billingBookSales = BigDecimal.ZERO;
             }
+            BigDecimal closingCash = toBigDecimal(payload.get("closingCash"));
+            BigDecimal closingGpayTotal = toBigDecimal(payload.get("closingGpayTotal"));
 
-            AccountingDaySummary summary = this.accountingDaySummaryService.upsertSummary(companyName, date, billingBookSales);
-            return ResponseEntity.ok(new AccountingDaySummaryResponse(date.toString(), summary.getBillingBookSales()));
+            AccountingDaySummary summary = this.accountingDaySummaryService.upsertSummary(
+                companyName, date, billingBookSales, closingCash, closingGpayTotal);
+
+            LocalDate yesterday = date.minusDays(1);
+            java.util.Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
+            BigDecimal openingCash = yesterdaySummary.map(s -> s.getClosingCash()).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            BigDecimal openingUpi = yesterdaySummary.map(s -> s.getClosingGpayTotal()).filter(v -> v != null).orElse(BigDecimal.ZERO);
+
+            return ResponseEntity.ok(new AccountingDaySummaryResponse(
+                date.toString(), summary.getBillingBookSales(), openingCash, openingUpi,
+                summary.getClosingCash(), summary.getClosingGpayTotal()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private static BigDecimal toBigDecimal(Object value) {
+        if (value == null) return null;
+        if (value instanceof BigDecimal) return (BigDecimal) value;
+        if (value instanceof Number) return BigDecimal.valueOf(((Number) value).doubleValue());
+        try {
+            return new BigDecimal(value.toString());
+        } catch (Exception e) {
+            return null;
         }
     }
 }

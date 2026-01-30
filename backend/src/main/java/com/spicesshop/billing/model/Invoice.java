@@ -84,6 +84,9 @@ public class Invoice {
     @Column(name = "eway_bill_number", length = 50)
     private String ewayBillNumber;
 
+    @Column(name = "total_packages")
+    private Integer totalPackages;
+
     public enum InvoiceStatus {
         ACTIVE, CANCELLATION_REQUESTED, CANCELLED;
     }
@@ -219,6 +222,10 @@ public class Invoice {
         this.ewayBillNumber = ewayBillNumber;
     }
 
+    public void setTotalPackages(Integer totalPackages) {
+        this.totalPackages = totalPackages;
+    }
+
     public Integer getInvoiceId() {
         return this.invoiceId;
     }
@@ -305,6 +312,10 @@ public class Invoice {
 
     public String getEwayBillNumber() {
         return this.ewayBillNumber;
+    }
+
+    public Integer getTotalPackages() {
+        return this.totalPackages;
     }
 
     @PrePersist

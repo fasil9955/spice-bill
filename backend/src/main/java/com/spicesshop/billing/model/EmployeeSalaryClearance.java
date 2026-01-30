@@ -33,6 +33,10 @@ public class EmployeeSalaryClearance {
     @Column(name = "net_pay", nullable = false, precision = 12, scale = 2)
     private BigDecimal netPay;
 
+    /** At month end: positive = employer to give employee, negative = employee to give employer. */
+    @Column(name = "closing_balance", precision = 12, scale = 2)
+    private BigDecimal closingBalance;
+
     @Column(name = "cleared_at")
     private LocalDateTime clearedAt;
 
@@ -79,6 +83,14 @@ public class EmployeeSalaryClearance {
 
     public void setNetPay(BigDecimal netPay) {
         this.netPay = netPay;
+    }
+
+    public BigDecimal getClosingBalance() {
+        return this.closingBalance;
+    }
+
+    public void setClosingBalance(BigDecimal closingBalance) {
+        this.closingBalance = closingBalance;
     }
 
     public void setClearedAt(LocalDateTime clearedAt) {

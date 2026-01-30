@@ -118,6 +118,56 @@
   flex-wrap: wrap;
 }
 
+/* Bills page – date filter and toolbar */
+.bills-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.bills-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bills-date-filter label {
+  font-weight: 500;
+  color: #374151;
+}
+.bills-date-input {
+  padding: 8px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.bills-date-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+.bills-all-dates-btn {
+  padding: 8px 14px;
+  background: #f3f4f6;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #374151;
+}
+.bills-all-dates-btn:hover {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
+
+.expense-summary {
+  margin-bottom: 12px;
+  font-size: 15px;
+  color: #374151;
+}
+.expense-summary strong {
+  color: #1f2937;
+}
+
 /* Bills page – modals and actions */
 .modal-overlay {
   position: fixed;
@@ -304,12 +354,22 @@
 }
 .bills-detail-actions .back-button,
 .bills-detail-actions .print-btn,
-.bills-detail-actions .cancel-btn {
+.bills-detail-actions .cancel-btn,
+.bills-detail-actions .edit-btn {
   padding: 8px 16px;
   font-size: 14px;
   border-radius: 8px;
   cursor: pointer;
   font-weight: 600;
+}
+.bills-detail-actions .edit-btn {
+  background: #eef2ff;
+  color: #4f46e5;
+  border: 1px solid #c7d2fe;
+}
+.bills-detail-actions .edit-btn:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
 }
 .bills-detail-actions .cancel-btn {
   background: #fef2f2;
@@ -334,6 +394,78 @@
   font-size: 13px;
   color: #6b7280;
 }
+.bills-courier-hint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: #6b7280;
+  padding: 0 20px;
+}
+.bills-courier-form {
+  padding: 16px 20px;
+}
+.bills-courier-form .form-group {
+  margin-bottom: 16px;
+}
+.bills-courier-form .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+.bills-courier-form .form-group input,
+.bills-courier-form .form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+.bills-courier-form .form-group input:focus,
+.bills-courier-form .form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+.bills-courier-form .form-group textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+.cell-tracking,
+.cell-status {
+  white-space: nowrap;
+}
+.courier-inline-tracking {
+  width: 100%;
+  min-width: 120px;
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+.courier-inline-tracking:focus {
+  outline: none;
+  border-color: #667eea;
+}
+.courier-inline-status {
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+}
+.courier-inline-status:focus {
+  outline: none;
+  border-color: #667eea;
+}
+.courier-saving {
+  font-size: 12px;
+  color: #6b7280;
+  margin-left: 4px;
+}
 .bills-cancel-reason {
   width: 100%;
   padding: 12px;
@@ -346,14 +478,15 @@
 .bills-table-container .action-buttons {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .bills-table-container .view-btn,
 .bills-table-container .edit-btn,
 .bills-table-container .print-btn,
+.bills-table-container .courier-btn,
 .bills-table-container .cancel-btn {
-  padding: 6px;
+  padding: 8px 14px;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -362,11 +495,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 36px;
+  min-width: 44px;
 }
 .bills-table-container .view-btn:hover,
 .bills-table-container .edit-btn:hover {
   background: #e5e7ff;
   color: #4f46e5;
+}
+.bills-table-container .courier-btn:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 .bills-table-container .print-btn:hover:not(:disabled) {
   background: #dbeafe;
@@ -426,4 +565,747 @@
 .cancellation-approve-body p:last-child {
   margin-bottom: 0;
   color: #6b7280;
+}
+
+/* Staff page – layout and alignment */
+.employees-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.employees-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.employees-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.employees-header p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.employees-header .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.employees-table-container {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.employees-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.employees-table thead {
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.employees-table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.employees-table tbody tr {
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.employees-table tbody tr:hover {
+  background: #fafafa;
+}
+
+.employees-table td {
+  padding: 12px 16px;
+  vertical-align: middle;
+  color: #374151;
+}
+
+.employees-table .employee-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.employees-table .employee-name-cell .feature-icon {
+  flex-shrink: 0;
+  color: #6b7280;
+}
+
+.employees-table .employee-mobile-cell {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.employees-table .employee-address-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employees-table .action-buttons {
+  white-space: nowrap;
+}
+
+.employees-table .action-buttons .account-btn,
+.employees-table .action-buttons .edit-btn,
+.employees-table .action-buttons .remove-btn {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.employees-table .action-buttons .account-btn {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.employees-table .action-buttons .account-btn:hover {
+  background: #a7f3d0;
+  color: #047857;
+}
+
+.employees-table .loading,
+.employees-table .no-data {
+  text-align: center;
+  padding: 32px 16px;
+  color: #6b7280;
+}
+
+.employees-table th:first-child,
+.employees-table td.employee-photo-cell {
+  width: 56px;
+  min-width: 56px;
+  text-align: center;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.employee-photo-cell {
+  position: relative;
+  vertical-align: middle;
+}
+
+.employee-photo-cell .employee-photo-thumb {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.employee-photo-cell .employee-photo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: #f3f4f6;
+  color: #9ca3af;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.employee-photo-cell .employee-photo-fallback-hidden {
+  display: none;
+}
+
+/* Staff account modal – employee account (aligned, professional) */
+.staff-account-modal {
+  max-width: 560px;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.staff-account-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.staff-account-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.staff-account-modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.staff-account-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.staff-account-close:hover {
+  color: #1f2937;
+  background: #f3f4f6;
+}
+
+.staff-account-employee-name {
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.staff-account-prev-balance {
+  margin: 12px 24px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.staff-account-prev-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  opacity: 0.95;
+}
+
+.staff-account-prev-value {
+  font-weight: 700;
+}
+
+.staff-account-prev-give {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.staff-account-prev-owe {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.staff-account-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fff;
+  background: #ef4444;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.staff-account-delete-btn:hover {
+  background: #dc2626;
+}
+
+.staff-account-section {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.staff-account-section:last-of-type {
+  border-bottom: none;
+}
+
+.staff-account-section-title {
+  margin: 0 0 16px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* Salary section – grid-aligned rows */
+.staff-account-salary-section {
+  background: #fff;
+}
+
+.staff-account-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.staff-account-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.staff-account-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.staff-account-month-row {
+  display: grid;
+  grid-template-columns: 120px minmax(140px, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.staff-account-month-row .staff-account-label {
+  grid-column: 1;
+}
+
+.staff-account-month-input {
+  padding: 8px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: #fff;
+  min-width: 0;
+}
+
+.staff-account-month-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.staff-account-days-present {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.staff-account-days-present strong {
+  color: #1f2937;
+}
+
+.staff-salary-input-row .staff-account-label {
+  align-self: center;
+}
+
+.staff-salary-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.staff-account-input,
+.staff-salary-input {
+  padding: 8px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  width: 140px;
+  max-width: 100%;
+  background: #fff;
+}
+
+.staff-account-input:focus,
+.staff-salary-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.staff-cleared-badge {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #059669;
+  background: #d1fae5;
+  border-radius: 6px;
+}
+
+.staff-account-summary-box {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.staff-account-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.staff-account-summary-row.staff-account-summary-highlight {
+  font-weight: 600;
+  color: #1f2937;
+  padding: 8px 0;
+}
+
+.staff-account-summary-row.staff-account-summary-highlight + .staff-account-summary-row {
+  padding-top: 4px;
+}
+
+.staff-account-summary-row.staff-account-negative,
+.staff-account-balance-to-give.staff-account-negative {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.staff-account-attendance-section .staff-account-attendance-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.staff-account-attendance-row strong {
+  color: #1f2937;
+}
+
+.staff-account-add-advance {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.staff-account-payments-section .staff-account-payment-form .staff-account-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+
+.staff-account-balance-to-give {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  margin-top: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-top: 2px solid #e5e7eb;
+}
+
+.staff-account-cleared-row {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.staff-already-given-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.staff-already-given-row .staff-account-label {
+  grid-column: 1;
+}
+
+.staff-already-given-row .staff-account-input {
+  grid-column: 2;
+}
+
+.staff-account-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.staff-account-btn-primary {
+  background: #667eea;
+  color: #fff;
+  margin-top: 14px;
+}
+
+.staff-account-btn-primary:hover:not(:disabled) {
+  background: #5a67d8;
+}
+
+.staff-account-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Advance form – aligned fields */
+.staff-account-advance-section {
+  background: #fff;
+}
+
+.staff-account-advance-form .staff-account-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+
+.staff-account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.staff-account-field label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.staff-account-field input,
+.staff-account-field select {
+  padding: 8px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  background: #fff;
+}
+
+.staff-account-field input:focus,
+.staff-account-field select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.staff-account-field-action {
+  align-items: flex-end;
+}
+
+.staff-account-field-action button {
+  margin-top: 0;
+}
+
+/* Lists (advances / expenses) */
+.staff-account-list-section {
+  background: #fff;
+  overflow: hidden;
+}
+
+.staff-account-empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.staff-account-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-bottom: 10px;
+}
+
+.staff-account-table th,
+.staff-account-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.staff-account-table th {
+  font-weight: 600;
+  color: #374151;
+  background: #f9fafb;
+}
+
+.staff-account-table td {
+  color: #1f2937;
+}
+
+.staff-account-total {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #065f46;
+}
+
+.staff-account-hint {
+  margin: 0 24px 16px;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+@media (max-width: 420px) {
+  .staff-account-month-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .staff-account-month-row .staff-account-days-present {
+    grid-column: 1;
+  }
+  .staff-account-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Staff modal – form grid */
+.staff-modal-content {
+  max-width: 560px;
+  width: 100%;
+}
+
+.staff-modal-content .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.staff-modal-content .modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.staff-modal-content .modal-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.staff-modal-content .modal-header .close-btn:hover {
+  color: #1f2937;
+}
+
+.employee-form {
+  padding: 24px;
+}
+
+.employee-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.employee-form-grid .form-group {
+  margin-bottom: 0;
+}
+
+.employee-form-grid .form-group-full {
+  grid-column: 1 / -1;
+}
+
+.employee-form .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.employee-form .form-group input,
+.employee-form .form-group select,
+.employee-form .form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  box-sizing: border-box;
+}
+
+.employee-form .form-group input:focus,
+.employee-form .form-group select:focus,
+.employee-form .form-group textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+.employee-form .form-group textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.employee-form .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 8px;
+}
+
+/* Staff – file upload */
+.file-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.file-upload-row .file-input {
+  font-size: 14px;
+  padding: 6px 0;
+  max-width: 100%;
+}
+.file-upload-row .file-status {
+  font-size: 13px;
+  color: #6b7280;
+}
+.file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #059669;
+}
+.employee-form .form-group label .required {
+  color: #dc2626;
 }

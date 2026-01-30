@@ -5,6 +5,7 @@ import com.spicesshop.billing.model.CourierRequest;
 import com.spicesshop.billing.model.Invoice;
 import com.spicesshop.billing.repository.CourierRequestRepository;
 import com.spicesshop.billing.repository.InvoiceRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -72,8 +73,18 @@ public class CourierRequestService {
         courierRequest.setPhone2(payload.getPhone2());
         courierRequest.setStatus(normalizeStatus(payload.getStatus()));
         courierRequest.setTrackingId(payload.getTrackingId());
+        courierRequest.setUpdatedAt(LocalDateTime.now());
 
         return this.courierRequestRepository.save(courierRequest);
+    }
+
+    public void deleteCourierRequest(String companyName, Integer courierId) {
+        CourierRequest courierRequest = this.courierRequestRepository.findById(courierId)
+            .orElseThrow(() -> new RuntimeException("Courier request not found"));
+        if (!companyName.equals(courierRequest.getCompanyName())) {
+            throw new RuntimeException("Courier request does not belong to this company");
+        }
+        this.courierRequestRepository.delete(courierRequest);
     }
 
     private String normalizeStatus(String status) {

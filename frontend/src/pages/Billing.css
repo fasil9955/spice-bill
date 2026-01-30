@@ -23,6 +23,260 @@
   width: 100%;
 }
 
+/* Billing / B2B page extends naturally – no scroll restriction */
+.billing-container {
+  overflow: visible;
+  padding-bottom: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-left: 20px;
+  padding-right: 20px;
+  box-sizing: border-box;
+}
+.billing-content,
+.billing-main-content {
+  overflow: visible;
+}
+
+/* B2B header – single row: back + title + badge left, nav links right */
+.billing-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.billing-header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
+}
+.billing-header-main .billing-header-actions:first-child {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.billing-header-main .billing-header-actions:last-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.billing-header-main h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #111827;
+}
+.b2b-bill-number-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+/* B2B billing: two columns – cart (left, more space) + payment card (right) */
+.b2b-billing-layout .billing-main-content {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.b2b-billing-layout .cart-section {
+  flex: 1;
+  min-width: 320px;
+  min-height: 0;
+}
+.b2b-billing-layout .totals-section {
+  flex: 0 0 auto;
+  width: 340px;
+  max-width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+.b2b-billing-layout .totals-card {
+  width: 100%;
+  max-width: 340px;
+  margin-left: auto;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.b2b-billing-layout .totals-card .totals-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 14px;
+  color: #374151;
+}
+.b2b-billing-layout .totals-card .totals-row.total-amount {
+  font-weight: 700;
+  font-size: 18px;
+  color: #111827;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 2px solid #e5e7eb;
+}
+.b2b-billing-layout .totals-card .payment-section {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+.b2b-billing-layout .totals-card .payment-section h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+.b2b-billing-layout .totals-card .discount-section {
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+.b2b-billing-layout .totals-card .discount-section h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+.b2b-billing-layout .totals-card .preview-invoice-btn,
+.b2b-billing-layout .totals-card .print-btn {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: #059669;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.b2b-billing-layout .totals-card .preview-invoice-btn:hover:not(:disabled),
+.b2b-billing-layout .totals-card .print-btn:hover:not(:disabled) {
+  background: #047857;
+}
+.b2b-billing-layout .totals-card .preview-invoice-btn:disabled,
+.b2b-billing-layout .totals-card .print-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.b2b-billing-layout .totals-card .print-btn + .print-btn {
+  margin-top: 8px;
+}
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.back-button:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+/* B2B cart table – less congested, more room for product rows */
+.b2b-billing-layout .b2b-cart-table th,
+.b2b-billing-layout .b2b-cart-table td {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+.b2b-billing-layout .b2b-cart-table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+}
+.b2b-billing-layout .cart-section .section-header {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+}
+.b2b-billing-layout .cart-section .section-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+}
+.b2b-billing-layout .cart-table-wrapper {
+  width: 100%;
+  margin-top: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+.b2b-billing-layout .b2b-cart-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.b2b-billing-layout .b2b-cart-table thead th {
+  text-align: left;
+  white-space: nowrap;
+}
+.b2b-billing-layout .b2b-cart-table td:nth-child(3),
+.b2b-billing-layout .b2b-cart-table td:nth-child(4),
+.b2b-billing-layout .b2b-cart-table td:nth-child(5),
+.b2b-billing-layout .b2b-cart-table td:nth-child(6) {
+  text-align: right;
+  white-space: nowrap;
+}
+.b2b-billing-layout .b2b-cart-table th:nth-child(3),
+.b2b-billing-layout .b2b-cart-table th:nth-child(4),
+.b2b-billing-layout .b2b-cart-table th:nth-child(5),
+.b2b-billing-layout .b2b-cart-table th:nth-child(6) {
+  text-align: right;
+}
+.b2b-billing-layout .b2b-cart-table .quantity-control {
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .b2b-billing-layout .totals-section {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .b2b-billing-layout .totals-card {
+    max-width: 100%;
+    margin-left: 0;
+  }
+}
+
 .billing-search-form {
   display: flex;
   align-items: center;
@@ -463,6 +717,188 @@
   color: #111827;
 }
 
+/* BTOC (retail) Bill Preview – old invoice format */
+.btoc-preview-container {
+  max-width: 420px;
+}
+
+.btoc-preview-header {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.btoc-preview-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.btoc-preview-header-btns {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btoc-btn-print {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #2563eb;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btoc-btn-print:hover {
+  background: #1d4ed8;
+}
+
+.btoc-btn-close {
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #dc2626;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btoc-btn-close:hover {
+  background: #b91c1c;
+}
+
+.btoc-preview-content .btoc-company {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.btoc-preview-content .btoc-company-name {
+  font-size: 17px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+  color: #111827;
+}
+
+.btoc-preview-content .btoc-company-line {
+  font-size: 12px;
+  color: #4b5563;
+  margin: 2px 0;
+}
+
+.btoc-preview-content .btoc-company-phone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.btoc-phone-icon {
+  color: #ec4899;
+  flex-shrink: 0;
+}
+
+.btoc-divider-dashed {
+  border: none;
+  border-top: 1px dashed #9ca3af;
+  margin: 10px 0;
+}
+
+.btoc-divider-solid {
+  border: none;
+  border-top: 1px solid #374151;
+  margin: 6px 0;
+}
+
+.btoc-preview-content .btoc-meta {
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.btoc-preview-content .btoc-meta-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  color: #374151;
+}
+
+.btoc-preview-content .btoc-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.btoc-preview-content .btoc-items-table th,
+.btoc-preview-content .btoc-items-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.btoc-preview-content .btoc-items-table th {
+  font-weight: 600;
+  color: #374151;
+}
+
+.btoc-preview-content .btoc-col-item {
+  text-align: left;
+}
+
+.btoc-preview-content .btoc-col-qty {
+  text-align: center;
+  width: 28%;
+}
+
+.btoc-preview-content .btoc-col-total {
+  text-align: right;
+  width: 32%;
+}
+
+.btoc-preview-content .btoc-totals {
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.btoc-preview-content .btoc-totals-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.btoc-preview-content .btoc-totals-row.btoc-total-amount {
+  font-weight: 700;
+  font-size: 16px;
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.btoc-preview-content .btoc-totals-row.btoc-discount {
+  color: #059669;
+}
+
+.btoc-preview-content .btoc-payment {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.btoc-preview-content .btoc-footer {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.btoc-preview-content .btoc-footer div {
+  margin: 3px 0;
+}
+
 .bill-preview-content .bill-header {
   text-align: center;
   margin-bottom: 16px;
@@ -641,34 +1077,43 @@
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  padding: 16px 20px;
-  margin-bottom: 20px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
   text-align: left;
+  border: 1px solid #e5e7eb;
+  box-sizing: border-box;
 }
 .b2b-customer-section h3 {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   font-size: 16px;
+  font-weight: 600;
   color: #374151;
 }
 .b2b-customer-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 .b2b-customer-search {
   flex: 1;
-  min-width: 200px;
-  padding: 10px 14px;
+  min-width: 220px;
+  padding: 12px 14px;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
   font-size: 14px;
+  box-sizing: border-box;
+}
+.b2b-customer-search:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
 }
 .add-customer-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 12px 18px;
   font-size: 14px;
   font-weight: 600;
   color: #059669;
@@ -676,27 +1121,132 @@
   border: 2px solid #a7f3d0;
   border-radius: 8px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 .add-customer-btn:hover {
   background: #d1fae5;
   border-color: #6ee7b7;
 }
 .b2b-selected-card {
-  margin-top: 12px;
-  padding: 12px 16px;
+  margin-top: 14px;
+  padding: 16px 20px;
   background: #f0fdf4;
   border: 1px solid #bbf7d0;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   color: #166534;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.b2b-selected-card > strong {
+  display: block;
+  font-size: 15px;
+  color: #14532d;
 }
 .b2b-selected-card .b2b-address {
-  margin: 6px 0 0;
+  margin: 2px 0 0;
   font-size: 13px;
   color: #15803d;
+  line-height: 1.4;
+}
+/* E-way and Total packages in one row on larger screens */
+.b2b-selected-card-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+  align-items: start;
+}
+@media (max-width: 520px) {
+  .b2b-selected-card-fields {
+    grid-template-columns: 1fr;
+  }
+}
+.b2b-eway-on-card {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: none;
+}
+.b2b-eway-on-card label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #15803d;
+}
+.b2b-eway-on-card .eway-bill-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: #111827;
+  box-sizing: border-box;
+}
+.b2b-eway-on-card .eway-bill-input:focus {
+  outline: none;
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+.b2b-eway-on-card .eway-bill-input::placeholder {
+  color: #9ca3af;
+}
+.b2b-total-packages-on-card {
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: none;
+}
+.b2b-total-packages-on-card label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+.b2b-total-packages-on-card .total-packages-input {
+  width: 100%;
+  max-width: 140px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  color: #111827;
+  box-sizing: border-box;
+}
+.b2b-total-packages-on-card .total-packages-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+.b2b-selected-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid #bbf7d0;
+  flex-wrap: wrap;
+}
+.edit-customer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.edit-customer-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
 }
 .clear-customer-btn {
-  margin-top: 8px;
   padding: 6px 12px;
   font-size: 13px;
   color: #059669;
@@ -707,6 +1257,9 @@
 }
 .clear-customer-btn:hover {
   background: #d1fae5;
+}
+.b2b-selected-card .clear-customer-btn {
+  margin-top: 0;
 }
 .b2b-customer-list {
   list-style: none;
@@ -736,6 +1289,10 @@
 .b2b-add-modal {
   min-width: 360px;
   max-width: 480px;
+}
+.b2b-edit-modal {
+  min-width: 320px;
+  max-width: 420px;
 }
 .b2b-add-form .form-group {
   margin-bottom: 16px;
@@ -778,7 +1335,8 @@
   max-width: 90px;
 }
 .b2b-cart-table .b2b-price-input,
-.b2b-cart-table .b2b-gst-input {
+.b2b-cart-table .b2b-gst-input,
+.b2b-cart-table .b2b-packages-input {
   min-width: 60px;
   max-width: 80px;
   text-align: right;
@@ -823,6 +1381,27 @@
 }
 .eway-bill-input::placeholder {
   color: #9ca3af;
+}
+
+/* Edit Invoice page */
+.edit-invoice-meta {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: #6b7280;
+}
+.edit-invoice-input {
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 90px;
+  text-align: right;
+}
+.edit-invoice-input.edit-rate {
+  width: 80px;
+}
+.edit-discount-row input {
+  max-width: 100px;
 }
 
 /* ============================
@@ -1025,6 +1604,212 @@
 
 .b2b-a4-footer-sign {
   margin-top: 14mm;
+}
+
+/* B2B preview – old frontend style */
+.b2b-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.b2b-preview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.b2b-btn-close {
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #dc2626;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.b2b-btn-close:hover {
+  background: #b91c1c;
+}
+.b2b-btn-save-print,
+.b2b-btn-print-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.b2b-old-style-sheet {
+  font-size: 12px;
+  color: #111827;
+}
+.b2b-old-company {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.b2b-old-company-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.b2b-old-company-address {
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+.b2b-old-company-meta {
+  font-size: 11px;
+  color: #374151;
+  margin: 1px 0;
+}
+.b2b-old-title {
+  text-align: center;
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 6px 0 10px;
+}
+.b2b-old-top-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+.b2b-old-billto-box {
+  flex: 1.4;
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.b2b-old-inv-box {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 4px;
+  text-align: right;
+}
+.b2b-old-billto-head {
+  font-weight: 700;
+  text-decoration: underline;
+  margin-bottom: 4px;
+}
+.b2b-old-billto-name {
+  font-weight: 700;
+  margin: 2px 0;
+}
+.b2b-old-billto-addr,
+.b2b-old-gst {
+  margin: 2px 0;
+}
+.b2b-old-inv-box > div {
+  margin: 2px 0;
+}
+.b2b-old-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 10px;
+  font-size: 11px;
+}
+.b2b-old-table th,
+.b2b-old-table td {
+  border: 1px solid #e5e7eb;
+  padding: 6px 8px;
+}
+.b2b-old-table thead tr {
+  background: #dc2626;
+  color: #fff;
+}
+.b2b-old-table th {
+  font-weight: 600;
+}
+.b2b-old-table td:nth-child(1) {
+  text-align: center;
+}
+.b2b-old-table td:nth-child(4),
+.b2b-old-table td:nth-child(5) {
+  text-align: center;
+}
+.b2b-old-table td:nth-child(6),
+.b2b-old-table td:nth-child(7) {
+  text-align: right;
+}
+.b2b-old-total-row td {
+  font-weight: 600;
+}
+.b2b-old-words-box {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.b2b-old-words strong {
+  margin-right: 6px;
+}
+.b2b-old-terms-box {
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.b2b-old-terms strong {
+  margin-right: 6px;
+}
+.b2b-old-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 11px;
+}
+.b2b-old-bank-box {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.b2b-old-bank-box div {
+  margin: 2px 0;
+}
+.b2b-old-summary-box {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 4px;
+  text-align: right;
+}
+.b2b-old-summary-line {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 2px 0;
+}
+.b2b-old-summary-line.b2b-old-total {
+  font-weight: 700;
+  text-decoration: underline;
+  margin-top: 4px;
+  padding-top: 4px;
+}
+.b2b-old-sign {
+  text-align: right;
+  font-size: 11px;
+  margin-top: 14px;
+}
+.b2b-old-sign-line {
+  margin-top: 10px;
 }
 
 @media print {

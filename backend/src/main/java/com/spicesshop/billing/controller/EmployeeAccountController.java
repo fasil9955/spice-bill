@@ -1,6 +1,7 @@
 package com.spicesshop.billing.controller;
 
 import com.spicesshop.billing.dto.EmployeeAdvanceRequest;
+import com.spicesshop.billing.dto.EmployeePaymentRequest;
 import com.spicesshop.billing.dto.EmployeeSalaryClearanceRequest;
 import com.spicesshop.billing.service.EmployeeAccountService;
 import com.spicesshop.billing.util.CompanyExtractor;
@@ -41,6 +42,17 @@ public class EmployeeAccountController {
         }
     }
 
+    @DeleteMapping({"/advances/{advanceId}"})
+    public ResponseEntity<?> deleteAdvance(@PathVariable Integer advanceId, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            this.employeeAccountService.deleteAdvance(companyName, advanceId);
+            return ResponseEntity.ok(Map.of("message", "Advance deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping({"/salary-clearances/{employeeId}"})
     public ResponseEntity<?> getSalaryClearances(@PathVariable Integer employeeId, HttpServletRequest request) {
         try {
@@ -56,6 +68,37 @@ public class EmployeeAccountController {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
             return ResponseEntity.ok(this.employeeAccountService.clearSalary(companyName, clearanceRequest));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping({"/payments/{employeeId}"})
+    public ResponseEntity<?> getPayments(@PathVariable Integer employeeId, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            return ResponseEntity.ok(this.employeeAccountService.getPayments(companyName, employeeId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping({"/payments"})
+    public ResponseEntity<?> addPayment(@RequestBody EmployeePaymentRequest paymentRequest, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            return ResponseEntity.ok(this.employeeAccountService.addPayment(companyName, paymentRequest));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping({"/payments/{paymentId}"})
+    public ResponseEntity<?> deletePayment(@PathVariable Integer paymentId, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            this.employeeAccountService.deletePayment(companyName, paymentId);
+            return ResponseEntity.ok(Map.of("message", "Payment deleted"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
