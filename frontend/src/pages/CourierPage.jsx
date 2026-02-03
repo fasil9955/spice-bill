@@ -162,11 +162,11 @@ const CourierPage = () => {
 
   const buildAddressLabelHtml = (company, courier) => {
     const fromName = (company?.companyName || 'Our Company').replace(/</g, '&lt;');
-    const fromAddr = (company?.address || '').replace(/\n/g, '<br/>').replace(/</g, '&lt;');
+    const fromAddr = (company?.address || '').replace(/</g, '&lt;').replace(/\n/g, '<br/>');
     const fromPin = (company?.pincode || company?.pin || '').replace(/</g, '&lt;');
     const fromPhone = (company?.phoneNumber || company?.phone || '').replace(/</g, '&lt;');
     const toName = (courier?.customerName || 'Customer').replace(/</g, '&lt;');
-    const toAddr = (courier?.address || '').replace(/\n/g, '<br/>').replace(/</g, '&lt;');
+    const toAddr = (courier?.address || '').replace(/</g, '&lt;').replace(/\n/g, '<br/>');
     const toPhones = [courier?.phone1, courier?.phone2].filter(Boolean).join(', ').replace(/</g, '&lt;');
     const tracking = (courier?.trackingId || '').replace(/</g, '&lt;');
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Courier Label</title><style>
