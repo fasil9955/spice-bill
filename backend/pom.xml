@@ -23,7 +23,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <skipFrontendBuild>true</skipFrontendBuild>
+        <skipFrontendBuild>false</skipFrontendBuild>
     </properties>
 
     <repositories>
@@ -125,46 +125,41 @@
 
     <build>
         <plugins>
-            <!-- Frontend Build Plugin -->
+            <!-- Frontend build: use system Node/npm (avoids plugin node.exe path issues in Eclipse/paths with spaces) -->
             <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>1.15.0</version>
-                <configuration>
-                    <workingDirectory>../frontend</workingDirectory>
-                    <installDirectory>target</installDirectory>
-                    <skip>${skipFrontendBuild}</skip>
-                </configuration>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
                 <executions>
-                    <!-- Install Node and npm -->
-                    <execution>
-                        <id>install node and npm</id>
-                        <goals>
-                            <goal>install-node-and-npm</goal>
-                        </goals>
-                        <configuration>
-                            <nodeVersion>v18.17.0</nodeVersion>
-                            <npmVersion>9.6.7</npmVersion>
-                        </configuration>
-                    </execution>
-                    <!-- Install npm dependencies -->
                     <execution>
                         <id>npm install</id>
+                        <phase>generate-resources</phase>
                         <goals>
-                            <goal>npm</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <arguments>install</arguments>
+                            <skip>${skipFrontendBuild}</skip>
+                            <executable>npm</executable>
+                            <arguments>
+                                <argument>install</argument>
+                            </arguments>
+                            <workingDirectory>${project.basedir}/../frontend</workingDirectory>
                         </configuration>
                     </execution>
-                    <!-- Build React app -->
                     <execution>
                         <id>npm run build</id>
+                        <phase>generate-resources</phase>
                         <goals>
-                            <goal>npm</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <arguments>run build</arguments>
+                            <skip>${skipFrontendBuild}</skip>
+                            <executable>npm</executable>
+                            <arguments>
+                                <argument>run</argument>
+                                <argument>build</argument>
+                            </arguments>
+                            <workingDirectory>${project.basedir}/../frontend</workingDirectory>
                         </configuration>
                     </execution>
                 </executions>
@@ -186,7 +181,7 @@
                             <outputDirectory>${project.build.directory}/classes/static</outputDirectory>
                             <resources>
                                 <resource>
-                                    <directory>../frontend/dist</directory>
+                                    <directory>${project.basedir}/../frontend/dist</directory>
                                     <filtering>false</filtering>
                                 </resource>
                             </resources>

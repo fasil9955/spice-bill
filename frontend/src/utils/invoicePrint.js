@@ -133,26 +133,15 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
       }
     })();
 
-    const subtotal = Number(invoice.subtotal) || 0;
-    const cgstAmt = Number(invoice.cgstAmount) || 0;
-    const sgstAmt = Number(invoice.sgstAmount) || 0;
-    const gstTotal = cgstAmt + sgstAmt;
+    // B2B: tax is NOT included in item price – taxable = unitPrice * qty, GST = taxable * gst%, amount = taxable + GST
     const discountAmt = Number(invoice.discountAmount) || 0;
-    const totalAmount = Number(invoice.totalAmount ?? invoice.grandTotal ?? 0);
-
-    const taxPercent = (() => {
-      if (!subtotal) return '';
-      const pct = (gstTotal * 100) / subtotal;
-      if (!isFinite(pct) || pct <= 0) return '';
-      return `${Math.round(pct)}%`;
-    })();
 
     const itemsRows = items
       .map((it, idx) => {
         const qty = Number(it.quantity) || 0;
         const unit = it.unit || it.product?.unit || '';
-        const rate = Math.round(Number(it.unitPrice ?? it.sellingPricePerUnit ?? 0));
-        const total = Math.round(Number(it.totalPrice ?? qty * (it.unitPrice ?? 0)));
+        const unitPrice = Number(it.unitPrice ?? it.sellingPricePerUnit ?? 0);
+        const taxableValue = unitPrice * qty;
         const hsn = it.hsnCode || '';
         const name = (it.productName || '').replace(/</g, '&lt;');
         return `
@@ -162,26 +151,42 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             <td>${(hsn || '–').replace(/</g, '&lt;')}</td>
             <td>${qty}</td>
             <td>${(unit || '–').replace(/</g, '&lt;')}</td>
-            <td style="text-align:right;">₹${rate.toFixed(2)}</td>
-            <td style="text-align:right;">₹${total.toFixed(2)}</td>
+            <td style="text-align:right;">₹${unitPrice.toFixed(2)}</td>
+            <td style="text-align:right;">₹${taxableValue.toFixed(2)}</td>
           </tr>
         `;
       })
       .join('');
 
     const totalQty = items.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
-    const totalItemsAmount = items.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
+    let calcSubtotal = 0;
+    let calcGstTotal = 0;
+    let calcItemsTotal = 0;
+    items.forEach((it) => {
+      const qty = Number(it.quantity) || 0;
+      const unitPrice = Number(it.unitPrice ?? it.sellingPricePerUnit ?? 0);
+      const gstPct = Number(it.gstPercentage) ?? 0;
+      const taxable = unitPrice * qty;
+      calcSubtotal += taxable;
+      calcGstTotal += taxable * (gstPct / 100);
+      calcItemsTotal += taxable * (1 + gstPct / 100);
+    });
+    const subtotal = Math.round(calcSubtotal * 100) / 100;
+    const gstTotal = Math.round(calcGstTotal * 100) / 100;
+    const totalAmount = Math.round((subtotal + gstTotal - discountAmt) * 100) / 100;
+
     const totalRow = `
       <tr class="total-row">
         <td colspan="3"><strong>Total</strong></td>
         <td>${Number(totalQty).toFixed(3)}</td>
         <td></td>
         <td></td>
-        <td style="text-align:right;"><strong>₹${Number(totalItemsAmount).toFixed(2)}</strong></td>
+        <td style="text-align:right;"><strong>₹${subtotal.toFixed(2)}</strong></td>
       </tr>
     `;
 
-    const gstPercentLabel = taxPercent || (items.length === 1 && items[0].gstPercentage != null
+    const taxPercent = subtotal > 0 && gstTotal > 0 ? Math.round((gstTotal * 100) / subtotal) : 0;
+    const gstPercentLabel = taxPercent > 0 ? `${taxPercent}%` : (items.length === 1 && items[0].gstPercentage != null
       ? `${Math.round(Number(items[0].gstPercentage))}%`
       : 'GST');
 
@@ -216,7 +221,6 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             }
             .a4-root {
               width: 210mm;
-              min-height: 297mm;
               margin: 0 auto;
               padding: 16mm 18mm 18mm;
             }
@@ -264,6 +268,19 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               border: 1px solid #d1d5db;
               padding: 6px 10px;
               background: #fafafa;
+              text-align: left;
+            }
+            .b2b-billto-addr-line {
+              font-weight: 700;
+              margin-top: 6px;
+              margin-bottom: 2px;
+            }
+            .b2b-billto-shipping-label { font-weight: 900; font-size: 1.1em; }
+            .b2b-billto-addr-line:first-of-type { margin-top: 2px; }
+            .b2b-billto-addr-value {
+              margin-bottom: 6px;
+              white-space: pre-wrap;
+              word-break: break-word;
             }
             .b2b-inv-box {
               flex: 1;
@@ -341,7 +358,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             .b2b-summary-line.total { font-weight: 700; text-decoration: underline; margin-top: 4px; padding-top: 4px; }
             .b2b-sign { text-align: right; font-size: 11px; margin-top: 12mm; }
             @page { size: A4; margin: 12mm 15mm; }
-            @media print { body { margin: 0; } .a4-root { box-shadow: none; } }
+            @media print {
+              body { margin: 0; }
+              .a4-root { box-shadow: none; min-height: 0; height: auto; page-break-after: avoid; }
+            }
           </style>
         </head>
         <body>
@@ -359,8 +379,9 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               <div class="b2b-billto-box">
                 <div class="b2b-billto-head">BILL TO:</div>
                 <div class="b2b-billto-name">${(customer.customerName || '').replace(/</g, '&lt;')}</div>
-                ${customer.billingAddress ? `<div>Billing Address: ${customer.billingAddress.replace(/</g, '&lt;')}</div>` : ''}
-                ${customer.phone ? `<div>Contact No.: ${customer.phone.replace(/</g, '&lt;')}</div>` : ''}
+                ${customer.billingAddress ? `<div class="b2b-billto-addr-line">Billing Address:</div><div class="b2b-billto-addr-value">${customer.billingAddress.replace(/</g, '&lt;')}</div>` : ''}
+                ${customer.shippingAddress ? `<div class="b2b-billto-addr-line b2b-billto-shipping-label">Shipping Address:</div><div class="b2b-billto-addr-value">${customer.shippingAddress.replace(/</g, '&lt;')}</div>` : ''}
+                ${customer.phone ? `<div style="margin: 2px 0;">Contact No.: ${customer.phone.replace(/</g, '&lt;')}</div>` : ''}
                 ${customer.gstNumber ? `<div><strong>GSTIN: ${customer.gstNumber.replace(/</g, '&lt;')}</strong></div>` : ''}
                 ${customer.stateCode || (customer.gstNumber && customer.gstNumber.length >= 2) ? `<div>State: ${getStateLabel(customer.stateCode || customer.gstNumber?.substring(0, 2)).replace(/</g, '&lt;')}</div>` : ''}
               </div>
@@ -369,7 +390,8 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
                 <div class="b2b-inv-line">Date: ${created.date}</div>
                 <div class="b2b-inv-line">Time: ${created.time}</div>
                 ${placeOfSupply ? `<div class="b2b-inv-line">Place of supply: ${placeOfSupply.replace(/</g, '&lt;')}</div>` : ''}
-                ${invoice.ewayBillNumber ? `<div class="b2b-inv-line">E-way Bill: ${invoice.ewayBillNumber.replace(/</g, '&lt;')}</div>` : ''}
+                ${invoice.totalPackages != null ? `<div class="b2b-inv-line">Package No.: ${invoice.totalPackages}</div>` : ''}
+                ${invoice.ewayBillNumber ? `<div class="b2b-inv-line">E-way Reference No.: ${invoice.ewayBillNumber.replace(/</g, '&lt;')}</div>` : ''}
               </div>
             </div>
 
@@ -391,7 +413,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               </tbody>
             </table>
 
-            ${invoice.totalPackages != null ? `<div class="b2b-total-packages-line">Total packages (for reference): ${invoice.totalPackages}</div>` : ''}
+            ${invoice.totalPackages != null ? `<div class="b2b-total-packages-line">Package No.: ${invoice.totalPackages}</div>` : ''}
 
             <div class="b2b-words-box b2b-words"><strong>Invoice Amount In Words:</strong> ${amountInWords.replace(/</g, '&lt;')}</div>
 
@@ -400,8 +422,9 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
                 ${bankContent}
               </div>
               <div class="b2b-summary-box">
-                <div class="b2b-summary-line"><span>Sub Total:</span><span>₹${subtotal.toFixed(2)}</span></div>
-                ${gstTotal > 0 ? `<div class="b2b-summary-line"><span>Tax (${gstPercentLabel}):</span><span>₹${gstTotal.toFixed(2)}</span></div>` : ''}
+                <div class="b2b-summary-line"><span>Sub Total (taxable):</span><span>₹${subtotal.toFixed(2)}</span></div>
+                ${gstTotal > 0 ? `<div class="b2b-summary-line"><span>GST (${gstPercentLabel}):</span><span>₹${gstTotal.toFixed(2)}</span></div>` : ''}
+                ${discountAmt > 0 ? `<div class="b2b-summary-line"><span>Discount:</span><span>- ₹${discountAmt.toFixed(2)}</span></div>` : ''}
                 <div class="b2b-summary-line total"><span>Total:</span><span>₹${totalAmount.toFixed(2)}</span></div>
               </div>
             </div>
@@ -440,7 +463,8 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         return String(invoice.createdAt);
       }
     })();
-    const baseAmount = Math.max(0, (Number(invoice.subtotal) || 0) - (Number(invoice.cgstAmount) || 0) - (Number(invoice.sgstAmount) || 0));
+    // Retail: backend stores subtotal = taxable base (amount before GST). So Base Amount = subtotal; Subtotal = base + CGST + SGST.
+    const baseAmount = Math.max(0, Number(invoice.subtotal) || 0);
     const cgstAmt = Number(invoice.cgstAmount) || 0;
     const sgstAmt = Number(invoice.sgstAmount) || 0;
     const subtotalVal = baseAmount + cgstAmt + sgstAmt;

@@ -1078,6 +1078,27 @@
   cursor: not-allowed;
 }
 
+.staff-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.staff-account-btn-save {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.staff-account-btn-save:hover:not(:disabled) {
+  background: #d1d5db;
+}
+
+.staff-account-btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Advance form – aligned fields */
 .staff-account-advance-section {
   background: #fff;

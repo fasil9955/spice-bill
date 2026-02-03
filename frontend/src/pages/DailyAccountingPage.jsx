@@ -140,6 +140,10 @@ const DailyAccountingPage = () => {
   const openingUpiNum = parseFloat(openingUpi) || 0;
   const balanceResult = totalSales + openingCashNum + openingUpiNum - totalExpenses - totalPayments;
 
+  const preventNumberScroll = (e) => {
+    e.target.blur();
+  };
+
   const employeeMap = employees.reduce((acc, e) => {
     const id = e.employeeId ?? e.id;
     acc[id] = e.employeeName || e.name || `Employee #${id}`;
@@ -264,7 +268,25 @@ const DailyAccountingPage = () => {
   const handlePrintReport = () => {
     const printWindow = window.open('', '_blank', 'width=320,height=600');
     if (!printWindow) return;
-    const moreOrShortage = balanceResult >= 0 ? `More: ₹${balanceResult.toFixed(2)}` : `Shortage: ₹${Math.abs(balanceResult).toFixed(2)}`;
+    const resultLabel = balanceResult < 0 ? 'more' : balanceResult > 0 ? 'shortage' : 'tally';
+    const moreOrShortage = `${resultLabel}${balanceResult !== 0 ? `: ₹${Math.abs(balanceResult).toFixed(2)}` : ''}`;
+    const escapeHtml = (s) => {
+      if (typeof s !== 'string') return '';
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    };
+    const expensesListHtml =
+      expenses.length === 0
+        ? '<p class="print-expense-item">No expenses.</p>'
+        : expenses
+            .map((exp) => {
+              const name =
+                exp.accountType === 'EMPLOYEE'
+                  ? (employeeMap[exp.employeeId] || exp.otherName || '—')
+                  : (exp.otherName || '—');
+              const amt = (parseFloat(exp.amount) || 0).toFixed(2);
+              return `<p class="print-expense-item">${escapeHtml(String(name))} ₹${amt}</p>`;
+            })
+            .join('');
     printWindow.document.write(`
       <!DOCTYPE html><html><head><meta charset="utf-8"><title>Day Close - ${formatDisplayDate(isoDate)}</title>
       <style>
@@ -274,6 +296,7 @@ const DailyAccountingPage = () => {
         h1 { font-size: 12px; margin: 0 0 6px; font-weight: 700; text-align: center; }
         h2 { font-size: 10px; margin: 8px 0 4px; font-weight: 700; border-bottom: 1px solid #000; padding-bottom: 2px; }
         p { margin: 2px 0; line-height: 1.3; }
+        .print-expense-item { margin: 1px 0; padding-left: 4px; }
         .last-row { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; font-weight: 700; font-size: 11px; text-align: center; }
       </style></head><body>
       <h1>Accounting &amp; Day Close</h1>
@@ -286,7 +309,8 @@ const DailyAccountingPage = () => {
       <p>Cash: ₹${openingCashNum.toFixed(2)}</p>
       <p>UPI: ₹${openingUpiNum.toFixed(2)}</p>
       <h2>Expenses</h2>
-      <p>Total Expenses: ₹${totalExpenses.toFixed(2)}</p>
+      ${expensesListHtml}
+      <p><strong>Total Expenses: ₹${totalExpenses.toFixed(2)}</strong></p>
       <h2>Payments (Card+GPay+Cash)</h2>
       <p>Total: ₹${totalPayments.toFixed(2)}</p>
       <p class="last-row">${moreOrShortage}</p>
@@ -352,6 +376,7 @@ const DailyAccountingPage = () => {
                   value={billingBookSales}
                   onChange={(e) => setBillingBookSales(e.target.value)}
                   onBlur={handleSaveBillingBook}
+                  onWheel={preventNumberScroll}
                   className="daily-accounting-input"
                 />
               </div>
@@ -372,6 +397,7 @@ const DailyAccountingPage = () => {
                   value={openingCash}
                   onChange={(e) => setOpeningCash(e.target.value)}
                   placeholder="0.00"
+                  onWheel={preventNumberScroll}
                   className="daily-accounting-input"
                 />
               </div>
@@ -384,6 +410,7 @@ const DailyAccountingPage = () => {
                   value={openingUpi}
                   onChange={(e) => setOpeningUpi(e.target.value)}
                   placeholder="0.00"
+                  onWheel={preventNumberScroll}
                   className="daily-accounting-input"
                 />
               </div>
@@ -459,6 +486,7 @@ const DailyAccountingPage = () => {
                       step="0.01"
                       value={addExpenseAmount}
                       onChange={(e) => setAddExpenseAmount(e.target.value)}
+                  onWheel={preventNumberScroll}
                       className="daily-accounting-add-expense-input daily-accounting-add-expense-amount"
                     />
                   </div>
@@ -556,6 +584,7 @@ const DailyAccountingPage = () => {
                       placeholder="0.00"
                       value={cardAmount}
                       onChange={(e) => setCardAmount(e.target.value)}
+                      onWheel={preventNumberScroll}
                       className="daily-accounting-payment-input daily-accounting-payment-amount"
                     />
                     <button type="button" className="daily-accounting-add-card-btn" onClick={addCardEntry}>
@@ -598,6 +627,7 @@ const DailyAccountingPage = () => {
                       placeholder="0.00"
                       value={gpayAmount}
                       onChange={(e) => setGpayAmount(e.target.value)}
+                      onWheel={preventNumberScroll}
                       className="daily-accounting-payment-input daily-accounting-payment-amount"
                     />
                     <button type="button" className="daily-accounting-add-gpay-btn" onClick={addGpayEntry}>
@@ -627,6 +657,7 @@ const DailyAccountingPage = () => {
                       value={cashBalance}
                       onChange={(e) => setCashBalance(e.target.value)}
                       onBlur={() => saveClosing()}
+                      onWheel={preventNumberScroll}
                       className="daily-accounting-payment-input daily-accounting-payment-amount"
                     />
                   </div>
@@ -658,10 +689,10 @@ const DailyAccountingPage = () => {
                 <span>Result:</span>
                 <span>₹{balanceResult.toFixed(2)}</span>
               </div>
+              <div className="daily-accounting-balance-row daily-accounting-result-label">
+                <span>{balanceResult < 0 ? 'more' : balanceResult > 0 ? 'shortage' : 'tally'}</span>
+              </div>
             </div>
-            <button type="button" className="daily-accounting-more-btn" onClick={() => navigate('/dashboard/reports')}>
-              MORE
-            </button>
           </div>
         </>
       )}

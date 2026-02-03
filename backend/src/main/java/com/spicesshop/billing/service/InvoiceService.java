@@ -412,23 +412,29 @@ public class InvoiceService {
         return this.invoiceRepository.save(existingInvoice);
     }
 
+    /** Soft delete only: mark B2B invoice as CANCELLED. No hard delete allowed for B2B sale report. */
     @Transactional
     public void deleteB2BInvoice(Integer invoiceId, String companyName) {
+        deleteB2BInvoice(invoiceId, companyName, null);
+    }
+
+    @Transactional
+    public void deleteB2BInvoice(Integer invoiceId, String companyName, String reason) {
         Invoice invoice = getInvoiceById(invoiceId, companyName)
             .orElseThrow(() -> new RuntimeException("Invoice not found"));
-        
+
         if (!"B2B".equals(invoice.getInvoiceType())) {
             throw new RuntimeException("Only B2B invoices can be deleted from this report");
         }
 
-        for (InvoiceItem item : invoice.getItems()) {
-            Product product = this.productRepository.findById(item.getProduct().getProductId()).orElse(null);
-            if (product != null) {
-                product.setQuantity(product.getQuantity().add(item.getQuantity()));
-                this.productRepository.save(product);
-            }
+        invoice.setStatus(Invoice.InvoiceStatus.CANCELLED);
+        invoice.setCancellationRequestedAt(invoice.getCancellationRequestedAt() != null ? invoice.getCancellationRequestedAt() : LocalDateTime.now());
+        if (reason != null && !reason.isBlank()) {
+            invoice.setCancellationReason(reason.trim());
+        } else if (invoice.getCancellationReason() == null || invoice.getCancellationReason().isBlank()) {
+            invoice.setCancellationReason("Marked cancelled from B2B report");
         }
-        this.invoiceRepository.delete(invoice);
+        this.invoiceRepository.save(invoice);
     }
 
     @Transactional
@@ -453,6 +459,7 @@ public class InvoiceService {
             .toList();
     }
 
+    /** Soft delete: mark invoice as CANCELLED and reverse stock. No hard delete. */
     @Transactional
     public void approveCancellationAndDelete(Integer invoiceId, String companyName) {
         Invoice invoice = getInvoiceById(invoiceId, companyName)
@@ -470,7 +477,8 @@ public class InvoiceService {
             }
         }
 
-        this.invoiceRepository.delete(invoice);
+        invoice.setStatus(Invoice.InvoiceStatus.CANCELLED);
+        this.invoiceRepository.save(invoice);
     }
 
     public List<Invoice> getMonthlyInvoices(String companyName, int year, int month) {

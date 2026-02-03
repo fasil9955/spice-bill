@@ -649,6 +649,15 @@
   border-top: 2px solid #e5e7eb;
 }
 
+.daily-accounting-result-label {
+  font-weight: 700;
+  font-size: 1rem;
+  text-transform: lowercase;
+  color: #374151;
+  text-align: center;
+  padding-top: 4px;
+}
+
 .daily-accounting-more-btn {
   display: block;
   width: 100%;

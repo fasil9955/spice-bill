@@ -206,6 +206,18 @@ public class InvoiceController {
                 String eway = payload.get("ewayBillNumber").toString().trim();
                 updatedInvoice.setEwayBillNumber(eway.isEmpty() ? null : eway);
             }
+            if (payload.get("totalPackages") != null) {
+                Object tp = payload.get("totalPackages");
+                updatedInvoice.setTotalPackages(tp instanceof Number ? ((Number) tp).intValue() : Integer.parseInt(tp.toString()));
+            }
+            Object b2bCustomerIdObj = payload.get("b2bCustomerId");
+            if (b2bCustomerIdObj != null) {
+                Integer b2bCustomerId = b2bCustomerIdObj instanceof Number
+                    ? ((Number) b2bCustomerIdObj).intValue()
+                    : Integer.parseInt(b2bCustomerIdObj.toString());
+                B2BCustomer b2bCustomer = this.b2bCustomerRepository.findById(b2bCustomerId).orElse(null);
+                if (b2bCustomer != null) updatedInvoice.setB2bCustomer(b2bCustomer);
+            }
             List<InvoiceItem> items = mapPayloadToInvoiceItems(payload.get("items"));
             return ResponseEntity.ok(this.invoiceService.updateInvoice(id, updatedInvoice, items, companyName));
         } catch (Exception e) {
@@ -260,7 +272,7 @@ public class InvoiceController {
                 return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
             }
             this.invoiceService.approveCancellationAndDelete(id, companyName);
-            return ResponseEntity.ok(Map.of("message", "Cancellation approved and invoice removed"));
+            return ResponseEntity.ok(Map.of("message", "Cancellation approved and invoice marked as cancelled"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -271,7 +283,21 @@ public class InvoiceController {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
             this.invoiceService.deleteB2BInvoice(id, companyName);
-            return ResponseEntity.ok(Map.of("message", "Invoice deleted successfully"));
+            return ResponseEntity.ok(Map.of("message", "Invoice marked as cancelled (soft delete)"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping({"/b2b/{id}"})
+    public ResponseEntity<?> cancelB2BInvoice(@PathVariable Integer id, @RequestParam(required = false) String reason, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
+            }
+            this.invoiceService.deleteB2BInvoice(id, companyName, reason);
+            return ResponseEntity.ok(Map.of("message", "Invoice marked as cancelled"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

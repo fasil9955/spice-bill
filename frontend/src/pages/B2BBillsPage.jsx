@@ -2,14 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService, authService, courierService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe } from '../utils/invoicePrint';
-import { ArrowLeft, Search, Printer, Trash2, Eye, Pencil, X, Truck } from 'lucide-react';
+import { ArrowLeft, Search, Printer, Trash2, Pencil, X, Truck } from 'lucide-react';
 
 const B2BBillsPage = () => {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedInvoice, setSelectedInvoice] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
@@ -39,25 +37,13 @@ const B2BBillsPage = () => {
     fetchInvoices();
   }, []);
 
-  const filteredInvoices = invoices.filter(inv =>
-    (inv.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (inv.b2bCustomer?.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (inv.b2bCustomer?.gstNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const openViewModal = async (inv) => {
-    setSelectedInvoice(null);
-    setDetailLoading(true);
-    try {
-      const res = await invoiceService.getById(inv.invoiceId);
-      setSelectedInvoice(res.data);
-    } catch (err) {
-      console.error('Failed to load invoice', err);
-      alert('Failed to load invoice details.');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  const filteredInvoices = invoices
+    .filter(inv =>
+      (inv.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inv.b2bCustomer?.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inv.b2bCustomer?.gstNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const handlePrint = async (inv) => {
     setPrintLoading(true);
@@ -129,20 +115,28 @@ const B2BBillsPage = () => {
     if (!cancelTarget) return;
     setCancelSubmitting(true);
     try {
-      await invoiceService.requestCancellation(cancelTarget.invoiceId, cancelReason || 'Requested from B2B Bills');
+      await invoiceService.deleteB2B(cancelTarget.invoiceId, cancelReason || undefined);
       setCancelTarget(null);
       setCancelReason('');
-      setSelectedInvoice(null);
       await fetchInvoices();
+      alert('Invoice marked as cancelled.');
     } catch (err) {
-      console.error('Cancel request failed', err);
-      alert(err.response?.data?.error || 'Failed to request cancellation.');
+      console.error('Cancel failed', err);
+      alert(err.response?.data?.error || 'Failed to cancel invoice.');
     } finally {
       setCancelSubmitting(false);
     }
   };
 
   const isActive = (inv) => (inv.status || 'ACTIVE') === 'ACTIVE';
+
+  /** Total including GST: subtotal + tax - discount (B2B amounts are ex-tax so we add GST). */
+  const totalWithGST = (inv) => {
+    const sub = Number(inv.subtotal) || 0;
+    const tax = Number(inv.taxAmount) || 0;
+    const discount = Number(inv.discountAmount) || 0;
+    return sub + tax - discount;
+  };
 
   return (
     <div className="bills-container">
@@ -200,15 +194,14 @@ const B2BBillsPage = () => {
                 <td>{inv.invoiceNumber}</td>
                 <td>{inv.b2bCustomer?.customerName || '–'}</td>
                 <td>{inv.b2bCustomer?.gstNumber || '–'}</td>
-                <td>₹{inv.totalAmount.toFixed(2)}</td>
+                <td>₹{totalWithGST(inv).toFixed(2)}</td>
                 <td><span className={`status-badge status-${(inv.status || 'ACTIVE').toLowerCase()}`}>{inv.status || 'ACTIVE'}</span></td>
                 <td className="action-buttons">
-                  <button className="view-btn" title="View" onClick={() => openViewModal(inv)}><Eye size={16}/></button>
                   <button className="edit-btn" title="Edit" onClick={() => navigate(`/dashboard/b2b/edit/${inv.invoiceId}`)}><Pencil size={16}/></button>
                   <button className="print-btn" title="Print" onClick={() => handlePrint(inv)} disabled={printLoading}><Printer size={16}/></button>
                   <button className="courier-btn" title="Add tracking / Courier" onClick={() => openTrackingModal(inv)}><Truck size={16}/></button>
-                  {isActive(inv) && (
-                    <button className="cancel-btn" title="Request cancel" onClick={() => openCancelModal(inv)}><Trash2 size={16}/></button>
+                    {isActive(inv) && (
+                    <button className="cancel-btn" title="Cancel (mark as cancelled)" onClick={() => openCancelModal(inv)}><Trash2 size={16}/></button>
                   )}
                 </td>
               </tr>
@@ -216,56 +209,6 @@ const B2BBillsPage = () => {
           </tbody>
         </table>
       </div>
-
-      {/* View / Edit detail modal */}
-      {detailLoading && (
-        <div className="modal-overlay">
-          <div className="modal-content bills-detail-modal"><p>Loading...</p></div>
-        </div>
-      )}
-      {selectedInvoice && !detailLoading && (
-        <div className="modal-overlay" onClick={() => setSelectedInvoice(null)}>
-          <div className="modal-content bills-detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="bills-detail-header">
-              <h2>Invoice {selectedInvoice.invoiceNumber}</h2>
-              <button type="button" className="modal-close" onClick={() => setSelectedInvoice(null)}><X size={20}/></button>
-            </div>
-            <div className="bills-detail-body">
-              <p><strong>Date:</strong> {new Date(selectedInvoice.createdAt).toLocaleString()}</p>
-              <p><strong>Type:</strong> B2B</p>
-              <p><strong>Customer:</strong> {selectedInvoice.b2bCustomer?.customerName || '–'}</p>
-              <p><strong>GST:</strong> {selectedInvoice.b2bCustomer?.gstNumber || '–'}</p>
-              <p><strong>Payment:</strong> {selectedInvoice.paymentMethod}</p>
-              <p><strong>Status:</strong> {selectedInvoice.status || 'ACTIVE'}</p>
-              <p><strong>Total:</strong> ₹{Number(selectedInvoice.totalAmount).toFixed(2)}</p>
-              {(selectedInvoice.items || []).length > 0 && (
-                <table className="bills-detail-items">
-                  <thead>
-                    <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
-                  </thead>
-                  <tbody>
-                    {selectedInvoice.items.map((it, i) => (
-                      <tr key={it.itemId || i}>
-                        <td>{it.productName || '-'}</td>
-                        <td>{Number(it.quantity)} {it.unit || ''}</td>
-                        <td>₹{Number(it.unitPrice).toFixed(2)}</td>
-                        <td>₹{Number(it.totalPrice).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="bills-detail-actions">
-              <button className="print-btn" onClick={() => handlePrint(selectedInvoice)} disabled={printLoading}>Print</button>
-              {isActive(selectedInvoice) && (
-                <button className="cancel-btn" onClick={() => { setCancelTarget(selectedInvoice); setCancelReason(''); setSelectedInvoice(null); }}>Request cancel</button>
-              )}
-              <button className="back-button" onClick={() => setSelectedInvoice(null)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Add tracking / Courier modal – tracking details only */}
       {trackingTarget && (
@@ -297,25 +240,26 @@ const B2BBillsPage = () => {
         </div>
       )}
 
-      {/* Cancel reason modal */}
+      {/* Cancel bill modal – mark as CANCELLED (stays in DB) */}
       {cancelTarget && (
         <div className="modal-overlay" onClick={() => setCancelTarget(null)}>
           <div className="modal-content bills-cancel-modal" onClick={e => e.stopPropagation()}>
             <div className="bills-detail-header">
-              <h2>Request cancellation – {cancelTarget.invoiceNumber}</h2>
+              <h2>Cancel invoice – {cancelTarget.invoiceNumber}</h2>
               <button type="button" className="modal-close" onClick={() => setCancelTarget(null)}><X size={20}/></button>
             </div>
-            <p className="bills-cancel-hint">Reason for cancellation (optional):</p>
+            <p className="bills-cancel-hint">Mark this invoice as cancelled? It will remain in the list with status &quot;CANCELLED&quot; and will not be deleted from the database.</p>
+            <p className="bills-cancel-hint">Reason (optional):</p>
             <textarea
               className="bills-cancel-reason"
               value={cancelReason}
               onChange={e => setCancelReason(e.target.value)}
               placeholder="e.g. Duplicate bill, wrong amount..."
-              rows={3}
+              rows={2}
             />
             <div className="bills-detail-actions">
-              <button className="cancel-btn" onClick={submitCancel} disabled={cancelSubmitting}>{cancelSubmitting ? 'Submitting...' : 'Submit request'}</button>
-              <button className="back-button" onClick={() => { setCancelTarget(null); setCancelReason(''); }}>Cancel</button>
+              <button className="cancel-btn" onClick={submitCancel} disabled={cancelSubmitting}>{cancelSubmitting ? 'Cancelling...' : 'Mark as cancelled'}</button>
+              <button className="back-button" onClick={() => { setCancelTarget(null); setCancelReason(''); }}>Back</button>
             </div>
           </div>
         </div>

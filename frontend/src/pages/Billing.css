@@ -105,13 +105,16 @@
 .b2b-billing-layout .totals-section {
   flex: 0 0 auto;
   width: 340px;
+  min-width: 0;
   max-width: 100%;
   display: flex;
   justify-content: flex-end;
+  box-sizing: border-box;
 }
 .b2b-billing-layout .totals-card {
   width: 100%;
   max-width: 340px;
+  min-width: 0;
   margin-left: auto;
   padding: 20px;
   background: #fff;
@@ -121,6 +124,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  box-sizing: border-box;
 }
 .b2b-billing-layout .totals-card .totals-row {
   display: flex;
@@ -139,26 +143,115 @@
   border-top: 2px solid #e5e7eb;
 }
 .b2b-billing-layout .totals-card .payment-section {
-  margin-top: 8px;
-  padding-top: 12px;
+  margin-top: 16px;
+  padding: 18px;
+  padding-bottom: 10px;
   border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 8px;
 }
 .b2b-billing-layout .totals-card .payment-section h3 {
-  margin: 0 0 10px;
+  margin: 0 0 14px;
   font-size: 14px;
   font-weight: 600;
   color: #374151;
+}
+.b2b-billing-layout .totals-card .payment-section .payment-select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 4px;
+}
+.b2b-billing-layout .totals-card .payment-section .mixed-amounts {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.b2b-billing-layout .totals-card .payment-section .mixed-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.b2b-billing-layout .totals-card .payment-section .mixed-row label {
+  min-width: 56px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+.b2b-billing-layout .totals-card .payment-section .mixed-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.b2b-billing-layout .totals-card .payment-section .mixed-row input:focus {
+  outline: none;
+  border-color: #667eea;
 }
 .b2b-billing-layout .totals-card .discount-section {
-  margin-top: 0;
-  padding-top: 12px;
+  margin-top: 12px;
+  padding: 18px;
+  padding-bottom: 8px;
   border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 .b2b-billing-layout .totals-card .discount-section h3 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: #374151;
+}
+.b2b-billing-layout .totals-card .discount-section .discount-toggle {
+  display: flex;
+  gap: 0;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+}
+.b2b-billing-layout .totals-card .discount-section .discount-toggle-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 48px;
+}
+.b2b-billing-layout .totals-card .discount-section .discount-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.b2b-billing-layout .totals-card .discount-section .discount-input-row input {
+  flex: 1;
+  min-width: 0;
+  max-width: 140px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.b2b-billing-layout .totals-card .discount-section .discount-input-row input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+.b2b-billing-layout .totals-card .discount-section .discount-input-row span {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  flex-shrink: 0;
 }
 .b2b-billing-layout .totals-card .preview-invoice-btn,
 .b2b-billing-layout .totals-card .print-btn {
@@ -1633,8 +1726,7 @@
 .b2b-btn-close:hover {
   background: #b91c1c;
 }
-.b2b-btn-save-print,
-.b2b-btn-print-only {
+.b2b-btn-save-print {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1708,6 +1800,18 @@
 .b2b-old-billto-addr,
 .b2b-old-gst {
   margin: 2px 0;
+}
+.b2b-old-billto-addr-label {
+  font-weight: 700;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+.b2b-old-billto-addr-label:first-of-type { margin-top: 2px; }
+.b2b-old-billto-addr-label.b2b-old-shipping-label { font-weight: 800; }
+.b2b-old-billto-addr-value {
+  margin-bottom: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .b2b-old-inv-box > div {
   margin: 2px 0;

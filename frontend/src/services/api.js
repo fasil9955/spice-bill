@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8080/api';
+// Use relative URL when served from same host (e.g. JAR); dev uses Vite proxy
+const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8080/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -81,7 +82,7 @@ export const invoiceService = {
   getById: (id) => api.get(`/invoices/${id}`),
   getByNumber: (number) => api.get(`/invoices/number/${number}`),
   getB2B: () => api.get('/invoices/b2b'),
-  deleteB2B: (id) => api.delete(`/invoices/b2b/${id}`),
+  deleteB2B: (id, reason) => api.delete(`/invoices/b2b/${id}${reason != null && reason !== '' ? `?reason=${encodeURIComponent(reason)}` : ''}`),
   getCancellationRequests: () => api.get('/invoices/cancellation-requests'),
   requestCancellation: (id, reason) => api.post(`/invoices/${id}/cancel`, { reason }),
   approveCancellation: (id) => api.post(`/invoices/${id}/approve-cancellation`),
@@ -113,6 +114,7 @@ export const employeeAccountService = {
   addPayment: (data) => api.post('/employee-accounts/payments', data),
   deletePayment: (paymentId) => api.delete(`/employee-accounts/payments/${paymentId}`),
   getSalaryClearances: (employeeId) => api.get(`/employee-accounts/salary-clearances/${employeeId}`),
+  saveMonthDetails: (data) => api.post('/employee-accounts/month-details', data),
   clearSalary: (data) => api.post('/employee-accounts/clear-salary', data),
 };
 

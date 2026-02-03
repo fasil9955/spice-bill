@@ -1,6 +1,9 @@
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+mvn spring-boot:run -DskipTests -DskipFrontendBuild=True
+ mvn clean package -DskipTests
+   java -jar target\spices-billing-system-1.0.0.jar
 
 Currently, two official plugins are available:
 

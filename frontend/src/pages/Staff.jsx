@@ -39,7 +39,7 @@ const Staff = () => {
   const [clearances, setClearances] = useState([]);
   const [attendanceStats, setAttendanceStats] = useState({ presentDays: 0, halfDays: 0, absentDays: 0 });
   const [attendanceReportLoading, setAttendanceReportLoading] = useState(false);
-  const [clearSalaryLoading, setClearSalaryLoading] = useState(false);
+  const [saveAccountLoading, setSaveAccountLoading] = useState(false);
   const [payments, setPayments] = useState([]);
   const [paymentForm, setPaymentForm] = useState({ amount: '', paymentDate: new Date().toISOString().slice(0, 10), remark: '' });
   const [paymentSaving, setPaymentSaving] = useState(false);
@@ -226,7 +226,7 @@ const Staff = () => {
 
   const closeAccount = () => setAccountEmployee(null);
 
-  // When account month changes (or clearances load), refresh attendance and salary from clearance
+  // When account month changes (or clearances load), refresh attendance and salary for that month
   useEffect(() => {
     if (!accountEmployee || !accountMonth) return;
     const [year, month] = accountMonth.split('-').map(Number);
@@ -244,6 +244,19 @@ const Staff = () => {
       .catch(() => setAttendanceStats({ presentDays: 0, halfDays: 0, absentDays: 0 }))
       .finally(() => setAttendanceReportLoading(false));
   }, [accountMonth, accountEmployee?.employeeId]);
+
+  // Each month has its own salary: when month or clearances change, set salary from that month's clearance
+  useEffect(() => {
+    if (!accountMonth || !clearances.length) {
+      if (!accountMonth) return;
+      setSalaryInput('');
+      return;
+    }
+    const clearanceForMonth = clearances.find((c) => c.salaryMonth === accountMonth);
+    setSalaryInput(clearanceForMonth != null && clearanceForMonth.salaryAmount != null
+      ? String(clearanceForMonth.salaryAmount)
+      : '');
+  }, [accountMonth, clearances]);
 
   const advancesForMonth = advances.filter((a) => {
     const d = a.recordDate ? String(a.recordDate).slice(0, 10) : '';
@@ -268,15 +281,14 @@ const Staff = () => {
     return d === accountMonth || d === nextMonthStr;
   });
   const totalPaymentsGiven = paymentsForSettlement.reduce((s, p) => s + Number(p.amount || 0), 0);
-  const balanceToGive = balance - totalPaymentsGiven; // negative = employee owes us
-  const clearanceForMonth = clearances.find((c) => c.salaryMonth === accountMonth);
-  const isCleared = !!clearanceForMonth;
   const [accY, accM] = accountMonth.split('-').map(Number);
   const prevMon = accM === 1 ? 12 : accM - 1;
   const prevYear = accM === 1 ? accY - 1 : accY;
   const prevMonthStr = `${prevYear}-${String(prevMon).padStart(2, '0')}`;
   const prevMonthClearance = clearances.find((c) => c.salaryMonth === prevMonthStr);
-  const prevMonthBalance = prevMonthClearance?.closingBalance != null ? parseFloat(prevMonthClearance.closingBalance) : null;
+  const prevMonthBalance = prevMonthClearance?.closingBalance != null ? parseFloat(prevMonthClearance.closingBalance) : 0;
+  // Balance at month end = previous month balance + (salary − deductions) − amount given
+  const balanceToGive = prevMonthBalance + balance - totalPaymentsGiven; // negative = employee owes us
 
   const ledgerEntries = [
     ...expensesForMonth.map((ex) => ({ type: 'Expense', date: ex.expenseDate, amount: ex.amount, id: `ex-${ex.expenseId}`, key: ex.expenseId })),
@@ -288,16 +300,16 @@ const Staff = () => {
     return dA.localeCompare(dB);
   });
 
-  const handleMarkAsCleared = async () => {
+  const handleSaveAccount = async () => {
     if (!accountEmployee) return;
     const sal = parseFloat(salaryInput);
     if (!Number.isFinite(sal) || sal < 0) {
-      alert('Enter a valid salary amount.');
+      alert('Enter a valid salary amount (0 or more).');
       return;
     }
-    setClearSalaryLoading(true);
+    setSaveAccountLoading(true);
     try {
-      await employeeAccountService.clearSalary({
+      await employeeAccountService.saveMonthDetails({
         employeeId: accountEmployee.employeeId,
         month: accountMonth,
         salaryAmount: sal,
@@ -307,9 +319,9 @@ const Staff = () => {
       const res = await employeeAccountService.getSalaryClearances(accountEmployee.employeeId);
       setClearances(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to mark as cleared.');
+      alert(err.response?.data?.error || 'Failed to save account details.');
     } finally {
-      setClearSalaryLoading(false);
+      setSaveAccountLoading(false);
     }
   };
 
@@ -496,14 +508,6 @@ const Staff = () => {
             </div>
             <div className="staff-account-employee-name">{accountEmployee.employeeName || 'Employee'}</div>
             <div className="staff-account-modal-body">
-              {prevMonthBalance != null && (
-                <div className={`staff-account-prev-balance ${prevMonthBalance >= 0 ? 'staff-account-prev-give' : 'staff-account-prev-owe'}`}>
-                  <span className="staff-account-prev-label">Balance at month end (previous month)</span>
-                  <span className="staff-account-prev-value">
-                    ₹ {prevMonthBalance.toFixed(2)}{prevMonthBalance < 0 ? ' (employee owes employer)' : ' (employer to give employee)'}
-                  </span>
-                </div>
-              )}
               <div className="staff-account-row staff-account-month-row">
                 <label className="staff-account-label">Month</label>
                 <input
@@ -631,6 +635,12 @@ const Staff = () => {
               <section className="staff-account-section staff-account-summary-section">
                 <h3 className="staff-account-section-title">Settlement</h3>
                 <div className="staff-account-summary-box">
+                  {prevMonthClearance && (
+                    <div className={`staff-account-summary-row staff-account-summary-prev ${(prevMonthBalance ?? 0) >= 0 ? '' : 'staff-account-negative'}`}>
+                      <span>Previous month balance</span>
+                      <span>₹ {(prevMonthBalance ?? 0).toFixed(2)}{(prevMonthBalance ?? 0) === 0 ? ' (tally)' : (prevMonthBalance ?? 0) < 0 ? ' (employee owes)' : ' (to give employee)'}</span>
+                    </div>
+                  )}
                   <div className="staff-account-summary-row">
                     <span>Deductions (expense + advance this month)</span>
                     <span>₹ {totalDeductions.toFixed(2)}</span>
@@ -639,14 +649,15 @@ const Staff = () => {
                     <span>Balance (salary − deductions)</span>
                     <span>₹ {balance.toFixed(2)}{balance < 0 ? ' (employee owes employer)' : ''}</span>
                   </div>
-                  <div className="staff-account-summary-row">
-                    <span>Total amount given to employee</span>
-                    <span>₹ {totalPaymentsGiven.toFixed(2)}</span>
-                  </div>
                   <div className={`staff-account-summary-row staff-account-summary-highlight staff-account-balance-to-give ${balanceToGive < 0 ? 'staff-account-negative' : ''}`}>
                     <span>Balance at month end</span>
                     <span>₹ {balanceToGive.toFixed(2)}{balanceToGive < 0 ? ' (employee owes employer)' : ' (employer to give employee)'}</span>
                   </div>
+                </div>
+                <div className="staff-account-actions">
+                  <button type="button" className="staff-account-btn staff-account-btn-save" onClick={handleSaveAccount} disabled={saveAccountLoading}>
+                    {saveAccountLoading ? 'Saving…' : 'Save'}
+                  </button>
                 </div>
               </section>
             </div>

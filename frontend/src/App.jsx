@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Dashboard from './pages/Dashboard';
-import './index.css';
+import B2BBilling from './pages/B2BBilling';
 import './App.css';
+import './pages/Dashboard.css';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -21,6 +22,19 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        {/* B2B edit: match at App level so it always renders (avoids Dashboard route ambiguity) */}
+        <Route
+          path="/dashboard/b2b/edit/:invoiceId"
+          element={
+            <ProtectedRoute>
+              <div className="dashboard-container">
+                <main className="main-content">
+                  <B2BBilling />
+                </main>
+              </div>
+            </ProtectedRoute>
+          }
+        />
         <Route 
           path="/dashboard/*" 
           element={

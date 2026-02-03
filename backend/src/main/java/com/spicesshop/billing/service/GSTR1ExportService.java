@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -39,15 +38,19 @@ public class GSTR1ExportService {
             ? sellerGstin.substring(0, 2) : "";
 
         List<Invoice> allInvoices = invoiceService.getMonthlyInvoices(companyName, year, month);
-        List<Invoice> b2bInvoices = allInvoices.stream()
+        List<Invoice> b2bActive = allInvoices.stream()
             .filter(i -> "B2B".equals(i.getInvoiceType()) && i.getB2bCustomer() != null && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .toList();
+        List<Invoice> b2bCancelled = allInvoices.stream()
+            .filter(i -> "B2B".equals(i.getInvoiceType()) && (i.getStatus() == Invoice.InvoiceStatus.CANCELLED || i.getStatus() == Invoice.InvoiceStatus.CANCELLATION_REQUESTED))
             .toList();
         List<Invoice> b2cInvoices = allInvoices.stream()
             .filter(i -> !"B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
             .toList();
 
-        // B2B rows (invoice-wise, split by GST rate)
-        List<B2BRow> b2bRows = buildB2BRows(b2bInvoices, sellerStateCode);
+        // B2B rows: active (invoice-wise by GST rate) + cancelled (invoice number + blank fields + remarks "Cancelled")
+        List<B2BRow> b2bRows = buildB2BRows(b2bActive, sellerStateCode);
+        addCancelledB2BRows(b2bRows, b2bCancelled);
 
         // B2C rate-wise summary
         List<B2CSummaryRow> b2cRows = buildB2CSummary(b2cInvoices);
@@ -147,6 +150,17 @@ public class GSTR1ExportService {
         return rows;
     }
 
+    /** Add one row per cancelled B2B invoice: invoice number + all other fields blank, remarks "Cancelled". */
+    private void addCancelledB2BRows(List<B2BRow> rows, List<Invoice> cancelledB2b) {
+        BigDecimal zero = BigDecimal.ZERO;
+        for (Invoice inv : cancelledB2b) {
+            String invoiceNo = inv.getInvoiceNumber() != null ? inv.getInvoiceNumber() : "";
+            String invoiceDate = inv.getCreatedAt() != null
+                ? inv.getCreatedAt().toLocalDate().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")) : "";
+            rows.add(new B2BRow("", "", invoiceNo, invoiceDate, 0, zero, zero, zero, zero, zero, true, "Cancelled"));
+        }
+    }
+
     private List<B2CSummaryRow> buildB2CSummary(List<Invoice> b2cInvoices) {
         // Aggregate by GST rate: taxable_value, then cgst = taxable * rate/2, sgst = same
         Map<Integer, BigDecimal> taxableByRate = new HashMap<>();
@@ -203,7 +217,7 @@ public class GSTR1ExportService {
 
     private void writeSheet1B2BSales(Workbook wb, List<B2BRow> rows) {
         Sheet sheet = wb.createSheet("B2B_SALES");
-        String[] headers = {"buyer_gstin", "buyer_state_code", "invoice_no", "invoice_date", "gst_rate", "taxable_value", "cgst_amount", "sgst_amount", "igst_amount", "invoice_total"};
+        String[] headers = {"buyer_gstin", "buyer_state_code", "invoice_no", "invoice_date", "gst_rate", "taxable_value", "cgst_amount", "sgst_amount", "igst_amount", "invoice_total", "remarks"};
         Row headerRow = sheet.createRow(0);
         CellStyle headerStyle = wb.createCellStyle();
         Font font = wb.createFont();
@@ -227,6 +241,7 @@ public class GSTR1ExportService {
             row.createCell(7).setCellValue(r.sgstAmount.doubleValue());
             row.createCell(8).setCellValue(r.igstAmount.doubleValue());
             row.createCell(9).setCellValue(r.invoiceTotal.doubleValue());
+            row.createCell(10).setCellValue(r.remarks != null ? r.remarks : "");
         }
         for (int i = 0; i < headers.length; i++) {
             sheet.autoSizeColumn(i);
@@ -305,10 +320,17 @@ public class GSTR1ExportService {
         final BigDecimal igstAmount;
         final BigDecimal invoiceTotal;
         final boolean sameState;
+        final String remarks;
 
         B2BRow(String buyerGstin, String buyerStateCode, String invoiceNo, String invoiceDate, int gstRate,
                BigDecimal taxableValue, BigDecimal cgstAmount, BigDecimal sgstAmount, BigDecimal igstAmount,
                BigDecimal invoiceTotal, boolean sameState) {
+            this(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, gstRate, taxableValue, cgstAmount, sgstAmount, igstAmount, invoiceTotal, sameState, "");
+        }
+
+        B2BRow(String buyerGstin, String buyerStateCode, String invoiceNo, String invoiceDate, int gstRate,
+               BigDecimal taxableValue, BigDecimal cgstAmount, BigDecimal sgstAmount, BigDecimal igstAmount,
+               BigDecimal invoiceTotal, boolean sameState, String remarks) {
             this.buyerGstin = buyerGstin;
             this.buyerStateCode = buyerStateCode;
             this.invoiceNo = invoiceNo;
@@ -320,6 +342,7 @@ public class GSTR1ExportService {
             this.igstAmount = igstAmount;
             this.invoiceTotal = invoiceTotal;
             this.sameState = sameState;
+            this.remarks = remarks != null ? remarks : "";
         }
     }
 

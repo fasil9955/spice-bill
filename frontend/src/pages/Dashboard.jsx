@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, useNavigate, Link, useLocation } from 'react-router-dom';
+import { Routes, Route, useNavigate, Link, useLocation, Outlet } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Package, 
@@ -134,13 +134,34 @@ const Dashboard = () => {
     <div className="dashboard-container">
       <main className="main-content">
         <Routes>
+          {/* B2B edit is handled at App level so /dashboard/b2b/edit/:id always renders */}
+          <Route path="/dashboard" element={<Outlet />}>
+            <Route index element={<DashboardHome user={user} menuItems={menuItems} />} />
+            <Route path="b2b" element={<B2BBilling />} />
+            <Route path="b2b-bills" element={<B2BBillsPage />} />
+            <Route path="billing" element={<Billing />} />
+            <Route path="bills" element={<BillsPage />} />
+            <Route path="bills/:invoiceId/edit" element={<EditInvoicePage />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="inventory-view" element={<Inventory />} />
+            <Route path="categories" element={<Categories />} />
+            <Route path="cancellation-requests" element={<CancellationRequestsPage />} />
+            <Route path="staff" element={<Staff />} />
+            <Route path="attendance" element={<Attendance />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="boss-report" element={<BossReportPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="courier" element={<CourierPage />} />
+            <Route path="expenses" element={<ExpensePage />} />
+            <Route path="accounting" element={<DailyAccountingPage />} />
+          </Route>
+          {/* Fallback for /dashboard so direct visit to /dashboard shows home */}
           <Route path="/" element={<DashboardHome user={user} menuItems={menuItems} />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/inventory-view" element={<Inventory />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/billing" element={<Billing />} />
           <Route path="/b2b" element={<B2BBilling />} />
-          <Route path="/dashboard/b2b/edit/:invoiceId" element={<B2BBilling />} />
           <Route path="/bills" element={<BillsPage />} />
           <Route path="/bills/:invoiceId/edit" element={<EditInvoicePage />} />
           <Route path="/b2b-bills" element={<B2BBillsPage />} />

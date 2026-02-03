@@ -57,6 +57,7 @@ const B2BBilling = () => {
   const editMode = !!editInvoiceId;
   const [editLoading, setEditLoading] = useState(!!editInvoiceId);
   const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
+  const [printDraftLoading, setPrintDraftLoading] = useState(false);
 
   const fetchNextBillNumber = async () => {
     try {
@@ -566,6 +567,7 @@ const B2BBilling = () => {
       setEwayBillNumber('');
       setTotalPackages('');
       setShowPreview(true);
+      fetchNextBillNumber();
       if (andPrint) handlePrintInvoice(response.data);
     } catch (err) {
       alert(err.response?.data?.error || err.response?.data?.message || 'Failed to save invoice');
@@ -587,6 +589,7 @@ const B2BBilling = () => {
         discountAmount: getDiscountValue(),
         ...(ewayBillNumber.trim() && { ewayBillNumber: ewayBillNumber.trim() }),
         ...((totalPackages !== '' && totalPackages != null) ? { totalPackages: parseInt(totalPackages, 10) } : {}),
+        ...(selectedCustomer?.customerId != null ? { b2bCustomerId: selectedCustomer.customerId } : {}),
         items: cart.map(item => ({
           product: { productId: item.productId },
           quantity: item.quantity,
@@ -607,15 +610,74 @@ const B2BBilling = () => {
     }
   };
 
+  /** In edit mode: print current form state (draft) without saving */
+  const handlePrintCurrentInEdit = async () => {
+    if (!editMode || !selectedCustomer || cart.length === 0) return;
+    setPrintDraftLoading(true);
+    try {
+      const [companyRes] = await Promise.all([
+        authService.getCompanyDetails().catch(() => ({ data: null }))
+      ]);
+      const company = companyRes?.data || {};
+      const userJson = localStorage.getItem('user');
+      const user = userJson ? JSON.parse(userJson) : null;
+      const subtotal = calculateSubtotalB2B();
+      const gstTotal = calculateCartGstB2B();
+      const discountVal = getDiscountValue();
+      const total = calculateTotalB2B();
+      const custState = getStateLabel(selectedCustomer.stateCode || (selectedCustomer.gstNumber || '').substring(0, 2));
+      const draft = {
+        invoiceNumber: editInvoiceNumber || '',
+        createdAt: new Date().toISOString(),
+        invoiceType: 'B2B',
+        ewayBillNumber: ewayBillNumber.trim() || null,
+        paymentMethod,
+        placeOfSupply: custState,
+        totalPackages: (totalPackages !== '' && totalPackages != null) ? parseInt(totalPackages, 10) : null,
+        b2bCustomer: selectedCustomer,
+        cashier: {
+          companyName: company.companyName || user?.companyName || 'Our Spices Shop',
+          address: company.address || '',
+          gstNumber: company.gstNumber || '',
+          phoneNumber: company.phoneNumber || '',
+          bankName: company.bankName || '',
+          accountNumber: company.accountNumber || '',
+          ifscCode: company.ifscCode || '',
+          branchName: company.branchName || ''
+        },
+        items: cart.map(item => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          hsnCode: item.hsnCode || '',
+          gstPercentage: Number(item.gstPercentage) ?? 0,
+          totalPrice: parseFloat(getItemTotalB2B(item).toFixed(2))
+        })),
+        subtotal: parseFloat(subtotal.toFixed(2)),
+        cgstAmount: parseFloat((gstTotal / 2).toFixed(2)),
+        sgstAmount: parseFloat((gstTotal / 2).toFixed(2)),
+        discountAmount: parseFloat(discountVal.toFixed(2)),
+        totalAmount: parseFloat(total.toFixed(2))
+      };
+      const html = buildInvoicePrintHtml(draft, { twoCopies: false });
+      if (html) printHtmlViaIframe(html);
+    } catch (err) {
+      alert(err?.message || 'Failed to print');
+    } finally {
+      setPrintDraftLoading(false);
+    }
+  };
+
   const cartGstB2B = calculateCartGstB2B();
-  const isDraft = previewDraft && !lastInvoice;
+  const isDraft = !!previewDraft;
 
   if (editMode && editLoading) {
     return (
       <div className="billing-container">
         <div className="billing-header">
           <button className="back-button" onClick={() => navigate('/dashboard/b2b-bills')}><ArrowLeft size={18} /> Back</button>
-          <h1>🏢 Edit B2B Invoice</h1>
+          <h1>🏢 B2B Billing</h1>
         </div>
         <p className="loading">Loading invoice...</p>
       </div>
@@ -630,9 +692,9 @@ const B2BBilling = () => {
             <button className="back-button" onClick={() => navigate(editMode ? '/dashboard/b2b-bills' : '/dashboard')}>
               <ArrowLeft size={18} /> Back
             </button>
-            <h1>{editMode ? '🏢 Edit B2B Invoice' : '🏢 B2B Billing'}</h1>
+            <h1>🏢 B2B Billing</h1>
             {editMode ? (
-              editInvoiceNumber && <span className="b2b-bill-number-badge">Inv #: {editInvoiceNumber}</span>
+              editInvoiceNumber && <span className="b2b-bill-number-badge">Editing: Inv # {editInvoiceNumber}</span>
             ) : (
               nextBillNumber && <span className="b2b-bill-number-badge">Bill #: {nextBillNumber}</span>
             )}
@@ -935,6 +997,9 @@ const B2BBilling = () => {
                   <button className="print-btn" onClick={() => handleUpdate(true)} disabled={!selectedCustomer || cart.length === 0 || loading}>
                     {loading ? 'Updating...' : 'Update & Print'}
                   </button>
+                  <button className="print-btn" type="button" onClick={handlePrintCurrentInEdit} disabled={!selectedCustomer || cart.length === 0 || printDraftLoading}>
+                    {printDraftLoading ? 'Printing...' : 'Print'}
+                  </button>
                 </>
               ) : (
                 <button className="preview-invoice-btn" onClick={handlePreview} disabled={!selectedCustomer || cart.length === 0 || loading}>
@@ -1047,18 +1112,28 @@ const B2BBilling = () => {
           const h12 = h % 12 || 12;
           return `${String(h12).padStart(2, '0')}:${m} ${h >= 12 ? 'pm' : 'am'}`;
         })() : '';
-        const gstTotal = (Number(draft.cgstAmount) || 0) + (Number(draft.sgstAmount) || 0);
-        const taxPct = (Number(draft.subtotal) || 0) > 0 && gstTotal > 0 ? Math.round((gstTotal * 100) / (Number(draft.subtotal) || 1)) : 0;
-        const totalAmt = Number(draft.totalAmount) || 0;
+        // B2B: GST is NOT included in price – calculate from unit price: taxable = price×qty, GST = taxable×gst%, amount = taxable + GST
+        let calcSubtotal = 0;
+        let calcGstTotal = 0;
+        let calcItemsTotal = 0;
+        (draft.items || []).forEach((it) => {
+          const qty = Number(it.quantity) || 0;
+          const unitPrice = Number(it.unitPrice ?? it.sellingPricePerUnit ?? 0);
+          const gstPct = Number(it.gstPercentage) ?? 0;
+          const taxable = unitPrice * qty;
+          calcSubtotal += taxable;
+          calcGstTotal += taxable * (gstPct / 100);
+          calcItemsTotal += taxable * (1 + gstPct / 100);
+        });
+        const subtotal = Math.round(calcSubtotal * 100) / 100;
+        const gstTotal = Math.round(calcGstTotal * 100) / 100;
+        const discountAmt = Number(draft.discountAmount) || 0;
+        const totalAmt = Math.round((subtotal + gstTotal - discountAmt) * 100) / 100;
+        const taxPct = subtotal > 0 && gstTotal > 0 ? Math.round((gstTotal * 100) / subtotal) : 0;
         const totalQty = (draft.items || []).reduce((s, it) => s + (Number(it.quantity) || 0), 0);
-        const totalItemsAmt = (draft.items || []).reduce((s, it) => s + (Number(it.totalPrice) || 0), 0);
+        const totalItemsAmt = calcItemsTotal;
         const amountWords = numberToWordsRupees(totalAmt);
         const companyName = draft.cashier?.companyName || 'Our Spices Shop';
-        const handlePrintOnly = () => {
-          const toPrint = draft.placeOfSupply ? draft : { ...draft, placeOfSupply: placeSupply };
-          const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
-          if (html) printHtmlViaIframe(html);
-        };
         return (
           <div className="modal-overlay b2b-preview-overlay" onClick={() => { if (!isDraft) setShowPreview(false); }}>
             <div className="bill-preview-modal b2b-bill-preview-modal" onClick={e => e.stopPropagation()}>
@@ -1067,11 +1142,11 @@ const B2BBilling = () => {
                 <div className="b2b-preview-header-actions">
                   {isDraft && (
                     <>
+                      <button type="button" className="print-btn" onClick={() => saveInvoice(false)} disabled={loading}>
+                        {loading ? 'Saving...' : 'Save'}
+                      </button>
                       <button type="button" className="print-btn b2b-btn-save-print" onClick={() => saveInvoice(true)} disabled={loading}>
                         <Printer size={16} /> Save & Print
-                      </button>
-                      <button type="button" className="print-btn b2b-btn-print-only" onClick={handlePrintOnly}>
-                        <Printer size={16} /> Print Only
                       </button>
                     </>
                   )}
@@ -1098,7 +1173,18 @@ const B2BBilling = () => {
                     <div className="b2b-old-billto-box">
                       <div className="b2b-old-billto-head">BILL TO:</div>
                       <div className="b2b-old-billto-name">{cust?.customerName || 'Customer'}</div>
-                      {cust?.billingAddress && <div className="b2b-old-billto-addr">Billing Address: {cust.billingAddress}</div>}
+                      {cust?.billingAddress && (
+                        <>
+                          <div className="b2b-old-billto-addr-label">Billing Address:</div>
+                          <div className="b2b-old-billto-addr-value">{cust.billingAddress}</div>
+                        </>
+                      )}
+                      {cust?.shippingAddress && (
+                        <>
+                          <div className="b2b-old-billto-addr-label b2b-old-shipping-label">Shipping Address:</div>
+                          <div className="b2b-old-billto-addr-value">{cust.shippingAddress}</div>
+                        </>
+                      )}
                       {cust?.phone && <div>Contact No.: {cust.phone}</div>}
                       {cust?.gstNumber && <div className="b2b-old-gst">GSTIN: {cust.gstNumber}</div>}
                       {(cust?.stateCode || (cust?.gstNumber && cust.gstNumber.length >= 2)) && (
@@ -1128,23 +1214,28 @@ const B2BBilling = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {(draft.items || []).map((it, i) => (
-                        <tr key={i}>
-                          <td>{i + 1}</td>
-                          <td>{it.productName}</td>
-                          <td>{it.hsnCode || '–'}</td>
-                          <td>{Number(it.quantity)}</td>
-                          <td>{it.unit || '–'}</td>
-                          <td>₹{Number(it.unitPrice).toFixed(2)}</td>
-                          <td>₹{Number(it.totalPrice).toFixed(2)}</td>
-                        </tr>
-                      ))}
+                      {(draft.items || []).map((it, i) => {
+                        const qty = Number(it.quantity) || 0;
+                        const unitPrice = Number(it.unitPrice ?? it.sellingPricePerUnit ?? 0);
+                        const taxable = unitPrice * qty;
+                        return (
+                          <tr key={i}>
+                            <td>{i + 1}</td>
+                            <td>{it.productName}</td>
+                            <td>{it.hsnCode || '–'}</td>
+                            <td>{qty}</td>
+                            <td>{it.unit || '–'}</td>
+                            <td>₹{unitPrice.toFixed(2)}</td>
+                            <td>₹{taxable.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
                       <tr className="b2b-old-total-row">
                         <td colSpan="3"><strong>Total</strong></td>
                         <td>{Number(totalQty).toFixed(3)}</td>
                         <td></td>
                         <td></td>
-                        <td><strong>₹{Number(totalItemsAmt).toFixed(2)}</strong></td>
+                        <td><strong>₹{subtotal.toFixed(2)}</strong></td>
                       </tr>
                     </tbody>
                   </table>
@@ -1160,9 +1251,12 @@ const B2BBilling = () => {
                       <div>Account Holder: {companyName}</div>
                     </div>
                     <div className="b2b-old-summary-box">
-                      <div className="b2b-old-summary-line"><span>Sub Total:</span><span>₹{(Number(draft.subtotal) || 0).toFixed(2)}</span></div>
+                      <div className="b2b-old-summary-line"><span>Sub Total (taxable):</span><span>₹{subtotal.toFixed(2)}</span></div>
                       {gstTotal > 0 && (
-                        <div className="b2b-old-summary-line"><span>Tax ({taxPct}%):</span><span>₹{gstTotal.toFixed(2)}</span></div>
+                        <div className="b2b-old-summary-line"><span>GST ({taxPct}%):</span><span>₹{gstTotal.toFixed(2)}</span></div>
+                      )}
+                      {discountAmt > 0 && (
+                        <div className="b2b-old-summary-line"><span>Discount:</span><span>- ₹{discountAmt.toFixed(2)}</span></div>
                       )}
                       <div className="b2b-old-summary-line b2b-old-total"><span>Total:</span><span>₹{totalAmt.toFixed(2)}</span></div>
                     </div>
@@ -1173,20 +1267,6 @@ const B2BBilling = () => {
                     <div className="b2b-old-sign-line">Authorized Signatory</div>
                   </div>
                 </div>
-              </div>
-              <div className="bill-preview-actions">
-                {isDraft ? (
-                  <>
-                    <button className="print-btn" onClick={() => saveInvoice(false)} disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
-                    <button className="print-btn" onClick={() => saveInvoice(true)} disabled={loading}>{loading ? 'Saving...' : 'Save & Print'}</button>
-                    <button className="secondary-btn" onClick={() => { setPreviewDraft(null); setShowPreview(false); }}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <button className="print-btn" onClick={() => handlePrintInvoice(lastInvoice)}><Printer size={18} /> Print Invoice</button>
-                    <button className="secondary-btn" onClick={() => setShowPreview(false)}>Done</button>
-                  </>
-                )}
               </div>
             </div>
           </div>

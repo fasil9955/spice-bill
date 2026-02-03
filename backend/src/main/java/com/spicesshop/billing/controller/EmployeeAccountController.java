@@ -63,6 +63,16 @@ public class EmployeeAccountController {
         }
     }
 
+    @PostMapping({"/month-details"})
+    public ResponseEntity<?> saveMonthDetails(@RequestBody EmployeeSalaryClearanceRequest body, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            return ResponseEntity.ok(this.employeeAccountService.saveMonthDetails(companyName, body));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping({"/clear-salary"})
     public ResponseEntity<?> clearSalary(@RequestBody EmployeeSalaryClearanceRequest clearanceRequest, HttpServletRequest request) {
         try {

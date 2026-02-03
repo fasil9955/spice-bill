@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -48,9 +49,9 @@ public class AccountingController {
 
             // Opening = yesterday's closing
             LocalDate yesterday = date.minusDays(1);
-            java.util.Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
-            BigDecimal openingCash = yesterdaySummary.map(s -> s.getClosingCash()).filter(v -> v != null).orElse(BigDecimal.ZERO);
-            BigDecimal openingUpi = yesterdaySummary.map(s -> s.getClosingGpayTotal()).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
+            BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingGpayTotal).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
             return ResponseEntity.ok(new AccountingDaySummaryResponse(
                 date.toString(), billingBookSales, openingCash, openingUpi, closingCash, closingGpayTotal));
@@ -81,9 +82,9 @@ public class AccountingController {
                 companyName, date, billingBookSales, closingCash, closingGpayTotal);
 
             LocalDate yesterday = date.minusDays(1);
-            java.util.Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
-            BigDecimal openingCash = yesterdaySummary.map(s -> s.getClosingCash()).filter(v -> v != null).orElse(BigDecimal.ZERO);
-            BigDecimal openingUpi = yesterdaySummary.map(s -> s.getClosingGpayTotal()).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
+            BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingGpayTotal).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
             return ResponseEntity.ok(new AccountingDaySummaryResponse(
                 date.toString(), summary.getBillingBookSales(), openingCash, openingUpi,

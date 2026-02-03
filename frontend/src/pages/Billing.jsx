@@ -27,7 +27,9 @@ const loadCartFromStorage = () => {
       const parsed = JSON.parse(saved);
       return Array.isArray(parsed) ? parsed : [];
     }
-  } catch (e) {}
+  } catch {
+    return [];
+  }
   return [];
 };
 
@@ -76,7 +78,7 @@ const Billing = () => {
         );
         setSearchResults(filtered);
         setHighlightedIndex(filtered.length > 0 ? 0 : -1);
-      } catch (err) {
+      } catch {
         setSearchResults([]);
         setHighlightedIndex(-1);
       }
@@ -142,7 +144,7 @@ const Billing = () => {
       setSearchTerm('');
       setSearchResults([]);
       setTimeout(() => searchInputRef.current?.focus(), 0);
-    } catch (err) {
+    } catch {
       if (searchResults.length === 1) {
         setSelectedForCart(searchResults[0]);
         setSelectedQtyInput('1');
@@ -314,7 +316,8 @@ const Billing = () => {
     const discountAmt = Number(invoice.discountAmount) || 0;
     const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
     const payment = invoice.paymentMethod || 'CASH';
-    const baseAmount = Math.max(0, (Number(invoice.subtotal) || 0) - (Number(invoice.cgstAmount) || 0) - (Number(invoice.sgstAmount) || 0));
+    // Retail: backend stores subtotal = taxable base. Base Amount = subtotal; Subtotal = base + CGST + SGST.
+    const baseAmount = Math.max(0, Number(invoice.subtotal) || 0);
     const cgstAmt = Number(invoice.cgstAmount) || 0;
     const sgstAmt = Number(invoice.sgstAmount) || 0;
     const subtotalVal = baseAmount + cgstAmt + sgstAmt;
@@ -437,13 +440,13 @@ const Billing = () => {
       return;
     }
     win.onafterprint = () => {
-      try { document.body.removeChild(iframe); } catch (e) {}
+      try { document.body.removeChild(iframe); } catch { /* ignore */ }
     };
     doc.open();
     doc.write(html);
     doc.close();
     setTimeout(() => {
-      try { win.print(); } catch (e) { try { window.print(); } catch (e2) {} }
+      try { win.print(); } catch { try { window.print(); } catch { /* ignore */ } }
     }, 250);
   };
 
@@ -465,7 +468,7 @@ const Billing = () => {
             fssaiLicense: invoice.cashier?.fssaiLicense ?? company.fssaiLicense ?? ''
           }
         };
-      } catch (e) {}
+      } catch { /* ignore */ }
     }
     const html = buildInvoicePrintHtml(toPrint, { twoCopies: true });
     if (!html) return;
@@ -484,10 +487,12 @@ const Billing = () => {
       const userJson = localStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
       const company = companyRes?.data || {};
-      const subtotal = calculateSubtotal();
+      const itemsTotal = calculateSubtotal();
       const { cgst, sgst } = calculateCartGst();
       const discountVal = getDiscountValue();
       const total = calculateTotal();
+      // Draft subtotal = taxable base (same as backend), so preview/print logic matches
+      const taxableBase = Math.max(0, itemsTotal - cgst - sgst);
       const draft = {
         invoiceNumber,
         createdAt: new Date().toISOString(),
@@ -507,7 +512,7 @@ const Billing = () => {
           unitPrice: item.unitPrice,
           totalPrice: parseFloat((item.unitPrice * item.quantity).toFixed(2))
         })),
-        subtotal: parseFloat(subtotal.toFixed(2)),
+        subtotal: parseFloat(taxableBase.toFixed(2)),
         cgstAmount: parseFloat(cgst.toFixed(2)),
         sgstAmount: parseFloat(sgst.toFixed(2)),
         discountAmount: parseFloat(discountVal.toFixed(2)),
@@ -717,7 +722,7 @@ const Billing = () => {
         <div className="totals-section">
           <div className="totals-card">
             <div className="totals-row">
-              <span>Subtotal</span>
+              <span>Base Amount</span>
               <span>₹{(Math.max(0, calculateSubtotal() - cartGst.cgst - cartGst.sgst)).toFixed(2)}</span>
             </div>
             {cartGst.cgst > 0 && (
@@ -732,6 +737,10 @@ const Billing = () => {
                 <span>₹{cartGst.sgst.toFixed(2)}</span>
               </div>
             )}
+            <div className="totals-row">
+              <span>Subtotal</span>
+              <span>₹{calculateSubtotal().toFixed(2)}</span>
+            </div>
             {getDiscountValue() > 0 && (
               <div className="totals-row totals-discount">
                 <span>Discount{discountType === 'percent' ? ` (${Math.min(Number(discountPercent) || 0, DISCOUNT_PERCENT_MAX)}%)` : ''}</span>
@@ -856,9 +865,8 @@ const Billing = () => {
     {showPreview && (previewDraft || lastInvoice) && (() => {
         const display = previewDraft ?? lastInvoice;
         const isDraft = !!previewDraft;
-        const subRaw = Number(display.subtotal);
-        const subVal = Number.isFinite(subRaw) ? subRaw : (display.items || []).reduce((s, it) => s + (Number(it.totalPrice) || 0), 0);
-        const baseAmount = Math.max(0, subVal - (Number(display.cgstAmount) || 0) - (Number(display.sgstAmount) || 0));
+        // display.subtotal from backend/draft is taxable base (base amount)
+        const baseAmount = Math.max(0, Number(display.subtotal) || 0);
         const cgstAmt = Number(display.cgstAmount) || 0;
         const sgstAmt = Number(display.sgstAmount) || 0;
         const subtotalVal = baseAmount + cgstAmt + sgstAmt;

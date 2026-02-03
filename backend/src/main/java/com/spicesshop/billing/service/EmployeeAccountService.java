@@ -85,12 +85,14 @@ public class EmployeeAccountService {
     }
 
     /** @deprecated Use getLedger. Returns advances from ledger for backward compatibility. */
+    @Deprecated
     public List<EmployeeAdvance> getAdvances(String companyName, Integer employeeId) {
         getEmployeeOrThrow(employeeId, companyName);
         return this.employeeAdvanceRepository.findByCompanyNameAndEmployeeIdOrderByRecordDateDescCreatedAtDesc(companyName, employeeId);
     }
 
     /** @deprecated Use addLedgerEntry with type ADVANCE. */
+    @Deprecated
     @Transactional
     public EmployeeAdvance createAdvance(String companyName, EmployeeAdvanceRequest request) {
         if (request == null || request.getEmployeeId() == null) {
@@ -125,6 +127,55 @@ public class EmployeeAccountService {
     public List<EmployeeSalaryClearance> getSalaryClearances(String companyName, Integer employeeId) {
         getEmployeeOrThrow(employeeId, companyName);
         return this.employeeSalaryClearanceRepository.findByCompanyNameAndEmployeeIdOrderByClearedAtDesc(companyName, employeeId);
+    }
+
+    /** Save month account details (salary, deductions, payments) without marking as cleared. Draft record has clearedAt = null. */
+    @Transactional
+    public EmployeeSalaryClearance saveMonthDetails(String companyName, EmployeeSalaryClearanceRequest request) {
+        if (request == null || request.getEmployeeId() == null) {
+            throw new RuntimeException("Employee is required");
+        }
+        if (request.getMonth() == null || request.getMonth().isBlank()) {
+            throw new RuntimeException("Month is required");
+        }
+        BigDecimal salaryAmount = request.getSalaryAmount() != null ? request.getSalaryAmount() : BigDecimal.ZERO;
+        if (salaryAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new RuntimeException("Salary amount cannot be negative");
+        }
+
+        getEmployeeOrThrow(request.getEmployeeId(), companyName);
+
+        YearMonth yearMonth = YearMonth.parse(request.getMonth());
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+
+        BigDecimal totalTaken;
+        if (request.getTotalTaken() != null) {
+            totalTaken = request.getTotalTaken();
+        } else {
+            totalTaken = this.employeeAdvanceRepository.sumAmountForMonth(companyName, request.getEmployeeId(), startDate, endDate);
+            if (totalTaken == null) {
+                totalTaken = BigDecimal.ZERO;
+            }
+        }
+
+        BigDecimal netPay = salaryAmount.subtract(totalTaken);
+        BigDecimal totalPaymentsGiven = (request.getTotalPaymentsGiven() != null) ? request.getTotalPaymentsGiven() : BigDecimal.ZERO;
+        BigDecimal closingBalance = netPay.subtract(totalPaymentsGiven);
+
+        EmployeeSalaryClearance clearance = this.employeeSalaryClearanceRepository
+            .findByCompanyNameAndEmployeeIdAndSalaryMonth(companyName, request.getEmployeeId(), request.getMonth())
+            .orElseGet(EmployeeSalaryClearance::new);
+
+        clearance.setCompanyName(companyName);
+        clearance.setEmployeeId(request.getEmployeeId());
+        clearance.setSalaryMonth(request.getMonth());
+        clearance.setSalaryAmount(salaryAmount);
+        clearance.setTotalTaken(totalTaken);
+        clearance.setNetPay(netPay);
+        clearance.setClosingBalance(closingBalance);
+        // Do not set clearedAt – remains null for draft/saved details
+        return this.employeeSalaryClearanceRepository.save(clearance);
     }
 
     @Transactional
