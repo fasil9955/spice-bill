@@ -34,11 +34,15 @@ public class B2BCustomerController {
     public ResponseEntity<?> searchCustomers(@RequestParam(required = false) String query, HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null || companyName.isBlank()) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized. Please log in again."));
+            }
             List<B2BCustomer> customers;
-            if (query == null || query.trim().isEmpty()) {
-                customers = this.b2bCustomerRepository.findByCompanyName(companyName);
+            String q = (query != null) ? query.trim() : "";
+            if (q.isEmpty()) {
+                customers = this.b2bCustomerRepository.findByCompanyNameOrUnassigned(companyName);
             } else {
-                customers = this.b2bCustomerRepository.findByCompanyNameContainingIgnoreCase(query);
+                customers = this.b2bCustomerRepository.findByCompanyNameOrUnassignedAndSearchQuery(companyName, q);
             }
             return ResponseEntity.ok(customers);
         } catch (Exception e) {
@@ -50,7 +54,10 @@ public class B2BCustomerController {
     public ResponseEntity<?> getAllCustomers(HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
-            List<B2BCustomer> customers = this.b2bCustomerRepository.findByCompanyName(companyName);
+            if (companyName == null || companyName.isBlank()) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized. Please log in again."));
+            }
+            List<B2BCustomer> customers = this.b2bCustomerRepository.findByCompanyNameOrUnassigned(companyName);
             return ResponseEntity.ok(customers);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -61,9 +68,15 @@ public class B2BCustomerController {
     public ResponseEntity<?> getCustomerById(@PathVariable Integer id, HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null || companyName.isBlank()) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized. Please log in again."));
+            }
             Optional<B2BCustomer> customer = this.b2bCustomerRepository.findById(id);
-            if (customer.isPresent() && customer.get().getCompanyName().equals(companyName)) {
-                return ResponseEntity.ok(customer.get());
+            if (customer.isPresent()) {
+                String custCompany = customer.get().getCompanyName();
+                if (companyName.equals(custCompany) || custCompany == null || custCompany.isBlank()) {
+                    return ResponseEntity.ok(customer.get());
+                }
             }
             return ResponseEntity.notFound().build();
         } catch (Exception e) {
@@ -75,6 +88,9 @@ public class B2BCustomerController {
     public ResponseEntity<?> createCustomer(@RequestBody B2BCustomer customer, HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null || companyName.isBlank()) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized. Please log in again."));
+            }
             customer.setCompanyName(companyName);
             B2BCustomer saved = this.b2bCustomerRepository.save(customer);
             return ResponseEntity.ok(saved);
@@ -87,21 +103,32 @@ public class B2BCustomerController {
     public ResponseEntity<?> updateCustomer(@PathVariable Integer id, @RequestBody B2BCustomer body, HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null || companyName.isBlank()) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized. Please log in again."));
+            }
             Optional<B2BCustomer> existing = this.b2bCustomerRepository.findById(id);
-            if (existing.isEmpty() || !existing.get().getCompanyName().equals(companyName)) {
+            B2BCustomer existingCustomer = existing.orElse(null);
+            if (existingCustomer == null) {
                 return ResponseEntity.notFound().build();
             }
-            B2BCustomer customer = existing.get();
-            if (body.getCustomerName() != null) customer.setCustomerName(body.getCustomerName());
-            if (body.getGstNumber() != null) customer.setGstNumber(body.getGstNumber());
-            if (body.getBillingAddress() != null) customer.setBillingAddress(body.getBillingAddress());
-            if (body.getShippingAddress() != null) customer.setShippingAddress(body.getShippingAddress());
-            if (body.getAddress() != null) customer.setAddress(body.getAddress());
-            if (body.getPhone() != null) customer.setPhone(body.getPhone());
-            if (body.getEmail() != null) customer.setEmail(body.getEmail());
-            if (body.getCompanyNameInInvoice() != null) customer.setCompanyNameInInvoice(body.getCompanyNameInInvoice());
-            customer.setUpdatedAt(java.time.LocalDateTime.now());
-            B2BCustomer updated = this.b2bCustomerRepository.save(customer);
+            String custCompany = existingCustomer.getCompanyName();
+            if (!companyName.equals(custCompany) && custCompany != null && !custCompany.isBlank()) {
+                return ResponseEntity.notFound().build();
+            }
+            // Assign direct-DB-insert customers to this company when they're updated
+            if (custCompany == null || custCompany.isBlank()) {
+                existingCustomer.setCompanyName(companyName);
+            }
+            if (body.getCustomerName() != null) existingCustomer.setCustomerName(body.getCustomerName());
+            if (body.getGstNumber() != null) existingCustomer.setGstNumber(body.getGstNumber());
+            if (body.getBillingAddress() != null) existingCustomer.setBillingAddress(body.getBillingAddress());
+            if (body.getShippingAddress() != null) existingCustomer.setShippingAddress(body.getShippingAddress());
+            if (body.getAddress() != null) existingCustomer.setAddress(body.getAddress());
+            if (body.getPhone() != null) existingCustomer.setPhone(body.getPhone());
+            if (body.getEmail() != null) existingCustomer.setEmail(body.getEmail());
+            if (body.getCompanyNameInInvoice() != null) existingCustomer.setCompanyNameInInvoice(body.getCompanyNameInInvoice());
+            existingCustomer.setUpdatedAt(java.time.LocalDateTime.now());
+            B2BCustomer updated = this.b2bCustomerRepository.save(existingCustomer);
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

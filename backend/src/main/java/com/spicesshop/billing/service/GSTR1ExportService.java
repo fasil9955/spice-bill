@@ -73,6 +73,55 @@ public class GSTR1ExportService {
         return String.format("GSTR1_Sales_%s_%d.xlsx", monthName, year);
     }
 
+    /**
+     * Returns the GSTR-1 monthly tax summary (same totals as MONTHLY_SUMMARY sheet) for display in reports.
+     * Includes separate CGST, SGST, IGST and total tax.
+     */
+    public java.util.Map<String, Object> getMonthlyTaxSummary(String companyName, int year, int month) throws Exception {
+        String sellerGstin = authService.getCompanyDetails(companyName).getGstNumber();
+        String sellerStateCode = (sellerGstin != null && sellerGstin.length() >= 2)
+            ? sellerGstin.substring(0, 2) : "";
+
+        List<Invoice> allInvoices = invoiceService.getMonthlyInvoices(companyName, year, month);
+        List<Invoice> b2bActive = allInvoices.stream()
+            .filter(i -> "B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .toList();
+        List<Invoice> b2bCancelled = allInvoices.stream()
+            .filter(i -> "B2B".equals(i.getInvoiceType()) && (i.getStatus() == Invoice.InvoiceStatus.CANCELLED || i.getStatus() == Invoice.InvoiceStatus.CANCELLATION_REQUESTED))
+            .toList();
+        List<Invoice> b2cInvoices = allInvoices.stream()
+            .filter(i -> !"B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .toList();
+
+        List<B2BRow> b2bRows = buildB2BRows(b2bActive, sellerStateCode);
+        addCancelledB2BRows(b2bRows, b2bCancelled);
+        List<B2CSummaryRow> b2cRows = buildB2CSummary(b2cInvoices);
+        MonthlySummary summary = buildMonthlySummary(b2bRows, b2cRows);
+
+        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("taxableValue", summary.totalTaxable.doubleValue());
+        out.put("cgst", summary.totalCgst.doubleValue());
+        out.put("sgst", summary.totalSgst.doubleValue());
+        out.put("igst", summary.totalIgst.doubleValue());
+        out.put("totalTax", summary.totalTax.doubleValue());
+        out.put("b2bSameState", java.util.Map.of(
+            "taxableValue", summary.b2bSameTaxable.doubleValue(),
+            "cgst", summary.b2bSameCgst.doubleValue(),
+            "sgst", summary.b2bSameSgst.doubleValue(),
+            "igst", summary.b2bSameIgst.doubleValue()));
+        out.put("b2bOtherState", java.util.Map.of(
+            "taxableValue", summary.b2bOtherTaxable.doubleValue(),
+            "cgst", summary.b2bOtherCgst.doubleValue(),
+            "sgst", summary.b2bOtherSgst.doubleValue(),
+            "igst", summary.b2bOtherIgst.doubleValue()));
+        out.put("b2c", java.util.Map.of(
+            "taxableValue", summary.b2cTaxable.doubleValue(),
+            "cgst", summary.b2cCgst.doubleValue(),
+            "sgst", summary.b2cSgst.doubleValue(),
+            "igst", summary.b2cIgst.doubleValue()));
+        return out;
+    }
+
     private static int gstRateFromItem(InvoiceItem item) {
         if (item.getGstPercentage() == null) return 0;
         int r = item.getGstPercentage().setScale(0, RoundingMode.HALF_UP).intValue();
@@ -131,7 +180,7 @@ public class GSTR1ExportService {
 
             if (inv.getItems() == null || inv.getItems().isEmpty()) continue;
 
-            // Group items by GST rate
+            // Group items by GST rate (only positive rates for normal rows)
             Map<Integer, List<InvoiceItem>> byRate = inv.getItems().stream()
                 .filter(it -> gstRateFromItem(it) > 0)
                 .collect(Collectors.groupingBy(GSTR1ExportService::gstRateFromItem));
@@ -141,6 +190,11 @@ public class GSTR1ExportService {
                 List<InvoiceItem> items = e.getValue();
                 BigDecimal taxableValue = items.stream().map(GSTR1ExportService::itemTaxable).reduce(BigDecimal.ZERO, BigDecimal::add);
                 BigDecimal totalTax = items.stream().map(GSTR1ExportService::itemTax).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                // If item-level tax is not stored (0), derive from taxable value and GST rate
+                if (totalTax.compareTo(BigDecimal.ZERO) == 0 && taxableValue.compareTo(BigDecimal.ZERO) > 0 && gstRate > 0) {
+                    totalTax = taxableValue.multiply(BigDecimal.valueOf(gstRate)).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                }
 
                 BigDecimal cgstAmount = BigDecimal.ZERO;
                 BigDecimal sgstAmount = BigDecimal.ZERO;
@@ -162,6 +216,23 @@ public class GSTR1ExportService {
                         cgstAmount, sgstAmount, igstAmount, invoiceTotal, sameState)
                     : new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, gstRate, taxableValue,
                         cgstAmount, sgstAmount, igstAmount, invoiceTotal, sameState, remarks));
+            }
+
+            // If no rows were added (e.g. all items have 0% GST), add one row so the invoice still appears in the report
+            if (byRate.isEmpty()) {
+                BigDecimal taxableAll = inv.getItems().stream().map(GSTR1ExportService::itemTaxable).reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal totalTaxAll = inv.getItems().stream().map(GSTR1ExportService::itemTax).reduce(BigDecimal.ZERO, BigDecimal::add);
+                // If item-level tax is 0, try to derive from invoice-level tax (CGST+SGST)
+                if (totalTaxAll.compareTo(BigDecimal.ZERO) == 0 && taxableAll.compareTo(BigDecimal.ZERO) > 0 && inv.getTaxAmount() != null && inv.getTaxAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    totalTaxAll = inv.getTaxAmount().setScale(2, RoundingMode.HALF_UP);
+                }
+                BigDecimal cgst0 = sameState ? totalTaxAll.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+                BigDecimal sgst0 = sameState ? totalTaxAll.subtract(cgst0) : BigDecimal.ZERO;
+                BigDecimal igst0 = sameState ? BigDecimal.ZERO : totalTaxAll;
+                BigDecimal total0 = taxableAll.add(totalTaxAll).setScale(2, RoundingMode.HALF_UP);
+                rows.add(remarks.isEmpty()
+                    ? new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, 0, taxableAll, cgst0, sgst0, igst0, total0, sameState)
+                    : new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, 0, taxableAll, cgst0, sgst0, igst0, total0, sameState, remarks));
             }
         }
         return rows;

@@ -9,6 +9,8 @@ const DISCOUNT_PERCENT_MAX = 30;
 
 const B2BBilling = () => {
   const [b2bCustomers, setB2bCustomers] = useState([]);
+  const [b2bCustomerError, setB2bCustomerError] = useState(null);
+  const [b2bCustomerLoading, setB2bCustomerLoading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [cart, setCart] = useState([]);
@@ -68,13 +70,21 @@ const B2BBilling = () => {
     }
   };
 
-  const fetchB2bCustomers = async () => {
+  const fetchB2bCustomers = async (searchQuery = '', showLoading = true) => {
+    setB2bCustomerError(null);
+    if (showLoading) setB2bCustomerLoading(true);
     try {
-      const res = await b2bCustomerService.getAll();
-      setB2bCustomers(Array.isArray(res.data) ? res.data : []);
+      const res = searchQuery.trim()
+        ? await b2bCustomerService.search(searchQuery.trim())
+        : await b2bCustomerService.getAll();
+      setB2bCustomers(Array.isArray(res?.data) ? res.data : []);
     } catch (err) {
       console.error('Failed to fetch B2B customers', err);
       setB2bCustomers([]);
+      const msg = err.response?.data?.error || err.message || 'Failed to load B2B customers. Please log in again.';
+      setB2bCustomerError(msg);
+    } finally {
+      if (showLoading) setB2bCustomerLoading(false);
     }
   };
 
@@ -82,6 +92,18 @@ const B2BBilling = () => {
     fetchB2bCustomers();
     if (!editMode) fetchNextBillNumber();
   }, [editMode]);
+
+  // Server-side search: when user types in customer search, fetch from API (debounced). Don't show loading so input stays focused.
+  const customerSearchDebounceRef = useRef(null);
+  useEffect(() => {
+    if (customerSearchDebounceRef.current) clearTimeout(customerSearchDebounceRef.current);
+    customerSearchDebounceRef.current = setTimeout(() => {
+      fetchB2bCustomers(customerSearch, false);
+    }, 300);
+    return () => {
+      if (customerSearchDebounceRef.current) clearTimeout(customerSearchDebounceRef.current);
+    };
+  }, [customerSearch]);
 
   useEffect(() => {
     if (!editMode || !editInvoiceId) return;
@@ -135,6 +157,7 @@ const B2BBilling = () => {
     searchInputRef.current?.focus();
   }, []);
 
+  // Server already filters by customerSearch; optionally filter client-side for instant feedback while typing
   const filteredCustomers = b2bCustomers.filter(c =>
     (c.customerName || '').toLowerCase().includes((customerSearch || '').toLowerCase()) ||
     (c.gstNumber || '').toLowerCase().includes((customerSearch || '').toLowerCase())
@@ -713,6 +736,14 @@ const B2BBilling = () => {
       {/* B2B Customer selection */}
       <div className="b2b-customer-section">
         <h3>B2B Customer</h3>
+        {b2bCustomerError && (
+          <div className="b2b-customer-error">
+            <span>{b2bCustomerError}</span>
+            <button type="button" className="b2b-customer-retry-btn" onClick={() => fetchB2bCustomers(customerSearch)}>
+              Retry
+            </button>
+          </div>
+        )}
         <div className="b2b-customer-row">
           <input
             type="text"
@@ -720,11 +751,15 @@ const B2BBilling = () => {
             placeholder="Search customer name or GST..."
             value={customerSearch}
             onChange={(e) => setCustomerSearch(e.target.value)}
+            autoComplete="off"
           />
           <button type="button" className="add-customer-btn" onClick={() => setShowAddCustomer(true)}>
             <UserPlus size={18} /> Add customer
           </button>
         </div>
+        {b2bCustomerLoading && b2bCustomers.length === 0 && !b2bCustomerError && (
+          <p className="b2b-customer-loading">Loading customers…</p>
+        )}
         {selectedCustomer && (
           <div className="b2b-selected-card">
             <strong>{selectedCustomer.customerName}</strong>

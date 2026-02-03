@@ -91,6 +91,25 @@ public class ReportController {
     }
 
     /**
+     * GSTR-1 tax summary for the selected month (CGST, SGST, IGST, total tax) for display on Reports page.
+     */
+    @GetMapping({"/gstr1-summary"})
+    public ResponseEntity<?> getGSTR1Summary(
+            @RequestParam Integer year,
+            @RequestParam Integer month,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            return ResponseEntity.ok(this.gstr1ExportService.getMonthlyTaxSummary(companyName, year, month));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * GSTR-1 ready Excel export: 3 sheets – B2B_SALES, B2C_SUMMARY, MONTHLY_SUMMARY.
      * File name: GSTR1_Sales_Jan_2026.xlsx
      */

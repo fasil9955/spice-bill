@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileSpreadsheet } from 'lucide-react';
 import { reportService } from '../services/api';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const formatMoney = (v) =>
+  v == null || Number.isNaN(v) ? '₹0.00' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const ReportsPage = () => {
   const navigate = useNavigate();
@@ -12,6 +15,25 @@ const ReportsPage = () => {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
+  const [taxSummary, setTaxSummary] = useState(null);
+  const [taxSummaryLoading, setTaxSummaryLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTaxSummaryLoading(true);
+    reportService
+      .getGSTR1Summary(year, month)
+      .then((res) => {
+        if (!cancelled && res?.data) setTaxSummary(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setTaxSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setTaxSummaryLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [year, month]);
 
   const handleGSTR1Download = async () => {
     setError(null);
@@ -100,6 +122,46 @@ const ReportsPage = () => {
           </div>
         </div>
         {error && <p className="reports-error">{error}</p>}
+
+        <div className="reports-tax-summary">
+          <h3>Tax summary ({MONTH_NAMES[month - 1]} {year})</h3>
+          {taxSummaryLoading ? (
+            <p className="reports-tax-loading">Loading…</p>
+          ) : taxSummary ? (
+            <table className="reports-tax-table">
+              <thead>
+                <tr>
+                  <th>Tax type</th>
+                  <th className="reports-tax-amount">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Taxable value</td>
+                  <td className="reports-tax-amount">{formatMoney(taxSummary.taxableValue)}</td>
+                </tr>
+                <tr>
+                  <td><strong>CGST</strong></td>
+                  <td className="reports-tax-amount">{formatMoney(taxSummary.cgst)}</td>
+                </tr>
+                <tr>
+                  <td><strong>SGST</strong></td>
+                  <td className="reports-tax-amount">{formatMoney(taxSummary.sgst)}</td>
+                </tr>
+                <tr>
+                  <td><strong>IGST</strong></td>
+                  <td className="reports-tax-amount">{formatMoney(taxSummary.igst)}</td>
+                </tr>
+                <tr className="reports-tax-total-row">
+                  <td><strong>Total tax</strong></td>
+                  <td className="reports-tax-amount">{formatMoney(taxSummary.totalTax)}</td>
+                </tr>
+              </tbody>
+            </table>
+          ) : (
+            <p className="reports-tax-empty">No tax data for this month or failed to load.</p>
+          )}
+        </div>
       </section>
     </div>
   );

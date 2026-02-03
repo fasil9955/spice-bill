@@ -1180,7 +1180,39 @@
   margin: 0 0 14px;
   font-size: 16px;
   font-weight: 600;
-  color: #374151;
+}
+
+.b2b-customer-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #b91c1c;
+}
+
+.b2b-customer-retry-btn {
+  padding: 6px 12px;
+  background: #b91c1c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.b2b-customer-retry-btn:hover {
+  background: #991b1b;
+}
+
+.b2b-customer-loading {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  color: #64748b;
 }
 .b2b-customer-row {
   display: flex;

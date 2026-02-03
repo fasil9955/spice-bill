@@ -285,3 +285,54 @@
   color: #b91c1c;
 }
 
+.reports-tax-summary {
+  margin-top: 24px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.reports-tax-summary h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #334155;
+}
+
+.reports-tax-loading,
+.reports-tax-empty {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.reports-tax-table {
+  width: 100%;
+  max-width: 320px;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.reports-tax-table th,
+.reports-tax-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.reports-tax-table th {
+  font-weight: 600;
+  color: #475569;
+}
+
+.reports-tax-amount {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.reports-tax-total-row td {
+  font-weight: 600;
+  border-top: 1px solid #cbd5e1;
+  padding-top: 10px;
+}
+
