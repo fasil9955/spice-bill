@@ -229,7 +229,9 @@ const Inventory = () => {
 
   const getLabelData = (product) => {
     const companyName = barcodeCompanyName || user?.companyName || product?.companyName || '';
-    const productName = product?.productName || '';
+    // Remove parenthesized parts (e.g. "Elachi (Cardamom)" → "Elachi") for barcode label
+    const rawName = product?.productName || '';
+    const productName = rawName.replace(/\s*\([^)]*\)/g, '').trim();
     const packedDate = formatDateForLabel(barcodePackedDate);
     const fssai = barcodeFssai || '';
 
