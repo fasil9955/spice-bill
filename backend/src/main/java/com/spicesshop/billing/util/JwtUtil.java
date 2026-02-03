@@ -34,7 +34,12 @@ public class JwtUtil {
     }
 
     public Integer extractUserId(String token) {
-        return extractClaim(token, claims -> (Integer) claims.get("userId"));
+        return extractClaim(token, claims -> {
+            Object v = claims.get("userId");
+            if (v == null) return null;
+            if (v instanceof Number) return ((Number) v).intValue();
+            return Integer.parseInt(v.toString());
+        });
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {

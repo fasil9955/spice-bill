@@ -7,6 +7,7 @@ import com.spicesshop.billing.model.Product;
 import com.spicesshop.billing.repository.B2BCustomerRepository;
 import com.spicesshop.billing.service.InvoiceService;
 import com.spicesshop.billing.util.CompanyExtractor;
+import com.spicesshop.billing.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,6 +32,9 @@ public class InvoiceController {
 
     @Autowired
     private B2BCustomerRepository b2bCustomerRepository;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @GetMapping({"/b2b/next-invoice-number"})
     public ResponseEntity<?> getNextB2BInvoiceNumber(HttpServletRequest request) {
@@ -79,6 +83,22 @@ public class InvoiceController {
                     com.spicesshop.billing.model.User cashier = new com.spicesshop.billing.model.User();
                     cashier.setUserId(userId instanceof Number ? ((Number) userId).intValue() : Integer.parseInt(userId.toString()));
                     invoice.setCashier(cashier);
+                }
+            }
+            if (invoice.getCashier() == null) {
+                String authHeader = request.getHeader("Authorization");
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    try {
+                        Integer userId = this.jwtUtil.extractUserId(authHeader.substring(7));
+                        if (userId != null) {
+                            com.spicesshop.billing.model.User cashier = new com.spicesshop.billing.model.User();
+                            cashier.setUserId(userId);
+                            invoice.setCashier(cashier);
+                        }
+                    } catch (Exception ignored) {}
+                }
+                if (invoice.getCashier() == null) {
+                    throw new RuntimeException("Cashier is required. Please log in again.");
                 }
             }
             // RETAIL: invoice number is generated only on save (do not use preview number from payload)

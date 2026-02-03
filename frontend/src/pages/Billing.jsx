@@ -311,7 +311,6 @@ const Billing = () => {
     const address = invoice.cashier?.address || '';
     const gstNumber = invoice.cashier?.gstNumber || '';
     const phoneNumber = invoice.cashier?.phoneNumber || '';
-    const fssaiLicense = invoice.cashier?.fssaiLicense || '';
     const createdAt = formatInvoiceDateTime(invoice.createdAt);
     const discountAmt = Number(invoice.discountAmount) || 0;
     const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
@@ -351,7 +350,6 @@ const Billing = () => {
           ${address ? `<div class="btoc-company-line">${address.replace(/</g, '&lt;')}</div>` : ''}
           ${phoneNumber ? `<div class="btoc-company-line">Ph. no.: ${phoneNumber.replace(/</g, '&lt;')}</div>` : ''}
           ${gstNumber ? `<div class="btoc-company-line">GST: ${gstNumber.replace(/</g, '&lt;')}</div>` : ''}
-          ${fssaiLicense ? `<div class="btoc-company-line">FSSAI: ${fssaiLicense.replace(/</g, '&lt;')}</div>` : ''}
         </div>
         ${copyHeading ? `<div class="btoc-print-heading">${copyHeading}</div>` : ''}
         <div class="btoc-divider-dashed"></div>
@@ -534,6 +532,7 @@ const Billing = () => {
     try {
       const userJson = localStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
+      const cashierUserId = user?.userId ?? user?.id;
       const invoiceData = {
         invoiceType: 'RETAIL',
         invoiceNumber: previewDraft.invoiceNumber,
@@ -542,7 +541,7 @@ const Billing = () => {
         cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
         upiAmount: paymentMethod === 'MIXED' ? Number(amounts.upi) || 0 : (paymentMethod === 'UPI' ? total : 0),
         discountAmount: getDiscountValue(),
-        ...(user?.userId != null && { cashier: { userId: user.userId } }),
+        ...(cashierUserId != null && { cashier: { userId: cashierUserId } }),
         items: cart.map(item => ({
           product: { productId: item.productId },
           quantity: item.quantity,
@@ -557,7 +556,7 @@ const Billing = () => {
       setShowPreview(true);
       if (andPrint) handlePrintInvoice(response.data);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to save invoice');
+      alert(err.response?.data?.error || err.response?.data?.message || 'Failed to save invoice');
     } finally {
       setLoading(false);
     }
@@ -896,7 +895,6 @@ const Billing = () => {
                   </div>
                 )}
                 {display.cashier?.gstNumber && <div className="btoc-company-line">GST: {display.cashier.gstNumber}</div>}
-                {display.cashier?.fssaiLicense && <div className="btoc-company-line">FSSAI: {display.cashier.fssaiLicense}</div>}
               </div>
               <div className="btoc-divider-dashed" />
               <div className="btoc-meta">

@@ -446,7 +446,6 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
     const address = (invoice.cashier?.address || '').trim();
     const gstNumber = (invoice.cashier?.gstNumber || '').trim();
     const phoneNumber = (invoice.cashier?.phoneNumber || '').trim();
-    const fssaiLicense = (invoice.cashier?.fssaiLicense || '').trim();
     const createdAt = (() => {
       if (!invoice.createdAt) return '';
       try {
@@ -499,7 +498,6 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
           ${address ? `<div class="btoc-company-line">${address.replace(/</g, '&lt;')}</div>` : ''}
           ${phoneNumber ? `<div class="btoc-company-line">Ph. no.: ${phoneNumber.replace(/</g, '&lt;')}</div>` : ''}
           ${gstNumber ? `<div class="btoc-company-line">GST: ${gstNumber.replace(/</g, '&lt;')}</div>` : ''}
-          ${fssaiLicense ? `<div class="btoc-company-line">FSSAI: ${fssaiLicense.replace(/</g, '&lt;')}</div>` : ''}
         </div>
         <div class="btoc-divider-dashed"></div>
         <div class="btoc-meta">

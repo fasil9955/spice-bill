@@ -40,10 +40,16 @@ const BillsPage = () => {
     fetchInvoices();
   }, [selectedDate]);
 
-  const filteredInvoices = invoices.filter(inv =>
-    (inv.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (inv.b2bCustomer?.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredInvoices = invoices
+    .filter(inv =>
+      (inv.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inv.b2bCustomer?.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      const dateA = a.createdAt || a.created_at || '';
+      const dateB = b.createdAt || b.created_at || '';
+      return dateB.localeCompare(dateA);
+    });
 
   const openCourierModal = (inv) => {
     setCourierTarget(inv);
