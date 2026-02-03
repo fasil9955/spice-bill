@@ -238,9 +238,20 @@ const Inventory = () => {
     const months = Number.isNaN(monthsParsed) ? 12 : monthsParsed;
     const bestBefore = `${months} months`;
 
-    const price = product?.sellingPricePerUnit != null ? `₹${product.sellingPricePerUnit}` : '';
     const w = (barcodeWeights?.[product?.productId] || '').toString().trim();
     const weight = w ? `${w}gm` : '';
+    // Base price is per 1 kg; when weight (gm) is entered, price = base * (weight / 1000)
+    const basePricePerKg = product?.sellingPricePerUnit != null ? Number(product.sellingPricePerUnit) : null;
+    let price = '';
+    if (basePricePerKg != null) {
+      if (w) {
+        const weightGm = parseFloat(w);
+        const priceForWeight = Number.isNaN(weightGm) || weightGm <= 0 ? basePricePerKg : (basePricePerKg * weightGm) / 1000;
+        price = `₹${Math.round(priceForWeight * 100) / 100}`;
+      } else {
+        price = `₹${basePricePerKg}`;
+      }
+    }
 
     return { companyName, productName, packedDate, bestBefore, fssai, price, weight };
   };
@@ -380,7 +391,7 @@ const Inventory = () => {
 
   const getBarcodeOptions = () => ({
     format: 'CODE128',
-    displayValue: false,
+    displayValue: true,
     width: 3,
     height: 55,
     margin: 12,
