@@ -39,7 +39,7 @@ public class GSTR1ExportService {
 
         List<Invoice> allInvoices = invoiceService.getMonthlyInvoices(companyName, year, month);
         List<Invoice> b2bActive = allInvoices.stream()
-            .filter(i -> "B2B".equals(i.getInvoiceType()) && i.getB2bCustomer() != null && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .filter(i -> "B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
             .toList();
         List<Invoice> b2bCancelled = allInvoices.stream()
             .filter(i -> "B2B".equals(i.getInvoiceType()) && (i.getStatus() == Invoice.InvoiceStatus.CANCELLED || i.getStatus() == Invoice.InvoiceStatus.CANCELLATION_REQUESTED))
@@ -101,16 +101,30 @@ public class GSTR1ExportService {
 
         for (Invoice inv : b2bInvoices) {
             B2BCustomer buyer = inv.getB2bCustomer();
-            if (buyer == null) continue;
+            String buyerGstin = "";
+            String buyerStateCode = "";
+            String remarks = "";
+            boolean sameState = true;
 
-            String buyerGstin = buyer.getGstNumber() != null ? buyer.getGstNumber().trim() : "";
-            if (buyerGstin.length() != GSTIN_LENGTH) continue; // validation: GSTIN must be 15 characters
+            if (buyer != null) {
+                buyerGstin = buyer.getGstNumber() != null ? buyer.getGstNumber().trim() : "";
+                if (buyerGstin.length() != GSTIN_LENGTH) {
+                    buyerGstin = "";
+                    remarks = "Invalid buyer GSTIN";
+                } else {
+                    buyerStateCode = (buyerGstin.length() >= 2) ? buyerGstin.substring(0, 2)
+                        : (buyer.getStateCode() != null ? buyer.getStateCode().trim() : "");
+                    if (buyerStateCode.length() != 2) {
+                        buyerStateCode = "";
+                        remarks = remarks.isEmpty() ? "Buyer state missing" : remarks;
+                    } else {
+                        sameState = buyerStateCode.equals(sellerStateCode);
+                    }
+                }
+            } else {
+                remarks = "Buyer details missing";
+            }
 
-            String buyerStateCode = (buyerGstin.length() >= 2) ? buyerGstin.substring(0, 2)
-                : (buyer.getStateCode() != null ? buyer.getStateCode().trim() : "");
-            if (buyerStateCode.length() != 2) continue;
-
-            boolean sameState = buyerStateCode.equals(sellerStateCode);
             String invoiceNo = inv.getInvoiceNumber() != null ? inv.getInvoiceNumber() : "";
             String invoiceDate = inv.getCreatedAt() != null
                 ? inv.getCreatedAt().toLocalDate().format(DateTimeFormatter.ofPattern("dd-MM-yyyy")) : "";
@@ -143,8 +157,11 @@ public class GSTR1ExportService {
                 if (seenInvoiceNos.contains(rowKey)) continue; // invoice number + rate uniqueness
                 seenInvoiceNos.add(rowKey);
 
-                rows.add(new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, gstRate, taxableValue,
-                    cgstAmount, sgstAmount, igstAmount, invoiceTotal, sameState));
+                rows.add(remarks.isEmpty()
+                    ? new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, gstRate, taxableValue,
+                        cgstAmount, sgstAmount, igstAmount, invoiceTotal, sameState)
+                    : new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, gstRate, taxableValue,
+                        cgstAmount, sgstAmount, igstAmount, invoiceTotal, sameState, remarks));
             }
         }
         return rows;

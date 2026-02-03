@@ -280,9 +280,11 @@ const Inventory = () => {
                   <div className="label-header">{info.companyName}</div>
                   <div className="label-product">{info.productName}</div>
                 </div>
-                <div className="label-barcode" style={{ marginTop: '-4px' }}>
-                  <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-                    <svg id={svgId} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
+                <div className="label-barcode-wrap">
+                  <div className="label-barcode" style={{ marginTop: '-4px' }}>
+                    <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+                      <svg id={svgId} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
+                    </div>
                   </div>
                 </div>
                 <div className="label-footer">
@@ -309,9 +311,11 @@ const Inventory = () => {
                   <div className="label-header">{info.companyName}</div>
                   <div className="label-product">{info.productName}</div>
                 </div>
-                <div className="label-barcode" style={{ marginTop: '-4px' }}>
-                  <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-                    <svg id={svgId} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
+                <div className="label-barcode-wrap">
+                  <div className="label-barcode" style={{ marginTop: '-4px' }}>
+                    <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+                      <svg id={svgId} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
+                    </div>
                   </div>
                 </div>
                 <div className="label-footer">
@@ -348,16 +352,8 @@ const Inventory = () => {
           const val = getBarcodeValue(pair[0]);
           if (svgEl && val) {
             try {
-              JsBarcode(svgEl, val, {
-                format: 'CODE128',
-                displayValue: true,
-                height: 18,
-                margin: 0,
-                textMargin: 2,
-                fontSize: 10,
-                fontOptions: 'bold',
-              });
-            } catch (e) {
+              JsBarcode(svgEl, val, getBarcodeOptions());
+            } catch {
               // ignore render errors for individual items
             }
           }
@@ -367,16 +363,8 @@ const Inventory = () => {
           const val = getBarcodeValue(pair[1]);
           if (svgEl && val) {
             try {
-              JsBarcode(svgEl, val, {
-                format: 'CODE128',
-                displayValue: true,
-                height: 22,
-                margin: 0,
-                textMargin: 2,
-                fontSize: 10,
-                fontOptions: 'bold',
-              });
-            } catch (e) {
+              JsBarcode(svgEl, val, getBarcodeOptions());
+            } catch {
               // ignore render errors for individual items
             }
           }
@@ -387,28 +375,29 @@ const Inventory = () => {
     // wait for DOM to paint
     const t = setTimeout(render, 0);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getBarcodeValue is stable, omit to avoid extra re-runs
   }, [showBarcodePreview, barcodePreviewProducts, barcodeWeights, barcodeBestBeforeMonths, barcodeCompanyName, barcodeFssai, barcodePackedDate]);
 
-  const generateBarcodeSvgInner = (barcodeText) => {
+  const getBarcodeOptions = () => ({
+    format: 'CODE128',
+    displayValue: false,
+    width: 3,
+    height: 55,
+    margin: 12,
+    textMargin: 2,
+    fontSize: 14,
+    fontOptions: 'bold',
+    lineColor: '#000000',
+    background: '#ffffff',
+  });
+
+  /** Generate barcode as PNG data URL for TSC/thermal printers (they often render SVG as solid black). */
+  const generateBarcodeImageForPrint = (barcodeText) => {
     try {
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      JsBarcode(svg, barcodeText, {
-        format: 'CODE128',
-        displayValue: true,
-        height: 18,
-        margin: 0,
-        textMargin: 2,
-        fontSize: 10,
-        fontOptions: 'bold',
-      });
-      if (!svg.getAttribute('viewBox')) {
-        const w = svg.getAttribute('width') || '100';
-        const h = svg.getAttribute('height') || '30';
-        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      }
-      return svg.innerHTML;
-    } catch (e) {
+      const canvas = document.createElement('canvas');
+      JsBarcode(canvas, barcodeText, getBarcodeOptions());
+      return canvas.toDataURL('image/png');
+    } catch {
       return '';
     }
   };
@@ -435,7 +424,7 @@ const Inventory = () => {
     win.onafterprint = () => {
       try {
         document.body.removeChild(iframe);
-      } catch (e) {}
+      } catch { /* ignore */ }
     };
 
     doc.open();
@@ -447,16 +436,16 @@ const Inventory = () => {
       try {
         win.focus();
         win.print();
-      } catch (e) {
+      } catch {
         try {
           window.print();
-        } catch (e2) {}
+        } catch { /* ignore */ }
       }
       // Safety cleanup in case onafterprint doesn't fire
       setTimeout(() => {
         try {
           if (document.body.contains(iframe)) document.body.removeChild(iframe);
-        } catch (e) {}
+        } catch { /* ignore */ }
       }, 4000);
     }, 250);
   };
@@ -477,17 +466,15 @@ const Inventory = () => {
       if (P[0]) {
         const E = getLabelData(P[0]);
         const W = getBarcodeValue(P[0]);
-        const q = generateBarcodeSvgInner(W);
+        const barcodeImg = generateBarcodeImageForPrint(W);
         j += `
           <div class="label">
             <div class="label-top">
               <div class="label-header">${E.companyName}</div>
               <div class="label-product">${E.productName}</div>
             </div>
-            <div class="label-barcode">
-              <div style="width: 100%; display: flex; justify-content: center; align-items: center; text-align: center; height: 100%;">
-                <svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="display: block; max-width: 100%; height: auto; margin: 0 auto !important; vertical-align: middle; text-align: center;">${q}</svg>
-              </div>
+            <div class="label-barcode-wrap">
+              <div class="label-barcode">${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="label-barcode-img" />` : ''}</div>
             </div>
             <div class="label-footer">
               <div class="label-footer-left">
@@ -509,17 +496,15 @@ const Inventory = () => {
       if (P[1]) {
         const E = getLabelData(P[1]);
         const W = getBarcodeValue(P[1]);
-        const q = generateBarcodeSvgInner(W);
+        const barcodeImg = generateBarcodeImageForPrint(W);
         j += `
           <div class="label">
             <div class="label-top">
               <div class="label-header">${E.companyName}</div>
               <div class="label-product">${E.productName}</div>
             </div>
-            <div class="label-barcode">
-              <div style="width: 100%; display: flex; justify-content: center; align-items: center; text-align: center; height: 100%;">
-                <svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="display: block; max-width: 100%; height: auto; margin: 0 auto !important; vertical-align: middle; text-align: center;">${q}</svg>
-              </div>
+            <div class="label-barcode-wrap">
+              <div class="label-barcode">${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="label-barcode-img" />` : ''}</div>
             </div>
             <div class="label-footer">
               <div class="label-footer-left">
@@ -550,20 +535,20 @@ const Inventory = () => {
           <title>Print Barcodes</title>
           <style>
             @page {
-              size: 111mm 25mm;
+              size: 106mm 25mm;
               margin: 0;
             }
             body {
               margin: 0;
               padding: 0;
               font-family: Arial, sans-serif;
-              width: 111mm;
+              width: 106mm;
               height: 25mm;
             }
             .print-container {
               display: flex;
               flex-direction: column;
-              width: 111mm;
+              width: 106mm;
               padding: 0;
               margin: 0;
               gap: 0;
@@ -571,7 +556,7 @@ const Inventory = () => {
             .label-row {
               display: flex;
               flex-direction: row;
-              width: 111mm;
+              width: 106mm;
               height: 25mm;
               padding: 0;
               margin: 0;
@@ -584,7 +569,7 @@ const Inventory = () => {
               flex-shrink: 0;
             }
             .label-spacer-middle {
-              width: 5mm;
+              width: 0;
               height: 25mm;
               flex-shrink: 0;
             }
@@ -648,55 +633,43 @@ const Inventory = () => {
               -webkit-font-smoothing: antialiased;
               -moz-osx-font-smoothing: grayscale;
             }
+            .label-barcode-wrap {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              width: 100%;
+              margin: 0;
+              flex: 1;
+              min-height: 0;
+            }
             .label-barcode {
-              margin: 0mm 0 0mm 0;
               text-align: center;
-              height: 9mm;
+              width: 100%;
               display: flex;
               align-items: center;
               justify-content: center;
               overflow: visible;
-              width: 100%;
-              vertical-align: middle;
-              transform: translateY(-0.6mm);
             }
-            .label-barcode > div {
-              width: 100%;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              text-align: center;
-              height: 100%;
-            }
-            .label-barcode svg {
-              max-width: 100%;
-              max-height: 9mm;
-              height: auto;
-              display: block;
-              margin: 0 auto !important;
-              vertical-align: middle;
-              text-align: center;
-            }
-            .label-barcode svg * {
-              text-anchor: middle;
-            }
-            .label-barcode canvas {
-              display: none;
-            }
-            .label-barcode text,
-            .label-barcode svg text {
-              font-weight: 900 !important;
-              font-family: Arial, sans-serif !important;
-              font-size: 10pt !important;
-              fill: #000000 !important;
-              stroke: #000000 !important;
-              stroke-width: 0.2 !important;
-              paint-order: stroke fill !important;
-              text-anchor: middle !important;
-              text-align: center !important;
+            .label-barcode-img {
+              width: 44mm !important;
+              height: auto !important;
+              max-height: 12mm !important;
               display: block !important;
-              visibility: visible !important;
-              opacity: 1 !important;
+              margin: 0 auto !important;
+              image-rendering: pixelated;
+              image-rendering: -moz-crisp-edges;
+              image-rendering: crisp-edges;
+            }
+            .label-barcode-number {
+              font-size: 9pt;
+              font-weight: 900;
+              letter-spacing: 0.05em;
+              text-align: center;
+              margin-top: 0.5mm;
+              line-height: 1.1;
+              color: #000;
+              -webkit-font-smoothing: antialiased;
             }
             .label-footer {
               display: flex;
@@ -727,27 +700,20 @@ const Inventory = () => {
               .no-print {
                 display: none;
               }
-              .label-barcode {
-                text-align: center !important;
+              .label-barcode-wrap {
                 display: flex !important;
+                flex-direction: column !important;
                 align-items: center !important;
                 justify-content: center !important;
               }
-              .label-barcode > div {
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                text-align: center !important;
-                width: 100% !important;
-              }
-              .label-barcode svg {
+              .label-barcode-img {
+                width: 44mm !important;
+                height: auto !important;
+                max-height: 12mm !important;
                 margin: 0 auto !important;
-                display: block !important;
-                text-align: center !important;
               }
-              .label-barcode text,
-              .label-barcode svg text {
-                text-anchor: middle !important;
+              .label-barcode-number {
+                font-weight: 900 !important;
                 text-align: center !important;
               }
             }
@@ -832,16 +798,16 @@ const Inventory = () => {
             popup.focus();
             popup.print();
             popup.onafterprint = () => {
-              try { popup.close(); } catch (e) {}
+              try { popup.close(); } catch { /* ignore */ }
             };
-          } catch (e) {
+          } catch {
             setTimeout(attempt, 120);
           }
         };
         setTimeout(attempt, 200);
         return;
       }
-    } catch (e) {
+    } catch {
       // ignore and fall back
     }
 
@@ -879,7 +845,7 @@ const Inventory = () => {
       }
       setShowModal(false);
       fetchData();
-    } catch (err) {
+    } catch {
       alert('Failed to save product');
     }
   };
@@ -889,7 +855,7 @@ const Inventory = () => {
       try {
         await productService.delete(id);
         fetchData();
-      } catch (err) {
+      } catch {
         alert('Failed to delete product');
       }
     }
