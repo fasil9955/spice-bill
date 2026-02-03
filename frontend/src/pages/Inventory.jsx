@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { categoryService, productService } from '../services/api';
+import { authService, categoryService, productService } from '../services/api';
 import { Plus, Search, Edit, Trash2, ArrowLeft, Download, Upload, Printer } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import * as XLSX from 'xlsx';
@@ -256,7 +256,7 @@ const Inventory = () => {
     return { companyName, productName, packedDate, bestBefore, fssai, price, weight };
   };
 
-  const openBarcodePreview = (list) => {
+  const openBarcodePreview = async (list) => {
     const arr = Array.isArray(list) ? list.filter(Boolean) : [];
     if (arr.length === 0) {
       alert('No products selected for barcode preview');
@@ -264,10 +264,16 @@ const Inventory = () => {
     }
     setBarcodePreviewProducts(arr);
     setBarcodeCompanyName(user?.companyName || arr[0]?.companyName || '');
-    setBarcodeFssai('');
     setBarcodeWeights({});
     setBarcodeBestBeforeMonths({});
     setShowBarcodePreview(true);
+    try {
+      const res = await authService.getCompanyDetails();
+      const fssai = res?.data?.fssaiLicense ?? '';
+      setBarcodeFssai(fssai);
+    } catch {
+      setBarcodeFssai('');
+    }
   };
 
   const closeBarcodePreview = () => setShowBarcodePreview(false);
