@@ -284,7 +284,7 @@ const DailyAccountingPage = () => {
                   ? (employeeMap[exp.employeeId] || exp.otherName || '—')
                   : (exp.otherName || '—');
               const amt = (parseFloat(exp.amount) || 0).toFixed(2);
-              return `<p class="print-expense-item">${escapeHtml(String(name))} ₹${amt}</p>`;
+              return `<p class="print-expense-item"><span>${escapeHtml(String(name))}</span><span class="print-amount">₹${amt}</span></p>`;
             })
             .join('');
     printWindow.document.write(`
@@ -296,23 +296,26 @@ const DailyAccountingPage = () => {
         h1 { font-size: 12px; margin: 0 0 6px; font-weight: 700; text-align: center; }
         h2 { font-size: 10px; margin: 8px 0 4px; font-weight: 700; border-bottom: 1px solid #000; padding-bottom: 2px; }
         p { margin: 2px 0; line-height: 1.3; }
-        .print-expense-item { margin: 1px 0; padding-left: 4px; }
+        .print-row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; line-height: 1.3; }
+        .print-row .print-amount { text-align: right; flex-shrink: 0; }
+        .print-expense-item { display: flex; justify-content: space-between; gap: 8px; margin: 1px 0; line-height: 1.3; }
+        .print-expense-item .print-amount { text-align: right; flex-shrink: 0; }
         .last-row { margin-top: 10px; padding-top: 8px; border-top: 2px solid #000; font-weight: 700; font-size: 11px; text-align: center; }
       </style></head><body>
       <h1>Accounting &amp; Day Close</h1>
       <p><strong>Date:</strong> ${formatDisplayDate(isoDate)}</p>
       <h2>Sales</h2>
-      <p>System Sales: ₹${systemSales.toFixed(2)}</p>
-      <p>Billing Book: ₹${billingBookNum.toFixed(2)}</p>
-      <p><strong>Total Sales: ₹${totalSales.toFixed(2)}</strong></p>
+      <p class="print-row">System Sales:<span class="print-amount">₹${systemSales.toFixed(2)}</span></p>
+      <p class="print-row">Billing Book:<span class="print-amount">₹${billingBookNum.toFixed(2)}</span></p>
+      <p class="print-row"><strong>Total Sales:</strong><span class="print-amount">₹${totalSales.toFixed(2)}</span></p>
       <h2>Opening Balance</h2>
-      <p>Cash: ₹${openingCashNum.toFixed(2)}</p>
-      <p>UPI: ₹${openingUpiNum.toFixed(2)}</p>
+      <p class="print-row">Cash:<span class="print-amount">₹${openingCashNum.toFixed(2)}</span></p>
+      <p class="print-row">UPI:<span class="print-amount">₹${openingUpiNum.toFixed(2)}</span></p>
       <h2>Expenses</h2>
       ${expensesListHtml}
-      <p><strong>Total Expenses: ₹${totalExpenses.toFixed(2)}</strong></p>
+      <p class="print-row"><strong>Total Expenses:</strong><span class="print-amount">₹${totalExpenses.toFixed(2)}</span></p>
       <h2>Payments (Card+GPay+Cash)</h2>
-      <p>Total: ₹${totalPayments.toFixed(2)}</p>
+      <p class="print-row">Total:<span class="print-amount">₹${totalPayments.toFixed(2)}</span></p>
       <p class="last-row">${moreOrShortage}</p>
       </body></html>
     `);

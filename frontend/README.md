@@ -1,11 +1,11 @@
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
+mvn spring-boot:run -DskipFrontendBuild=true  
 
  mvn clean package -DskipTests
-   java -jar target\spices-billing-system-1.0.0.jar
-
+   
+java -jar target\spices-billing-system-1.0.0.jar
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh

@@ -166,7 +166,7 @@ const B2BBilling = () => {
   const handleSearchChange = async (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
-    if (trimmed.length > 2) {
+    if (trimmed.length > 0) {
       try {
         const response = await productService.getAll();
         const filtered = response.data.filter(p =>
@@ -211,7 +211,9 @@ const B2BBilling = () => {
 
   const handleSearchSubmit = async (e) => {
     e.preventDefault();
-    const trimmed = (searchTerm || '').trim();
+    // Use input's current DOM value so fast barcode scans are not truncated (React state can lag behind)
+    const rawInput = searchInputRef.current?.value;
+    const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
     if (!trimmed) return;
     if (highlightedIndex >= 0 && searchResults[highlightedIndex]) {
       const p = searchResults[highlightedIndex];
@@ -284,13 +286,13 @@ const B2BBilling = () => {
             : item
         );
       }
-      return [...prev, {
+      return [{
         ...product,
         unitPrice: product.sellingPricePerUnit ?? product.unitPrice,
         quantity: parseFloat(Number(qty).toFixed(2)),
         hsnCode: product.hsnCode || '',
         gstPercentage: gstPct
-      }];
+      }, ...prev];
     });
     setSearchResults([]);
     setSearchTerm('');

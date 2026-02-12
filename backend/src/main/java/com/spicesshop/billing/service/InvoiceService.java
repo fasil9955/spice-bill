@@ -162,17 +162,6 @@ public class InvoiceService {
 
         List<InvoiceItem> normalizedItems = normalizeInvoiceItems(items);
 
-        BigDecimal sumOfItemTotals = normalizedItems.stream().map(item -> {
-            Product product = this.productRepository.findById(item.getProduct().getProductId())
-                .orElseThrow(() -> new RuntimeException("Product not found"));
-            
-            if (!product.getCompanyName().equals(companyName)) {
-                throw new RuntimeException("Product does not belong to your company");
-            }
-            BigDecimal itemTotal = item.getQuantity().multiply(item.getUnitPrice());
-            return itemTotal.subtract(item.getDiscountAmount());
-        }).reduce(BigDecimal.ZERO, BigDecimal::add);
-
         for (InvoiceItem item : normalizedItems) {
             Product product = this.productRepository.findById(item.getProduct().getProductId())
                 .orElseThrow(() -> new RuntimeException("Product not found: " + item.getProduct().getProductId()));
@@ -190,8 +179,7 @@ public class InvoiceService {
             }
 
             BigDecimal itemTotal = item.getQuantity().multiply(item.getUnitPrice());
-            itemTotal = itemTotal.subtract(item.getDiscountAmount());
-            item.setTotalPrice(itemTotal);
+            itemTotal = itemTotal.subtract(item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO);
 
             // GST: use item's gstPercentage if already set (e.g. from B2B payload), else category
             BigDecimal gstPct = item.getGstPercentage() != null && item.getGstPercentage().compareTo(BigDecimal.ZERO) >= 0
@@ -200,13 +188,25 @@ public class InvoiceService {
             if (gstPct == null) gstPct = BigDecimal.ZERO;
             item.setGstPercentage(gstPct);
             if (gstPct.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal onePlusGst = BigDecimal.ONE.add(gstPct.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
-                BigDecimal taxableValue = itemTotal.divide(onePlusGst, 2, RoundingMode.HALF_UP);
-                BigDecimal gstAmount = itemTotal.subtract(taxableValue);
+                BigDecimal gstAmount;
+                BigDecimal totalPrice;
+                if ("B2B".equals(invoice.getInvoiceType())) {
+                    // B2B: tax is added AFTER price (tax-exclusive). itemTotal = taxable base.
+                    gstAmount = itemTotal.multiply(gstPct).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                    totalPrice = itemTotal.add(gstAmount);
+                } else {
+                    // B2C/Retail: itemTotal is tax-inclusive; back out taxable and tax.
+                    BigDecimal onePlusGst = BigDecimal.ONE.add(gstPct.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
+                    BigDecimal taxableValue = itemTotal.divide(onePlusGst, 2, RoundingMode.HALF_UP);
+                    gstAmount = itemTotal.subtract(taxableValue);
+                    totalPrice = itemTotal;
+                }
+                item.setTotalPrice(totalPrice);
                 BigDecimal halfGst = gstAmount.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
                 item.setCgstAmount(halfGst);
                 item.setSgstAmount(halfGst);
             } else {
+                item.setTotalPrice(itemTotal);
                 item.setCgstAmount(BigDecimal.ZERO);
                 item.setSgstAmount(BigDecimal.ZERO);
             }
@@ -232,14 +232,20 @@ public class InvoiceService {
         invoice.setSgstAmount(totalSgst);
         invoice.setTaxAmount(totalCgst.add(totalSgst));
 
-        // Subtotal = sum of items minus GST (same as billing page: taxable base)
-        BigDecimal subtotalBeforeTax = sumOfItemTotals.subtract(totalCgst).subtract(totalSgst);
+        // Subtotal (taxable) = sum over items of (totalPrice - CGST - SGST)
+        BigDecimal subtotalBeforeTax = normalizedItems.stream()
+            .map(i -> (i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
+                .subtract(i.getCgstAmount() != null ? i.getCgstAmount() : BigDecimal.ZERO)
+                .subtract(i.getSgstAmount() != null ? i.getSgstAmount() : BigDecimal.ZERO))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         invoice.setSubtotal(subtotalBeforeTax);
-
+        BigDecimal sumItemTotals = normalizedItems.stream()
+            .map(i -> i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         if ("B2B".equals(invoice.getInvoiceType())) {
-            invoice.setTotalAmount(subtotalBeforeTax.add(invoice.getTaxAmount()).subtract(invoice.getDiscountAmount()));
+            invoice.setTotalAmount(subtotalBeforeTax.add(invoice.getTaxAmount()).subtract(invoice.getDiscountAmount() != null ? invoice.getDiscountAmount() : BigDecimal.ZERO));
         } else {
-            invoice.setTotalAmount(sumOfItemTotals.subtract(invoice.getDiscountAmount()));
+            invoice.setTotalAmount(sumItemTotals.subtract(invoice.getDiscountAmount() != null ? invoice.getDiscountAmount() : BigDecimal.ZERO));
         }
 
         invoice.setItems(normalizedItems);
@@ -364,20 +370,31 @@ public class InvoiceService {
             }
 
             BigDecimal itemTotal = item.getQuantity().multiply(item.getUnitPrice());
-            itemTotal = itemTotal.subtract(item.getDiscountAmount());
-            item.setTotalPrice(itemTotal);
+            itemTotal = itemTotal.subtract(item.getDiscountAmount() != null ? item.getDiscountAmount() : BigDecimal.ZERO);
 
-            BigDecimal gstPct = product.getCategory() != null ? product.getCategory().getGstPercentage() : null;
-            if (gstPct != null && gstPct.compareTo(BigDecimal.ZERO) > 0) {
-                item.setGstPercentage(gstPct);
-                BigDecimal onePlusGst = BigDecimal.ONE.add(gstPct.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
-                BigDecimal taxableValue = itemTotal.divide(onePlusGst, 2, RoundingMode.HALF_UP);
-                BigDecimal gstAmount = itemTotal.subtract(taxableValue);
+            BigDecimal gstPct = item.getGstPercentage() != null && item.getGstPercentage().compareTo(BigDecimal.ZERO) >= 0
+                ? item.getGstPercentage()
+                : (product.getCategory() != null ? product.getCategory().getGstPercentage() : null);
+            if (gstPct == null) gstPct = BigDecimal.ZERO;
+            item.setGstPercentage(gstPct);
+            if (gstPct.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal gstAmount;
+                BigDecimal totalPrice;
+                if ("B2B".equals(existingInvoice.getInvoiceType())) {
+                    gstAmount = itemTotal.multiply(gstPct).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                    totalPrice = itemTotal.add(gstAmount);
+                } else {
+                    BigDecimal onePlusGst = BigDecimal.ONE.add(gstPct.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
+                    BigDecimal taxableValue = itemTotal.divide(onePlusGst, 2, RoundingMode.HALF_UP);
+                    gstAmount = itemTotal.subtract(taxableValue);
+                    totalPrice = itemTotal;
+                }
+                item.setTotalPrice(totalPrice);
                 BigDecimal halfGst = gstAmount.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
                 item.setCgstAmount(halfGst);
                 item.setSgstAmount(halfGst);
             } else {
-                item.setGstPercentage(gstPct != null ? gstPct : BigDecimal.ZERO);
+                item.setTotalPrice(itemTotal);
                 item.setCgstAmount(BigDecimal.ZERO);
                 item.setSgstAmount(BigDecimal.ZERO);
             }
@@ -402,12 +419,20 @@ public class InvoiceService {
         BigDecimal totalSgst = existingInvoice.getItems().stream()
             .map(i -> i.getSgstAmount() != null ? i.getSgstAmount() : BigDecimal.ZERO)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal subtotalBeforeTax = sumItemTotals.subtract(totalCgst).subtract(totalSgst);
+        BigDecimal subtotalBeforeTax = existingInvoice.getItems().stream()
+            .map(i -> (i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
+                .subtract(i.getCgstAmount() != null ? i.getCgstAmount() : BigDecimal.ZERO)
+                .subtract(i.getSgstAmount() != null ? i.getSgstAmount() : BigDecimal.ZERO))
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         existingInvoice.setSubtotal(subtotalBeforeTax);
         existingInvoice.setCgstAmount(totalCgst);
         existingInvoice.setSgstAmount(totalSgst);
         existingInvoice.setTaxAmount(totalCgst.add(totalSgst));
-        existingInvoice.setTotalAmount(sumItemTotals.subtract(existingInvoice.getDiscountAmount() != null ? existingInvoice.getDiscountAmount() : BigDecimal.ZERO));
+        if ("B2B".equals(existingInvoice.getInvoiceType())) {
+            existingInvoice.setTotalAmount(subtotalBeforeTax.add(totalCgst.add(totalSgst)).subtract(existingInvoice.getDiscountAmount() != null ? existingInvoice.getDiscountAmount() : BigDecimal.ZERO));
+        } else {
+            existingInvoice.setTotalAmount(sumItemTotals.subtract(existingInvoice.getDiscountAmount() != null ? existingInvoice.getDiscountAmount() : BigDecimal.ZERO));
+        }
 
         return this.invoiceRepository.save(existingInvoice);
     }

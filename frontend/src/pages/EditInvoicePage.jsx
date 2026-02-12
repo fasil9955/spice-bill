@@ -75,7 +75,7 @@ const EditInvoicePage = () => {
   const handleSearchChange = (val) => {
     setSearchTerm(val);
     const trimmed = (val || '').trim().toLowerCase();
-    if (trimmed.length < 2) {
+    if (trimmed.length < 1) {
       setSearchResults([]);
       setHighlightedIndex(-1);
       return;

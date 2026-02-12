@@ -21,6 +21,11 @@
 .cart-section .section-header,
 .cart-section .cart-table-wrapper {
   width: 100%;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
 }
 
 /* Billing / B2B page extends naturally – no scroll restriction */

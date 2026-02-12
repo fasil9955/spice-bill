@@ -48,7 +48,7 @@ const Billing = () => {
   const [loading, setLoading] = useState(false);
   const [editingQty, setEditingQty] = useState({});
   const [selectedForCart, setSelectedForCart] = useState(null); // product selected from search, pending qty + add
-  const [selectedQtyInput, setSelectedQtyInput] = useState('1'); // string so user can type 0.25, 0, etc.
+  const [selectedQtyInput, setSelectedQtyInput] = useState(''); // string so user can type 0.25, 0, etc.; default empty (nil)
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
@@ -69,7 +69,7 @@ const Billing = () => {
   const handleSearchChange = async (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
-    if (trimmed.length > 2) {
+    if (trimmed.length > 0) {
       try {
         const response = await productService.getAll();
         const filtered = response.data.filter(p =>
@@ -100,7 +100,7 @@ const Billing = () => {
       e.preventDefault();
       const p = searchResults[highlightedIndex];
       setSelectedForCart(p);
-      setSelectedQtyInput('1');
+      setSelectedQtyInput('');
       setSearchResults([]);
       setHighlightedIndex(-1);
       setSearchTerm('');
@@ -114,12 +114,14 @@ const Billing = () => {
 
   const handleSearchSubmit = async (e) => {
     e.preventDefault();
-    const trimmed = (searchTerm || '').trim();
+    // Use input's current DOM value so fast barcode scans are not truncated (React state can lag behind)
+    const rawInput = searchInputRef.current?.value;
+    const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
     if (!trimmed) return;
     if (highlightedIndex >= 0 && searchResults[highlightedIndex]) {
       const p = searchResults[highlightedIndex];
       setSelectedForCart(p);
-      setSelectedQtyInput('1');
+      setSelectedQtyInput('');
       setSearchResults([]);
       setHighlightedIndex(-1);
       setSearchTerm('');
@@ -147,7 +149,7 @@ const Billing = () => {
     } catch {
       if (searchResults.length === 1) {
         setSelectedForCart(searchResults[0]);
-        setSelectedQtyInput('1');
+        setSelectedQtyInput('');
         setSearchResults([]);
         setHighlightedIndex(-1);
         setSearchTerm('');
@@ -178,7 +180,7 @@ const Billing = () => {
     }
     addToCart(selectedForCart, num);
     setSelectedForCart(null);
-    setSelectedQtyInput('1');
+    setSelectedQtyInput('');
     searchInputRef.current?.focus();
   };
 
@@ -193,7 +195,7 @@ const Billing = () => {
             : item
         );
       }
-      return [...prev, { ...product, unitPrice: product.sellingPricePerUnit, quantity: parseFloat(Number(qty).toFixed(2)) }];
+      return [{ ...product, unitPrice: product.sellingPricePerUnit, quantity: parseFloat(Number(qty).toFixed(2)) }, ...prev];
     });
     setSearchResults([]);
     setSearchTerm('');
@@ -607,7 +609,7 @@ const Billing = () => {
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     onClick={() => {
                       setSelectedForCart(p);
-                      setSelectedQtyInput('1');
+                      setSelectedQtyInput('');
                       setSearchResults([]);
                       setHighlightedIndex(-1);
                       setSearchTerm('');
@@ -637,6 +639,7 @@ const Billing = () => {
                   type="text"
                   inputMode="decimal"
                   className="selected-item-qty-input"
+                  placeholder="0"
                   value={selectedQtyInput}
                   onChange={(e) => setSelectedQtyInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -656,7 +659,7 @@ const Billing = () => {
                 <button
                   type="button"
                   className="clear-selected-btn"
-                  onClick={() => { setSelectedForCart(null); setSelectedQtyInput('1'); searchInputRef.current?.focus(); }}
+                  onClick={() => { setSelectedForCart(null); setSelectedQtyInput(''); searchInputRef.current?.focus(); }}
                   aria-label="Clear"
                 >
                   <X size={16} />
