@@ -127,33 +127,51 @@ const Billing = () => {
   };
 
   const handleSearchKeyDown = (e) => {
-    if (searchResults.length === 0) return;
-    if (e.key === 'ArrowDown') {
+    // Arrow navigation within dropdown
+    if (e.key === 'ArrowDown' && searchResults.length > 0) {
       e.preventDefault();
       usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i < searchResults.length - 1 ? i + 1 : 0));
-    } else if (e.key === 'ArrowUp') {
+      return;
+    }
+    if (e.key === 'ArrowUp' && searchResults.length > 0) {
       e.preventDefault();
       usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1));
-    } else if (e.key === 'Enter' && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+      return;
+    }
+
+    // Enter key behaviour:
+    // - If user navigated dropdown with arrows and a product is highlighted, Enter selects that product.
+    // - Otherwise (typical barcode scan), we delay handling slightly and then treat it as a barcode.
+    if (e.key === 'Enter') {
+      if (usedSearchArrowsRef.current && searchResults.length > 0 && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+        e.preventDefault();
+        const p = searchResults[highlightedIndex];
+        setSelectedForCart(p);
+        setSelectedQtyInput('');
+        setSearchResults([]);
+        setHighlightedIndex(-1);
+        setSearchTerm('');
+        setTimeout(() => selectedQtyRef.current?.focus(), 50);
+        return;
+      }
+      // Barcode / direct search path: delay a bit so the full scan string is in the input, then submit.
       e.preventDefault();
-      const p = searchResults[highlightedIndex];
-      setSelectedForCart(p);
-      setSelectedQtyInput('');
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      setSearchTerm('');
-      setTimeout(() => selectedQtyRef.current?.focus(), 50);
-    } else if (e.key === 'Escape') {
+      setTimeout(() => {
+        runSearchSubmit();
+      }, 150);
+      return;
+    }
+
+    if (e.key === 'Escape') {
       setSearchResults([]);
       setHighlightedIndex(-1);
       searchInputRef.current?.blur();
     }
   };
 
-  const handleSearchSubmit = async (e) => {
-    e.preventDefault();
+  const runSearchSubmit = async () => {
     // Only treat input as a barcode/search when the search box itself has focus.
     // This prevents barcode scans from other inputs (qty, payment fields, etc.)
     // from accidentally triggering product lookup or add-to-cart.
@@ -163,18 +181,6 @@ const Billing = () => {
     const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
     if (!trimmed) return;
 
-    // If user actually navigated the dropdown with arrow keys, Enter should pick the highlighted item.
-    // Otherwise (typical for barcode scans), skip old dropdown results and treat it as a barcode.
-    if (usedSearchArrowsRef.current && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
-      const p = searchResults[highlightedIndex];
-      setSelectedForCart(p);
-      setSelectedQtyInput('');
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      setSearchTerm('');
-      setTimeout(() => selectedQtyRef.current?.focus(), 50);
-      return;
-    }
     try {
       const response = await productService.parseBarcode(trimmed);
       const { product, weight } = response.data;
@@ -207,6 +213,11 @@ const Billing = () => {
         alert('Product not found. Scan barcode or type name to search.');
       }
     }
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    runSearchSubmit();
   };
 
   const tryAddSelectedToCart = () => {
