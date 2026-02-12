@@ -50,6 +50,8 @@ const Billing = () => {
   const [selectedForCart, setSelectedForCart] = useState(null); // product selected from search, pending qty + add
   const [selectedQtyInput, setSelectedQtyInput] = useState(''); // string so user can type 0.25, 0, etc.; default empty (nil)
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Tracks whether user navigated the search results with arrow keys (so Enter should pick a highlighted item)
+  const usedSearchArrowsRef = useRef(false);
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
   const handlePreviewRef = useRef(null);
@@ -103,6 +105,8 @@ const Billing = () => {
   const handleSearchChange = async (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
+    // New term typed/scanned – treat as fresh search; dropdown navigation (arrows) not yet used.
+    usedSearchArrowsRef.current = false;
     if (trimmed.length > 0) {
       try {
         const response = await productService.getAll();
@@ -126,9 +130,11 @@ const Billing = () => {
     if (searchResults.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i < searchResults.length - 1 ? i + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1));
     } else if (e.key === 'Enter' && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
       e.preventDefault();
@@ -148,11 +154,18 @@ const Billing = () => {
 
   const handleSearchSubmit = async (e) => {
     e.preventDefault();
+    // Only treat input as a barcode/search when the search box itself has focus.
+    // This prevents barcode scans from other inputs (qty, payment fields, etc.)
+    // from accidentally triggering product lookup or add-to-cart.
+    if (document.activeElement !== searchInputRef.current) return;
     // Use input's current DOM value so fast barcode scans are not truncated (React state can lag behind)
     const rawInput = searchInputRef.current?.value;
     const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
     if (!trimmed) return;
-    if (highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+
+    // If user actually navigated the dropdown with arrow keys, Enter should pick the highlighted item.
+    // Otherwise (typical for barcode scans), skip old dropdown results and treat it as a barcode.
+    if (usedSearchArrowsRef.current && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
       const p = searchResults[highlightedIndex];
       setSelectedForCart(p);
       setSelectedQtyInput('');

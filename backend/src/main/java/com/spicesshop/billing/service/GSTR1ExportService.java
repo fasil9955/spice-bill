@@ -251,20 +251,45 @@ public class GSTR1ExportService {
 
     private List<B2CSummaryRow> buildB2CSummary(List<Invoice> b2cInvoices) {
         // Aggregate by GST rate: taxable_value, then cgst = taxable * rate/2, sgst = same
+        // NOTE: Some older invoices might have item.gstPercentage = null/0 but still have CGST/SGST amounts.
+        // In that case, infer the effective GST rate from taxable + tax so B2C section is not empty.
         Map<Integer, BigDecimal> taxableByRate = new HashMap<>();
         for (Invoice inv : b2cInvoices) {
             if (inv.getItems() == null) continue;
             for (InvoiceItem item : inv.getItems()) {
-                int rate = gstRateFromItem(item);
-                if (rate == 0) continue;
                 BigDecimal taxable = itemTaxable(item);
+                if (taxable.compareTo(BigDecimal.ZERO) <= 0) continue;
+                int rate = gstRateFromItem(item);
+                if (rate == 0) {
+                    // Try to infer GST rate from stored CGST+SGST on the item
+                    BigDecimal tax = itemTax(item);
+                    if (tax.compareTo(BigDecimal.ZERO) > 0) {
+                        // effectiveRate = (tax / taxable) * 100, then map to nearest allowed bucket
+                        BigDecimal effectiveRate = tax
+                            .multiply(BigDecimal.valueOf(100))
+                            .divide(taxable, 2, RoundingMode.HALF_UP);
+                        int eff = effectiveRate.setScale(0, RoundingMode.HALF_UP).intValue();
+                        if (ALLOWED_GST_RATES.contains(eff)) {
+                            rate = eff;
+                        } else if (eff <= 6) {
+                            rate = 5;
+                        } else if (eff <= 15) {
+                            rate = 12;
+                        } else {
+                            rate = 18;
+                        }
+                    }
+                }
+                if (rate == 0) continue;
                 taxableByRate.merge(rate, taxable, BigDecimal::add);
             }
         }
         List<B2CSummaryRow> rows = new ArrayList<>();
         for (int rate : new TreeSet<>(taxableByRate.keySet())) {
             BigDecimal taxable = taxableByRate.get(rate).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal halfRate = BigDecimal.valueOf(rate).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP).divide(BigDecimal.valueOf(2), 4, RoundingMode.HALF_UP);
+            BigDecimal halfRate = BigDecimal.valueOf(rate)
+                .divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(2), 4, RoundingMode.HALF_UP);
             BigDecimal cgst = taxable.multiply(halfRate).setScale(2, RoundingMode.HALF_UP);
             BigDecimal sgst = taxable.multiply(halfRate).setScale(2, RoundingMode.HALF_UP);
             BigDecimal totalTax = cgst.add(sgst).setScale(2, RoundingMode.HALF_UP);

@@ -131,7 +131,7 @@ public class ReportService {
     }
 
     /**
-     * Top selling items for a given month (by quantity). Aggregates invoice items by product.
+     * Top selling items for a given month (by quantity). B2C only (excludes B2B). Company-wise.
      */
     public List<TopSellingItemDto> getTopSellingItems(String companyName, int year, int month, int limit) {
         LocalDate startDate = LocalDate.of(year, month, 1);
@@ -143,6 +143,7 @@ public class ReportService {
 
         for (Invoice inv : invoices) {
             if (inv.getStatus() != null && inv.getStatus() != Invoice.InvoiceStatus.ACTIVE) continue;
+            if ("B2B".equals(inv.getInvoiceType())) continue;
             for (InvoiceItem ii : inv.getItems()) {
                 Integer pid = ii.getProduct() != null ? ii.getProduct().getProductId() : null;
                 String name = ii.getProductName() != null ? ii.getProductName() : "Unknown";
@@ -183,18 +184,40 @@ public class ReportService {
     }
 
     /**
-     * Month-wise sales for a year. Returns 12 entries (generates missing months with zeros).
+     * Month-wise sales for a year. B2C only (excludes B2B). Company-wise. Returns 12 entries.
      */
     public List<MonthlySalesSummary> getMonthlySalesByYear(String companyName, int year) {
-        List<MonthlySalesSummary> existing = this.monthlySalesSummaryRepository.findByCompanyNameAndYear(companyName, year);
-        Map<Integer, MonthlySalesSummary> byMonth = existing.stream().collect(Collectors.toMap(MonthlySalesSummary::getMonth, m -> m, (a, b) -> a));
+        LocalDateTime startDateTime = LocalDate.of(year, 1, 1).atStartOfDay();
+        LocalDateTime endDateTime = LocalDate.of(year, 12, 31).atTime(23, 59, 59);
+        List<Invoice> invoices = this.invoiceRepository.findByCompanyNameAndDateRange(companyName, startDateTime, endDateTime);
 
-        List<MonthlySalesSummary> result = new ArrayList<>();
+        Map<Integer, MonthlySalesSummary> byMonth = new LinkedHashMap<>();
         for (int m = 1; m <= 12; m++) {
-            result.add(byMonth.containsKey(m)
-                ? byMonth.get(m)
-                : this.generateMonthlyReport(year, m, companyName));
+            MonthlySalesSummary summary = new MonthlySalesSummary();
+            summary.setCompanyName(companyName);
+            summary.setYear(year);
+            summary.setMonth(m);
+            summary.setTotalInvoices(0);
+            summary.setTotalSales(BigDecimal.ZERO);
+            summary.setTotalTax(BigDecimal.ZERO);
+            summary.setTotalDiscount(BigDecimal.ZERO);
+            summary.setTotalItemsSold(0);
+            byMonth.put(m, summary);
         }
-        return result;
+
+        for (Invoice inv : invoices) {
+            if (inv.getStatus() != null && inv.getStatus() != Invoice.InvoiceStatus.ACTIVE) continue;
+            if ("B2B".equals(inv.getInvoiceType())) continue;
+            int m = inv.getCreatedAt() != null ? inv.getCreatedAt().getMonthValue() : 1;
+            MonthlySalesSummary summary = byMonth.get(m);
+            if (summary == null) continue;
+            summary.setTotalInvoices((summary.getTotalInvoices() != null ? summary.getTotalInvoices() : 0) + 1);
+            summary.setTotalSales(summary.getTotalSales().add(inv.getTotalAmount() != null ? inv.getTotalAmount() : BigDecimal.ZERO));
+            summary.setTotalTax(summary.getTotalTax().add(inv.getTaxAmount() != null ? inv.getTaxAmount() : BigDecimal.ZERO));
+            summary.setTotalDiscount(summary.getTotalDiscount().add(inv.getDiscountAmount() != null ? inv.getDiscountAmount() : BigDecimal.ZERO));
+            summary.setTotalItemsSold((summary.getTotalItemsSold() != null ? summary.getTotalItemsSold() : 0) + (inv.getItems() != null ? inv.getItems().size() : 0));
+        }
+
+        return new ArrayList<>(byMonth.values());
     }
 }
