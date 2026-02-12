@@ -233,7 +233,8 @@ const B2BBilling = () => {
       if (weight != null && Number(weight) > 0) {
         const w = Number(weight);
         const unit = (product.unit || '').toLowerCase();
-        qty = unit === 'kg' ? w / 1000 : w;
+        // For weight/volume units like kg or litre, treat barcode weight as grams/ml and convert to kg/l
+        qty = (unit === 'kg' || unit === 'l') ? w / 1000 : w;
         qty = parseFloat(Number(qty).toFixed(3));
       }
       addToCart(product, qty);
