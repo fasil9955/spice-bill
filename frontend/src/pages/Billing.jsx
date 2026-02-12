@@ -52,11 +52,45 @@ const Billing = () => {
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
+  const handlePreviewRef = useRef(null);
+  const handleSaveAndPrintRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    handlePreviewRef.current = handlePreview;
+  });
+  useEffect(() => {
+    handleSaveAndPrintRef.current = handleSaveAndPrint;
+  });
 
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
+
+  // Shortcut: Ctrl+Enter to open Preview Invoice (works from anywhere, including search box)
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter' && e.ctrlKey && cart.length > 0 && !loading) {
+        e.preventDefault();
+        handlePreviewRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [cart.length, loading]);
+
+  // When bill preview modal is open (draft): Enter triggers Save & Print
+  useEffect(() => {
+    if (!showPreview || !previewDraft) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter' && !e.ctrlKey && !loading) {
+        e.preventDefault();
+        handleSaveAndPrintRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showPreview, previewDraft, loading]);
 
   useEffect(() => {
     if (cart.length > 0) {
@@ -555,8 +589,13 @@ const Billing = () => {
       setLastInvoice(response.data);
       setPreviewDraft(null);
       setCart([]);
-      setShowPreview(true);
-      if (andPrint) handlePrintInvoice(response.data);
+      if (andPrint) {
+        setShowPreview(false);
+        handlePrintInvoice(response.data);
+        setTimeout(() => searchInputRef.current?.focus(), 150);
+      } else {
+        setShowPreview(true);
+      }
     } catch (err) {
       alert(err.response?.data?.error || err.response?.data?.message || 'Failed to save invoice');
     } finally {
