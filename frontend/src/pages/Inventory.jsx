@@ -469,6 +469,11 @@ const Inventory = () => {
     }, 250);
   };
 
+  const escapeForPrintHtml = (s) => {
+    if (s == null || typeof s !== 'string') return '';
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+
   const printBarcodesFromPreview = () => {
     const list = [...barcodePreviewProducts];
     if (list.length === 0) return;
@@ -486,11 +491,13 @@ const Inventory = () => {
         const E = getLabelData(P[0]);
         const W = getBarcodeValue(P[0]);
         const barcodeImg = generateBarcodeImageForPrint(W);
+        const name0 = escapeForPrintHtml(E.productName);
+        const company0 = escapeForPrintHtml(E.companyName);
         j += `
           <div class="label">
             <div class="label-top">
-              <div class="label-header">${E.companyName}</div>
-              <div class="label-product">${E.productName}</div>
+              <div class="label-header">${company0}</div>
+              <div class="label-product">${name0}</div>
             </div>
             <div class="label-barcode-wrap">
               <div class="label-barcode">${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="label-barcode-img" />` : ''}</div>
@@ -516,11 +523,13 @@ const Inventory = () => {
         const E = getLabelData(P[1]);
         const W = getBarcodeValue(P[1]);
         const barcodeImg = generateBarcodeImageForPrint(W);
+        const name1 = escapeForPrintHtml(E.productName);
+        const company1 = escapeForPrintHtml(E.companyName);
         j += `
           <div class="label">
             <div class="label-top">
-              <div class="label-header">${E.companyName}</div>
-              <div class="label-product">${E.productName}</div>
+              <div class="label-header">${company1}</div>
+              <div class="label-product">${name1}</div>
             </div>
             <div class="label-barcode-wrap">
               <div class="label-barcode">${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="label-barcode-img" />` : ''}</div>
@@ -580,7 +589,7 @@ const Inventory = () => {
               padding: 0;
               margin: 0;
               gap: 0;
-              page-break-after: always;
+              page-break-after: auto;
             }
             .label-spacer-left {
               width: 3mm;
@@ -588,9 +597,11 @@ const Inventory = () => {
               flex-shrink: 0;
             }
             .label-spacer-middle {
-              width: 0;
+              width: 1mm;
               height: 25mm;
               flex-shrink: 0;
+              border-left: 1px solid #000;
+              box-sizing: border-box;
             }
             .label-spacer-right {
               width: 3mm;
@@ -613,13 +624,15 @@ const Inventory = () => {
             .label-top {
               display: flex;
               flex-direction: column;
-              gap: 0.3mm;
-              margin-bottom: 0.5mm;
+              gap: 0.2mm;
+              margin-bottom: 0.3mm;
               align-items: center;
               text-align: center;
+              flex-shrink: 0;
+              min-height: 7mm;
             }
             .label-header {
-              font-size: 6pt;
+              font-size: 5.5pt;
               font-weight: 900;
               line-height: 1.1;
               text-align: center;
@@ -631,14 +644,23 @@ const Inventory = () => {
               -moz-osx-font-smoothing: grayscale;
             }
             .label-product {
-              font-size: 6.5pt;
+              font-size: 7.5pt;
               font-weight: 900;
-              line-height: 1.1;
+              line-height: 1.2;
               text-align: center;
               width: 100%;
               word-wrap: break-word;
               overflow-wrap: break-word;
+              word-break: break-word;
               color: #000;
+              min-height: 1.2em;
+              max-height: 5.5mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
+              padding: 0 0.5mm;
+              box-sizing: border-box;
               -webkit-font-smoothing: antialiased;
               -moz-osx-font-smoothing: grayscale;
             }
@@ -697,6 +719,7 @@ const Inventory = () => {
               margin-top: 0.2mm;
               line-height: 1.2;
               font-weight: 900;
+              flex-shrink: 0;
               -webkit-font-smoothing: antialiased;
               -moz-osx-font-smoothing: grayscale;
             }
@@ -714,6 +737,7 @@ const Inventory = () => {
               gap: 0.2mm;
               color: #000;
               font-weight: 900;
+              margin-right: 6mm;
             }
             @media print {
               .no-print {

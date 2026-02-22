@@ -297,9 +297,7 @@
   margin: 0 0 12px;
   font-size: 1rem;
   color: #334155;
-}
-
-.reports-tax-loading,
+}.reports-tax-loading,
 .reports-tax-empty {
   margin: 0;
   font-size: 0.875rem;

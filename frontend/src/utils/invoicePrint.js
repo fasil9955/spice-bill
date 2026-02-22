@@ -562,6 +562,12 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             .btoc-payment { margin-top: 8px; font-size: 11px; }
             .btoc-footer { margin-top: 14px; text-align: center; font-size: 12px; color: #4b5563; }
             .btoc-footer div { margin: 2px 0; }
+            @media print {
+              @page {
+                size: 80mm auto;
+                margin: 4mm;
+              }
+            }
           </style>
         </head>
         <body>${copiesHtml}</body>

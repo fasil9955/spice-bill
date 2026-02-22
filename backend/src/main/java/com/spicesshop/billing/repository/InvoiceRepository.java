@@ -50,4 +50,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
     Long countByDate(@Param("date") LocalDate date);
     
     List<Invoice> findByStatus(Invoice.InvoiceStatus status);
+
+    @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.status = com.spicesshop.billing.model.Invoice$InvoiceStatus.CANCELLED AND (i.invoiceType IS NULL OR i.invoiceType <> 'B2B')")
+    List<Invoice> findCancelledNonB2BByCompany(@Param("companyName") String companyName);
 }

@@ -512,6 +512,21 @@ public class InvoiceService {
         return getInvoicesByDateRange(startDate, endDate, companyName);
     }
 
+    /**
+     * Permanently delete CANCELLED B2C/BTOC invoices only (non-B2B) for a company.
+     * B2B invoices are never hard-deleted (kept for reports/audit).
+     */
+    @Transactional
+    public int purgeCancelledBtocInvoices(String companyName) {
+        List<Invoice> toDelete = this.invoiceRepository.findCancelledNonB2BByCompany(companyName);
+        if (toDelete == null || toDelete.isEmpty()) return 0;
+        int count = toDelete.size();
+        // Invoice has cascade + orphanRemoval on items, so deleting invoice deletes its items.
+        this.invoiceRepository.deleteAll(toDelete);
+        this.invoiceRepository.flush();
+        return count;
+    }
+
     @Transactional
     public B2BCustomer findOrCreateB2BCustomer(String customerName, String gstNumber, String billingAddress, String shippingAddress, String phone, String email) {
         if (gstNumber == null || gstNumber.trim().isEmpty()) {

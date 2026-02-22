@@ -322,4 +322,22 @@ public class InvoiceController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    /**
+     * Permanently delete CANCELLED BTOC (non-B2B) invoices for the company.
+     * This does NOT delete B2B invoices.
+     */
+    @DeleteMapping({"/btoc/cancelled/purge"})
+    public ResponseEntity<?> purgeCancelledBtocInvoices(HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
+            }
+            int deleted = this.invoiceService.purgeCancelledBtocInvoices(companyName);
+            return ResponseEntity.ok(Map.of("deleted", deleted));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

@@ -315,7 +315,10 @@ const DailyAccountingPage = () => {
       ${expensesListHtml}
       <p class="print-row"><strong>Total Expenses:</strong><span class="print-amount">₹${totalExpenses.toFixed(2)}</span></p>
       <h2>Payments (Card+GPay+Cash)</h2>
-      <p class="print-row">Total:<span class="print-amount">₹${totalPayments.toFixed(2)}</span></p>
+      <p class="print-row">Card:<span class="print-amount">₹${totalCardManual.toFixed(2)}</span></p>
+      <p class="print-row">GPay / UPI:<span class="print-amount">₹${totalGpayManual.toFixed(2)}</span></p>
+      <p class="print-row">Cash Balance:<span class="print-amount">₹${cashBalanceNum.toFixed(2)}</span></p>
+      <p class="print-row"><strong>Total:</strong><span class="print-amount">₹${totalPayments.toFixed(2)}</span></p>
       <p class="last-row">${moreOrShortage}</p>
       </body></html>
     `);
