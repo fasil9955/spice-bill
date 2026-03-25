@@ -193,6 +193,12 @@ public class ProductService {
         existingProduct.setQuantity(product.getQuantity());
         existingProduct.setMinStockLevel(product.getMinStockLevel());
         existingProduct.setIsActive(product.getIsActive());
+        if (product.getUsp() != null) {
+            existingProduct.setUsp(product.getUsp());
+        }
+        if (product.getIngredients() != null) {
+            existingProduct.setIngredients(product.getIngredients());
+        }
 
         return this.productRepository.save(existingProduct);
     }

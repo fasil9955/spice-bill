@@ -43,6 +43,14 @@ public class Product {
     @Column(name = "unit", length = 20)
     private String unit;
 
+    // Text shown on barcode/sticker for USP/claim.
+    @Column(name = "usp", columnDefinition = "TEXT")
+    private String usp;
+
+    // Ingredient list shown on barcode/sticker.
+    @Column(name = "ingredients", columnDefinition = "TEXT")
+    private String ingredients;
+
     @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
     private BigDecimal quantity;
 
@@ -75,6 +83,8 @@ public class Product {
         this.hsnCode = hsnCode;
         this.packagingType = packagingType;
         this.unit = unit;
+        this.usp = null;
+        this.ingredients = null;
         this.quantity = quantity != null ? quantity : BigDecimal.ZERO;
         this.minStockLevel = minStockLevel != null ? minStockLevel : BigDecimal.ZERO;
         this.isActive = isActive != null ? isActive : true;
@@ -120,6 +130,14 @@ public class Product {
 
     public void setUnit(String unit) {
         this.unit = unit;
+    }
+
+    public void setUsp(String usp) {
+        this.usp = usp;
+    }
+
+    public void setIngredients(String ingredients) {
+        this.ingredients = ingredients;
     }
 
     public void setQuantity(BigDecimal quantity) {
@@ -184,6 +202,14 @@ public class Product {
 
     public String getUnit() {
         return this.unit;
+    }
+
+    public String getUsp() {
+        return this.usp;
+    }
+
+    public String getIngredients() {
+        return this.ingredients;
     }
 
     public BigDecimal getQuantity() {

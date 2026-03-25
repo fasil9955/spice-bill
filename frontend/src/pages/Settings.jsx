@@ -16,6 +16,9 @@ const Settings = () => {
     fssaiLicense: '',
     address: '',
     phoneNumber: '',
+    packingLicenceNo: '',
+    customerCareNumber: '',
+    customerCareEmail: '',
     bankName: '',
     accountNumber: '',
     ifscCode: '',
@@ -40,6 +43,9 @@ const Settings = () => {
         fssaiLicense: d.fssaiLicense ?? '',
         address: d.address ?? '',
         phoneNumber: d.phoneNumber ?? '',
+        packingLicenceNo: d.packingLicenceNo ?? '',
+        customerCareNumber: d.customerCareNumber ?? '',
+        customerCareEmail: d.customerCareEmail ?? '',
         bankName: d.bankName ?? '',
         accountNumber: d.accountNumber ?? '',
         ifscCode: d.ifscCode ?? '',
@@ -67,6 +73,9 @@ const Settings = () => {
         fssaiLicense: company.fssaiLicense,
         address: company.address,
         phoneNumber: company.phoneNumber,
+        packingLicenceNo: company.packingLicenceNo,
+        customerCareNumber: company.customerCareNumber,
+        customerCareEmail: company.customerCareEmail,
         bankName: company.bankName,
         accountNumber: company.accountNumber,
         ifscCode: company.ifscCode,
@@ -184,6 +193,33 @@ const Settings = () => {
                 value={company.phoneNumber}
                 onChange={(e) => setCompany({ ...company, phoneNumber: e.target.value })}
                 placeholder="Contact number"
+              />
+            </div>
+            <div className="form-group">
+              <label>Packing Licence No</label>
+              <input
+                type="text"
+                value={company.packingLicenceNo}
+                onChange={(e) => setCompany({ ...company, packingLicenceNo: e.target.value })}
+                placeholder="e.g., 123456789"
+              />
+            </div>
+            <div className="form-group">
+              <label>Customer Care No</label>
+              <input
+                type="text"
+                value={company.customerCareNumber}
+                onChange={(e) => setCompany({ ...company, customerCareNumber: e.target.value })}
+                placeholder="e.g., 9876543210"
+              />
+            </div>
+            <div className="form-group">
+              <label>Customer Care Email</label>
+              <input
+                type="email"
+                value={company.customerCareEmail}
+                onChange={(e) => setCompany({ ...company, customerCareEmail: e.target.value })}
+                placeholder="e.g., support@company.com"
               />
             </div>
             <h3 className="settings-subheading">Bank Details</h3>

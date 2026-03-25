@@ -5,6 +5,9 @@ public class CompanyDetailsRequest {
     private String fssaiLicense;
     private String address;
     private String phoneNumber;
+    private String packingLicenceNo;
+    private String customerCareNumber;
+    private String customerCareEmail;
     private String bankName;
     private String accountNumber;
     private String ifscCode;
@@ -13,11 +16,27 @@ public class CompanyDetailsRequest {
 
     public CompanyDetailsRequest() {}
 
-    public CompanyDetailsRequest(String gstNumber, String fssaiLicense, String address, String phoneNumber, String bankName, String accountNumber, String ifscCode, String branchName, Integer b2bInvoiceStart) {
+    public CompanyDetailsRequest(
+            String gstNumber,
+            String fssaiLicense,
+            String address,
+            String phoneNumber,
+            String packingLicenceNo,
+            String customerCareNumber,
+            String customerCareEmail,
+            String bankName,
+            String accountNumber,
+            String ifscCode,
+            String branchName,
+            Integer b2bInvoiceStart
+    ) {
         this.gstNumber = gstNumber;
         this.fssaiLicense = fssaiLicense;
         this.address = address;
         this.phoneNumber = phoneNumber;
+        this.packingLicenceNo = packingLicenceNo;
+        this.customerCareNumber = customerCareNumber;
+        this.customerCareEmail = customerCareEmail;
         this.bankName = bankName;
         this.accountNumber = accountNumber;
         this.ifscCode = ifscCode;
@@ -55,6 +74,30 @@ public class CompanyDetailsRequest {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public String getPackingLicenceNo() {
+        return this.packingLicenceNo;
+    }
+
+    public void setPackingLicenceNo(String packingLicenceNo) {
+        this.packingLicenceNo = packingLicenceNo;
+    }
+
+    public String getCustomerCareNumber() {
+        return this.customerCareNumber;
+    }
+
+    public void setCustomerCareNumber(String customerCareNumber) {
+        this.customerCareNumber = customerCareNumber;
+    }
+
+    public String getCustomerCareEmail() {
+        return this.customerCareEmail;
+    }
+
+    public void setCustomerCareEmail(String customerCareEmail) {
+        this.customerCareEmail = customerCareEmail;
     }
 
     public String getBankName() {

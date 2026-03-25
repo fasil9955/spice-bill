@@ -86,6 +86,9 @@ public class AuthService {
             admin.getFssaiLicense(),
             admin.getAddress(),
             admin.getPhoneNumber(),
+            admin.getPackingLicenceNo(),
+            admin.getCustomerCareNumber(),
+            admin.getCustomerCareEmail(),
             admin.getBankName(),
             admin.getAccountNumber(),
             admin.getIfscCode(),
@@ -106,6 +109,9 @@ public class AuthService {
         admin.setFssaiLicense(request.getFssaiLicense());
         admin.setAddress(request.getAddress());
         admin.setPhoneNumber(request.getPhoneNumber());
+        admin.setPackingLicenceNo(request.getPackingLicenceNo());
+        admin.setCustomerCareNumber(request.getCustomerCareNumber());
+        admin.setCustomerCareEmail(request.getCustomerCareEmail());
         admin.setBankName(request.getBankName());
         admin.setAccountNumber(request.getAccountNumber());
         admin.setIfscCode(request.getIfscCode());
@@ -117,6 +123,9 @@ public class AuthService {
         cashier.setFssaiLicense(request.getFssaiLicense());
         cashier.setAddress(request.getAddress());
         cashier.setPhoneNumber(request.getPhoneNumber());
+        cashier.setPackingLicenceNo(request.getPackingLicenceNo());
+        cashier.setCustomerCareNumber(request.getCustomerCareNumber());
+        cashier.setCustomerCareEmail(request.getCustomerCareEmail());
         cashier.setBankName(request.getBankName());
         cashier.setAccountNumber(request.getAccountNumber());
         cashier.setIfscCode(request.getIfscCode());
@@ -130,6 +139,9 @@ public class AuthService {
             admin.getFssaiLicense(),
             admin.getAddress(),
             admin.getPhoneNumber(),
+            admin.getPackingLicenceNo(),
+            admin.getCustomerCareNumber(),
+            admin.getCustomerCareEmail(),
             admin.getBankName(),
             admin.getAccountNumber(),
             admin.getIfscCode(),

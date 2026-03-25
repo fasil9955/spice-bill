@@ -34,6 +34,18 @@ public class User {
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;
 
+    // Printed on barcode stickers for repacked & marketed by section.
+    @Column(name = "packing_licence_no", length = 50)
+    private String packingLicenceNo;
+
+    // Used as "Customer Care" on barcode stickers.
+    @Column(name = "customer_care_number", length = 20)
+    private String customerCareNumber;
+
+    // Optional email to show contact details in admin settings.
+    @Column(name = "customer_care_email", length = 120)
+    private String customerCareEmail;
+
     @Column(name = "bank_name", length = 200)
     private String bankName;
 
@@ -109,6 +121,30 @@ public class User {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public String getPackingLicenceNo() {
+        return this.packingLicenceNo;
+    }
+
+    public void setPackingLicenceNo(String packingLicenceNo) {
+        this.packingLicenceNo = packingLicenceNo;
+    }
+
+    public String getCustomerCareNumber() {
+        return this.customerCareNumber;
+    }
+
+    public void setCustomerCareNumber(String customerCareNumber) {
+        this.customerCareNumber = customerCareNumber;
+    }
+
+    public String getCustomerCareEmail() {
+        return this.customerCareEmail;
+    }
+
+    public void setCustomerCareEmail(String customerCareEmail) {
+        this.customerCareEmail = customerCareEmail;
     }
 
     public void setBankName(String bankName) {

@@ -6,6 +6,10 @@ import JsBarcode from 'jsbarcode';
 import * as XLSX from 'xlsx';
 
 const Inventory = () => {
+  // Local FSSAI logo for barcode stickers (used in both preview and print).
+  // Note: some browsers may restrict loading `file://` images in print windows.
+  const fssaiLogoSrc = '/fssai-logo.png';
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,10 +26,17 @@ const Inventory = () => {
     hsnCode: '',
     packagingType: '',
     unit: '',
+    usp: '',
+    ingredients: '',
   });
   const [showBarcodePreview, setShowBarcodePreview] = useState(false);
   const [barcodePreviewProducts, setBarcodePreviewProducts] = useState([]);
   const [barcodeCompanyName, setBarcodeCompanyName] = useState('');
+  const [barcodeCompanyAddress, setBarcodeCompanyAddress] = useState('');
+  const [barcodeCustomerCare, setBarcodeCustomerCare] = useState('');
+  const [barcodeCustomerCareEmail, setBarcodeCustomerCareEmail] = useState('');
+  // Additional license number for printing (separate from FSSAI).
+  const [barcodePackingLicense, setBarcodePackingLicense] = useState('');
   const [barcodeFssai, setBarcodeFssai] = useState('');
   const [barcodePackedDate, setBarcodePackedDate] = useState(() => {
     // YYYY-MM-DD for <input type="date">
@@ -34,6 +45,10 @@ const Inventory = () => {
   });
   const [barcodeWeights, setBarcodeWeights] = useState({});
   const [barcodeBestBeforeMonths, setBarcodeBestBeforeMonths] = useState({});
+  const [barcodeBatchNoByProductId, setBarcodeBatchNoByProductId] = useState({});
+  // Per-product additional marketing fields (enter in barcode preview modal).
+  const [barcodeUspByProductId, setBarcodeUspByProductId] = useState({});
+  const [barcodeIngredientsByProductId, setBarcodeIngredientsByProductId] = useState({});
   const barcodePreviewRef = useRef(null);
   const importInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
@@ -229,6 +244,10 @@ const Inventory = () => {
 
   const getLabelData = (product) => {
     const companyName = barcodeCompanyName || user?.companyName || product?.companyName || '';
+    const companyAddress = barcodeCompanyAddress || user?.address || '';
+    const customerCare = barcodeCustomerCare || user?.phoneNumber || '';
+    const customerCareEmail = barcodeCustomerCareEmail || '';
+    const packingLicense = barcodePackingLicense || '';
     // Remove parenthesized parts (e.g. "Elachi (Cardamom)" → "Elachi") for barcode label
     const rawName = product?.productName || '';
     const productName = rawName.replace(/\s*\([^)]*\)/g, '').trim();
@@ -240,22 +259,52 @@ const Inventory = () => {
     const months = Number.isNaN(monthsParsed) ? 12 : monthsParsed;
     const bestBefore = `${months} months`;
 
+    const batchNo = (barcodeBatchNoByProductId?.[product?.productId] || '').toString().trim();
+
     const w = (barcodeWeights?.[product?.productId] || '').toString().trim();
     const weight = w ? `${w}gm` : '';
     // Base price is per 1 kg; when weight (gm) is entered, price = base * (weight / 1000)
     const basePricePerKg = product?.sellingPricePerUnit != null ? Number(product.sellingPricePerUnit) : null;
     let price = '';
+    let amountExclTax = null; // numeric amount for packed quantity (without GST)
     if (basePricePerKg != null) {
       if (w) {
         const weightGm = parseFloat(w);
         const priceForWeight = Number.isNaN(weightGm) || weightGm <= 0 ? basePricePerKg : (basePricePerKg * weightGm) / 1000;
+        amountExclTax = priceForWeight;
         price = `₹${Math.round(priceForWeight * 100) / 100}`;
       } else {
+        amountExclTax = basePricePerKg;
         price = `₹${basePricePerKg}`;
       }
     }
 
-    return { companyName, productName, packedDate, bestBefore, fssai, price, weight };
+    // sellingPricePerUnit is already GST-inclusive, so "MRP (Incl of all taxes)" should
+    // not add GST again. We only adjust the amount based on the packed weight (gm).
+    const mrpInclTax = amountExclTax != null ? amountExclTax : null;
+
+    const unitSalePrice = mrpInclTax != null ? `₹${Math.round(mrpInclTax * 100) / 100}` : '';
+
+    const usp = (barcodeUspByProductId?.[product?.productId] || '').toString().trim();
+    const ingredients = (barcodeIngredientsByProductId?.[product?.productId] || '').toString().trim();
+
+    return {
+      companyName,
+      companyAddress,
+      customerCare,
+      customerCareEmail,
+      packingLicense,
+      productName,
+      packedDate,
+      bestBefore,
+      batchNo,
+      fssai,
+      price,
+      weight,
+      unitSalePrice,
+      usp,
+      ingredients,
+    };
   };
 
   const openBarcodePreview = async (list) => {
@@ -266,13 +315,30 @@ const Inventory = () => {
     }
     setBarcodePreviewProducts(arr);
     setBarcodeCompanyName(user?.companyName || arr[0]?.companyName || '');
+    setBarcodeCompanyAddress('');
+    setBarcodeCustomerCare('');
+    setBarcodeCustomerCareEmail('');
+    setBarcodePackingLicense('');
     setBarcodeWeights({});
     setBarcodeBestBeforeMonths({});
+    setBarcodeBatchNoByProductId({});
+    const uspMap = {};
+    const ingredientsMap = {};
+    arr.forEach((p) => {
+      uspMap[p.productId] = (p.usp || '').toString();
+      ingredientsMap[p.productId] = (p.ingredients || '').toString();
+    });
+    setBarcodeUspByProductId(uspMap);
+    setBarcodeIngredientsByProductId(ingredientsMap);
     setShowBarcodePreview(true);
     try {
       const res = await authService.getCompanyDetails();
       const fssai = res?.data?.fssaiLicense ?? '';
       setBarcodeFssai(fssai);
+      setBarcodeCompanyAddress(res?.data?.address ?? '');
+      setBarcodeCustomerCare(res?.data?.customerCareNumber ?? res?.data?.phoneNumber ?? '');
+      setBarcodeCustomerCareEmail(res?.data?.customerCareEmail ?? '');
+      setBarcodePackingLicense(res?.data?.packingLicenceNo ?? '');
     } catch {
       setBarcodeFssai('');
     }
@@ -282,110 +348,94 @@ const Inventory = () => {
 
   const renderPreviewRows = () => {
     const rows = [];
-    const k = [...barcodePreviewProducts];
-    if (k.length % 2 !== 0 && k.length > 0) k.push(k[k.length - 1]);
+    const list = barcodePreviewProducts || [];
 
-    for (let j = 0; j < k.length; j += 2) {
-      const pair = k.slice(j, j + 2);
+    for (let idx = 0; idx < list.length; idx += 1) {
+      const product = list[idx];
+      const info = getLabelData(product);
+      const svgId = `barcode-preview-${product.productId}-${idx}`;
+
       rows.push(
-        <div className="label-row" key={`row-${j}`}>
-          <div className="label-spacer-left" />
-          {pair[0] ? (() => {
-            const info = getLabelData(pair[0]);
-            const svgId = `barcode-preview-${pair[0].productId}-${j}`;
-            return (
-              <div className="label" key={`${pair[0].productId}-${j}`}>
-                <div className="label-top">
-                  <div className="label-header">{info.companyName}</div>
-                  <div className="label-product">{info.productName}</div>
+        <div className="label-row" key={`row-${idx}`}>
+          <div className="label" key={`${product.productId}-${idx}`}>
+            <div className="sticker-grid">
+              <div className="sticker-col-left">
+                <div className="sticker-product-name">{info.productName || '—'}</div>
+
+                <div className="sticker-barcode-wrap">
+                  <svg id={svgId} className="sticker-barcode-svg" />
                 </div>
-                <div className="label-barcode-wrap">
-                  <div className="label-barcode" style={{ marginTop: '-4px' }}>
-                    <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-                      <svg id={svgId} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
-                    </div>
-                  </div>
+
+                <div className="sticker-field">
+                  <span className="sticker-label">Net Quantity :</span>
+                  <span className="sticker-value">{info.weight || '—'}</span>
                 </div>
-                <div className="label-footer">
-                  <div className="label-footer-left">
-                    <div>Pkd: {info.packedDate}</div>
-                    <div>BB: {info.bestBefore}</div>
-                    <div className="label-fssai">FSSAI: {info.fssai}</div>
-                  </div>
-                  <div className="label-footer-right">
-                    <div>{info.price}</div>
-                    {info.weight ? <div>{info.weight}</div> : null}
-                  </div>
+                <div className="sticker-field">
+                  <span className="sticker-label">MRP :</span>
+                  <span className="sticker-value">
+                    {info.unitSalePrice || '—'} (Incl of all taxes)
+                  </span>
                 </div>
-              </div>
-            );
-          })() : null}
-          <div className="label-spacer-middle" />
-          {pair[1] ? (() => {
-            const info = getLabelData(pair[1]);
-            const svgId = `barcode-preview-${pair[1].productId}-${j + 1}`;
-            return (
-              <div className="label" key={`${pair[1].productId}-${j + 1}`}>
-                <div className="label-top">
-                  <div className="label-header">{info.companyName}</div>
-                  <div className="label-product">{info.productName}</div>
+                <div className="sticker-field">
+                  <span className="sticker-label">Packed On :</span>
+                  <span className="sticker-value">{info.packedDate || '—'}</span>
                 </div>
-                <div className="label-barcode-wrap">
-                  <div className="label-barcode" style={{ marginTop: '-4px' }}>
-                    <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-                      <svg id={svgId} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
-                    </div>
-                  </div>
+                <div className="sticker-field">
+                  <span className="sticker-label">Batch No :</span>
+                  <span className="sticker-value">{info.batchNo || '—'}</span>
                 </div>
-                <div className="label-footer">
-                  <div className="label-footer-left">
-                    <div>Pkd: {info.packedDate}</div>
-                    <div>BB: {info.bestBefore}</div>
-                    <div className="label-fssai">FSSAI: {info.fssai}</div>
-                  </div>
-                  <div className="label-footer-right">
-                    <div>{info.price}</div>
-                    {info.weight ? <div>{info.weight}</div> : null}
-                  </div>
+                <div className="sticker-field">
+                  <span className="sticker-label">Best Before :</span>
+                  <span className="sticker-value">{info.bestBefore || '—'}</span>
+                </div>
+                <div className="sticker-field">
+                  <span className="sticker-label">USP :</span>
+                  <span className="sticker-value">{info.usp || '—'}</span>
                 </div>
               </div>
-            );
-          })() : null}
-          <div className="label-spacer-right" />
+
+              <div className="sticker-col-right">
+                {info.ingredients ? (
+                  <div className="sticker-line sticker-ingredients">Ingredients: {info.ingredients}</div>
+                ) : (
+                  <div className="sticker-line sticker-ingredients">Ingredients: —</div>
+                )}
+
+                <div className="sticker-repacked-title">REPACKED &amp; MARKETED BY</div>
+                <div className="sticker-company-name">{info.companyName || '—'}</div>
+                <div className="sticker-company-address">{info.companyAddress || '—'}</div>
+
+                <div className="sticker-line">Customer Care</div>
+                <div className="sticker-line">Phone : {info.customerCare || '—'}</div>
+                <div className="sticker-line">Email: {info.customerCareEmail || '—'}</div>
+                <div className="sticker-line">LMPC Reg No: {info.packingLicense || '—'}</div>
+
+                <div className="sticker-fssai-row">
+                  <img className="fssai-logo-img" src={fssaiLogoSrc} alt="FSSAI" />
+                  <div className="fssai-text">{info.fssai || '—'}</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       );
     }
+
     return rows;
   };
 
   useEffect(() => {
     if (!showBarcodePreview) return;
-    const k = [...barcodePreviewProducts];
-    if (k.length % 2 !== 0 && k.length > 0) k.push(k[k.length - 1]);
-
     const render = () => {
-      for (let j = 0; j < k.length; j += 2) {
-        const pair = k.slice(j, j + 2);
-        if (pair[0]) {
-          const svgEl = document.getElementById(`barcode-preview-${pair[0].productId}-${j}`);
-          const val = getBarcodeValue(pair[0]);
-          if (svgEl && val) {
-            try {
-              JsBarcode(svgEl, val, getBarcodeOptions());
-            } catch {
-              // ignore render errors for individual items
-            }
-          }
-        }
-        if (pair[1]) {
-          const svgEl = document.getElementById(`barcode-preview-${pair[1].productId}-${j + 1}`);
-          const val = getBarcodeValue(pair[1]);
-          if (svgEl && val) {
-            try {
-              JsBarcode(svgEl, val, getBarcodeOptions());
-            } catch {
-              // ignore render errors for individual items
-            }
+      for (let idx = 0; idx < barcodePreviewProducts.length; idx += 1) {
+        const product = barcodePreviewProducts[idx];
+        const svgEl = document.getElementById(`barcode-preview-${product.productId}-${idx}`);
+        const val = getBarcodeValue(product);
+        if (svgEl && val) {
+          try {
+            JsBarcode(svgEl, val, getBarcodeOptions());
+          } catch {
+            // ignore render errors for individual items
           }
         }
       }
@@ -395,14 +445,14 @@ const Inventory = () => {
     const t = setTimeout(render, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- getBarcodeValue is stable, omit to avoid extra re-runs
-  }, [showBarcodePreview, barcodePreviewProducts, barcodeWeights, barcodeBestBeforeMonths, barcodeCompanyName, barcodeFssai, barcodePackedDate]);
+  }, [showBarcodePreview, barcodePreviewProducts, barcodeWeights]);
 
   const getBarcodeOptions = () => ({
     format: 'CODE128',
     displayValue: true,
     width: 3,
-    height: 55,
-    margin: 12,
+    height: 50,
+    margin: 8,
     textMargin: 2,
     fontSize: 14,
     fontOptions: 'bold',
@@ -478,79 +528,91 @@ const Inventory = () => {
     const list = [...barcodePreviewProducts];
     if (list.length === 0) return;
 
-    const k = [...list];
-    if (k.length % 2 !== 0 && k.length > 0) k.push(k[k.length - 1]);
+    const escapeMultilineForPrintHtml = (s) =>
+      escapeForPrintHtml(s).replace(/\n/g, '<br/>');
 
     let j = '<div class="print-container">';
-    for (let I = 0; I < k.length; I += 2) {
-      const P = k.slice(I, I + 2);
-      j += '<div class="label-row">';
-      j += '<div class="label-spacer-left"></div>';
+    for (let idx = 0; idx < list.length; idx += 1) {
+      const product = list[idx];
+      const E = getLabelData(product);
+      const W = getBarcodeValue(product);
+      const barcodeImg = generateBarcodeImageForPrint(W);
 
-      if (P[0]) {
-        const E = getLabelData(P[0]);
-        const W = getBarcodeValue(P[0]);
-        const barcodeImg = generateBarcodeImageForPrint(W);
-        const name0 = escapeForPrintHtml(E.productName);
-        const company0 = escapeForPrintHtml(E.companyName);
-        j += `
+      const companyName = escapeForPrintHtml(E.companyName);
+      const companyAddress = escapeMultilineForPrintHtml(E.companyAddress || '');
+      const customerCare = escapeForPrintHtml(E.customerCare || '');
+      const customerCareEmail = escapeForPrintHtml(E.customerCareEmail || '');
+      const packingLicense = escapeForPrintHtml(E.packingLicense || '');
+      const productName = escapeForPrintHtml(E.productName);
+      const packedDate = escapeForPrintHtml(E.packedDate || '');
+      const batchNo = escapeForPrintHtml(E.batchNo || '');
+      const bestBefore = escapeForPrintHtml(E.bestBefore || '');
+      const fssai = escapeForPrintHtml(E.fssai || '');
+      const unitSalePrice = escapeForPrintHtml(E.unitSalePrice || '');
+      const ingredients = escapeMultilineForPrintHtml(E.ingredients || '');
+      const usp = escapeForPrintHtml(E.usp || '');
+      const weight = escapeForPrintHtml(E.weight || '');
+
+      const isLast = idx === list.length - 1;
+      j += `
+        <div class="label-row ${isLast ? 'last-row' : 'force-break'}">
           <div class="label">
-            <div class="label-top">
-              <div class="label-header">${company0}</div>
-              <div class="label-product">${name0}</div>
-            </div>
-            <div class="label-barcode-wrap">
-              <div class="label-barcode">${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="label-barcode-img" />` : ''}</div>
-            </div>
-            <div class="label-footer">
-              <div class="label-footer-left">
-                <div>Pkd: ${E.packedDate}</div>
-                <div>BB: ${E.bestBefore}</div>
-                <div class="label-fssai">FSSAI: ${E.fssai}</div>
+            <div class="sticker-grid">
+              <div class="sticker-col-left">
+                <div class="sticker-product-name">${productName}</div>
+
+                <div class="sticker-barcode-wrap">
+                  ${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="sticker-barcode-img" />` : ''}
+                </div>
+
+                <div class="sticker-field">
+                  <span class="sticker-label">Net Quantity :</span>
+                  <span class="sticker-value">${weight || '—'}</span>
+                </div>
+                <div class="sticker-field">
+                  <span class="sticker-label">MRP :</span>
+                  <span class="sticker-value">${unitSalePrice || '—'} (Incl of all taxes)</span>
+                </div>
+                <div class="sticker-field">
+                  <span class="sticker-label">Packed On :</span>
+                  <span class="sticker-value">${packedDate || '—'}</span>
+                </div>
+                <div class="sticker-field">
+                  <span class="sticker-label">Batch No :</span>
+                  <span class="sticker-value">${batchNo || '—'}</span>
+                </div>
+                <div class="sticker-field">
+                  <span class="sticker-label">Best Before :</span>
+                  <span class="sticker-value">${bestBefore || '—'}</span>
+                </div>
+                <div class="sticker-field">
+                  <span class="sticker-label">USP :</span>
+                  <span class="sticker-value">${usp || '—'}</span>
+                </div>
               </div>
-              <div class="label-footer-right">
-                <div>${E.price}</div>
-                ${E.weight ? `<div>${E.weight}</div>` : ''}
+
+              <div class="sticker-col-right">
+                ${ingredients ? `<div class="sticker-line sticker-ingredients">Ingredients: ${ingredients}</div>` : `<div class="sticker-line sticker-ingredients">Ingredients: —</div>`}
+
+                <div class="sticker-repacked-title">REPACKED &amp; MARKETED BY</div>
+                <div class="sticker-company-name">${companyName}</div>
+                <div class="sticker-company-address">${companyAddress || '—'}</div>
+
+                <div class="sticker-line">Customer Care</div>
+                <div class="sticker-line">Phone : ${customerCare || '—'}</div>
+                ${customerCareEmail ? `<div class="sticker-line">Email: ${customerCareEmail}</div>` : `<div class="sticker-line">Email: —</div>`}
+
+                <div class="sticker-line">LMPC Reg No: ${packingLicense || '—'}</div>
+
+                <div class="sticker-fssai-row">
+                  <img class="fssai-logo-img" src="${fssaiLogoSrc}" alt="FSSAI" />
+                  <div class="fssai-text">${fssai || '—'}</div>
+                </div>
               </div>
             </div>
           </div>
-        `;
-      }
-
-      j += '<div class="label-spacer-middle"></div>';
-
-      if (P[1]) {
-        const E = getLabelData(P[1]);
-        const W = getBarcodeValue(P[1]);
-        const barcodeImg = generateBarcodeImageForPrint(W);
-        const name1 = escapeForPrintHtml(E.productName);
-        const company1 = escapeForPrintHtml(E.companyName);
-        j += `
-          <div class="label">
-            <div class="label-top">
-              <div class="label-header">${company1}</div>
-              <div class="label-product">${name1}</div>
-            </div>
-            <div class="label-barcode-wrap">
-              <div class="label-barcode">${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="label-barcode-img" />` : ''}</div>
-            </div>
-            <div class="label-footer">
-              <div class="label-footer-left">
-                <div>Pkd: ${E.packedDate}</div>
-                <div>BB: ${E.bestBefore}</div>
-                <div class="label-fssai">FSSAI: ${E.fssai}</div>
-              </div>
-              <div class="label-footer-right">
-                <div>${E.price}</div>
-                ${E.weight ? `<div>${E.weight}</div>` : ''}
-              </div>
-            </div>
-          </div>
-        `;
-      }
-
-      j += '<div class="label-spacer-right"></div>';
-      j += '</div>';
+        </div>
+      `;
     }
     j += '</div>';
 
@@ -563,129 +625,300 @@ const Inventory = () => {
           <title>Print Barcodes</title>
           <style>
             @page {
-              size: 106mm 25mm;
+              size: 100mm 50mm;
               margin: 0;
             }
             body {
               margin: 0;
               padding: 0;
               font-family: Arial, sans-serif;
-              width: 106mm;
-              height: 25mm;
+              width: 100mm;
+              height: 50mm;
             }
             .print-container {
               display: flex;
               flex-direction: column;
-              width: 106mm;
+              width: 100mm;
               padding: 0;
               margin: 0;
               gap: 0;
             }
             .label-row {
-              display: flex;
-              flex-direction: row;
-              width: 106mm;
-              height: 25mm;
+              width: 100mm;
+              height: 50mm;
               padding: 0;
               margin: 0;
-              gap: 0;
-              page-break-after: auto;
+              page-break-inside: avoid;
             }
-            .label-spacer-left {
-              width: 3mm;
-              height: 25mm;
-              flex-shrink: 0;
-            }
-            .label-spacer-middle {
-              width: 1mm;
-              height: 25mm;
-              flex-shrink: 0;
-              border-left: 1px solid #000;
-              box-sizing: border-box;
-            }
-            .label-spacer-right {
-              width: 3mm;
-              height: 25mm;
-              flex-shrink: 0;
-            }
+            .force-break { page-break-after: always; }
+            .last-row { page-break-after: auto; }
+
             .label {
+              width: 100mm;
+              height: 50mm;
+              padding: 0;
+              box-sizing: border-box;
+              font-size: 6pt;
+              overflow: hidden;
+              color: #000;
+            }
+
+            .sticker-grid {
+              position: relative;
+              width: 100mm;
+              height: 50mm;
+              display: flex;
+            }
+            .sticker-grid:before {
+              content: '';
+              position: absolute;
+              left: 50mm;
+              top: 0;
+              bottom: 0;
+              border-left: 1px solid #000;
+              pointer-events: none;
+            }
+
+            .sticker-col-left {
               width: 50mm;
-              height: 25mm;
-              padding: 1mm;
+              padding: 2mm 2mm 1mm 2mm;
               box-sizing: border-box;
               display: flex;
               flex-direction: column;
-              justify-content: space-between;
-              font-size: 5pt;
-              page-break-inside: avoid;
+              gap: 0.35mm;
+              overflow: hidden;
+            }
+            .sticker-col-right {
+              width: 50mm;
+              padding: 3.5mm 1mm 1mm 1mm;
+              box-sizing: border-box;
+              display: flex;
+              flex-direction: column;
+              gap: 0.35mm;
+              overflow: hidden;
+            }
+
+            .sticker-product-name {
+              font-size: 10pt;
+              font-weight: 900;
+              text-align: center;
+              line-height: 1.1;
+              word-wrap: break-word;
               overflow: hidden;
               flex-shrink: 0;
-            }
-            .label-top {
+              min-height: 8mm;
               display: flex;
-              flex-direction: column;
-              gap: 0.2mm;
-              margin-bottom: 0.3mm;
               align-items: center;
-              text-align: center;
-              flex-shrink: 0;
-              min-height: 7mm;
+              justify-content: center;
             }
-            .label-header {
-              font-size: 5.5pt;
-              font-weight: 900;
-              line-height: 1.1;
-              text-align: center;
+            .sticker-barcode-wrap {
+              flex-shrink: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
               width: 100%;
+            }
+            .sticker-barcode-img {
+              width: 46mm !important;
+              height: auto !important;
+              max-height: 14mm !important;
+              display: block !important;
+              margin: 0 auto !important;
+            }
+            .sticker-line {
+              font-size: 7pt;
+              line-height: 1.1;
               word-wrap: break-word;
               overflow-wrap: break-word;
-              color: #000;
-              -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
+              white-space: normal;
+              text-align: center;
+            }
+            .sticker-field {
+              width: 100%;
+              display: flex;
+              flex-direction: row;
+              align-items: flex-start;
+              gap: 1mm;
+            }
+            .sticker-label {
+              width: 24mm;
+              font-size: 7pt;
+              line-height: 1.1;
+              font-weight: 400;
+              text-align: left;
+              white-space: nowrap;
+            }
+            .sticker-value {
+              flex: 1;
+              font-size: 7pt;
+              line-height: 1.1;
+              font-weight: 400;
+              text-align: left;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+            }
+            .sticker-section-title {
+              font-weight: 400;
+              font-size: 7pt;
+              margin-top: 1mm;
+            }
+            .sticker-usp-row {
+              display: flex;
+              flex-direction: row;
+              align-items: flex-start;
+              gap: 1mm;
+            }
+            .sticker-usp-title {
+              font-weight: 400;
+              font-size: 7pt;
+              line-height: 1.1;
+              white-space: nowrap;
+            }
+            .sticker-repacked-title {
+              font-weight: 400;
+              font-size: 8pt;
+              text-align: center;
+              margin-top: 1mm;
+            }
+            .sticker-company-name {
+              font-weight: 900;
+              font-size: 9pt;
+              text-align: center;
+            }
+            .sticker-company-address {
+              font-weight: 700;
+              font-size: 7pt;
+              text-align: center;
+              max-height: 10mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 3;
+              -webkit-box-orient: vertical;
+            }
+            .sticker-ingredients {
+              max-height: 9mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 3;
+              -webkit-box-orient: vertical;
+            }
+            .sticker-fssai {
+              margin-top: 0;
+              display: flex;
+              flex-direction: row;
+              justify-content: space-between;
+              align-items: center;
+              gap: 2mm;
+            }
+            .sticker-fssai-row {
+              display: flex;
+              flex-direction: row;
+              align-items: center;
+              justify-content: flex-start;
+              gap: 1mm;
+              margin-top: 0;
+            }
+            .fssai-logo-img {
+              width: 18mm;
+              height: 10mm;
+              object-fit: contain;
+              display: block;
+              margin: 0;
+              flex-shrink: 0;
+            }
+            .fssai-text {
+              font-weight: 700;
+              text-align: left;
+              font-size: 7pt;
+              flex: 1;
+            }
+
+            .sticker-usp-line {
+              font-weight: 400;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              line-height: 1.15;
+              max-height: 10mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 3;
+              -webkit-box-orient: vertical;
+            }
+
+            .label-top {
+              flex-shrink: 0;
+              text-align: center;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 0.3mm;
+              margin-bottom: 1mm;
+            }
+            .label-repacked {
+              font-size: 7pt;
+              font-weight: 900;
+              line-height: 1.1;
+              letter-spacing: 0.01em;
+            }
+            .label-company-name {
+              font-size: 8pt;
+              font-weight: 900;
+              line-height: 1.1;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+            }
+            .label-company-address {
+              font-size: 6pt;
+              font-weight: 700;
+              line-height: 1.1;
+              text-align: center;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+            }
+            .label-customer-care,
+            .label-packing-licence {
+              font-size: 6pt;
+              font-weight: 700;
+              line-height: 1.1;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+            }
+
+            .label-middle {
+              flex: 1;
+              min-height: 0;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: flex-start;
+              gap: 1mm;
             }
             .label-product {
-              font-size: 7.5pt;
+              font-size: 10pt;
               font-weight: 900;
-              line-height: 1.2;
+              line-height: 1.15;
               text-align: center;
               width: 100%;
               word-wrap: break-word;
               overflow-wrap: break-word;
               word-break: break-word;
               color: #000;
-              min-height: 1.2em;
-              max-height: 5.5mm;
               overflow: hidden;
               display: -webkit-box;
               -webkit-line-clamp: 2;
               -webkit-box-orient: vertical;
-              padding: 0 0.5mm;
-              box-sizing: border-box;
-              -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
+              padding: 0 1mm;
             }
-            .label-fssai {
-              font-size: 5.5pt;
-              color: #000;
-              line-height: 1.2;
-              word-wrap: break-word;
-              overflow-wrap: break-word;
-              font-weight: 900;
-              -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
-            }
+
             .label-barcode-wrap {
+              width: 100%;
               display: flex;
-              flex-direction: column;
               align-items: center;
               justify-content: center;
-              width: 100%;
-              margin: 0;
               flex: 1;
               min-height: 0;
             }
             .label-barcode {
-              text-align: center;
               width: 100%;
               display: flex;
               align-items: center;
@@ -693,71 +926,77 @@ const Inventory = () => {
               overflow: visible;
             }
             .label-barcode-img {
-              width: 44mm !important;
+              width: 98mm !important;
               height: auto !important;
-              max-height: 12mm !important;
+              max-height: 28mm !important;
               display: block !important;
               margin: 0 auto !important;
               image-rendering: pixelated;
               image-rendering: -moz-crisp-edges;
               image-rendering: crisp-edges;
             }
-            .label-barcode-number {
-              font-size: 9pt;
-              font-weight: 900;
-              letter-spacing: 0.05em;
-              text-align: center;
-              margin-top: 0.5mm;
-              line-height: 1.1;
-              color: #000;
-              -webkit-font-smoothing: antialiased;
-            }
+
             .label-footer {
+              flex-shrink: 0;
               display: flex;
               justify-content: space-between;
-              font-size: 5.5pt;
-              margin-top: 0.2mm;
-              line-height: 1.2;
-              font-weight: 900;
-              flex-shrink: 0;
-              -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
+              align-items: flex-start;
+              margin-top: 1mm;
             }
             .label-footer-left {
               display: flex;
               flex-direction: column;
-              gap: 0.2mm;
-              color: #000;
+              gap: 0.3mm;
               font-weight: 900;
+              line-height: 1.1;
             }
             .label-footer-right {
               text-align: right;
               display: flex;
               flex-direction: column;
-              gap: 0.2mm;
-              color: #000;
+              gap: 0.3mm;
               font-weight: 900;
-              margin-right: 6mm;
+              line-height: 1.1;
+              margin-right: 6mm; /* move right column slightly left for visibility */
+            }
+            .label-fssai {
+              font-size: 6pt;
+            }
+
+            .label-extra {
+              flex-shrink: 0;
+              margin-top: 0.8mm;
+              font-weight: 700;
+              line-height: 1.1;
+            }
+            .label-extra-label {
+              font-weight: 900;
+            }
+            .label-usp,
+            .label-ingredients {
+              font-size: 6pt;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              word-break: break-word;
+            }
+            .label-usp {
+              max-height: 8mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
+            }
+            .label-ingredients {
+              max-height: 18mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 4;
+              -webkit-box-orient: vertical;
             }
             @media print {
-              .no-print {
-                display: none;
-              }
-              .label-barcode-wrap {
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                justify-content: center !important;
-              }
               .label-barcode-img {
-                width: 44mm !important;
-                height: auto !important;
-                max-height: 12mm !important;
-                margin: 0 auto !important;
-              }
-              .label-barcode-number {
-                font-weight: 900 !important;
-                text-align: center !important;
+                width: 98mm !important;
+                max-height: 28mm !important;
               }
             }
           </style>
@@ -766,53 +1005,31 @@ const Inventory = () => {
           ${F}
           <script>
             (function() {
-              // Store printer preference for barcodes
-              localStorage.setItem('lastUsedPrinter', 'TSC');
-              localStorage.setItem('barcodePrinter', 'TSC');
-              
-              function attemptPrint() {
-                try {
-                  // Ensure content is fully loaded
-                  if (document.body.children.length === 0) {
-                    console.warn('Print content not loaded, retrying...');
-                    setTimeout(attemptPrint, 100);
-                    return;
-                  }
-                  
-                  window.focus();
-                  // Try to use Print API with printer selection
-                  // Note: Browser may require user to select printer manually
-                  // The browser will remember the last selected printer
-                  window.print();
-                } catch (error) {
-                  console.error('Print error:', error);
-                  window.print();
-                }
-              }
-              
               // Close window after print
               window.onafterprint = function() {
                 window.close();
               };
-              
-              // Wait for content to be fully rendered before printing
+              function attemptPrint() {
+                try {
+                  if (document.body.children.length === 0) {
+                    setTimeout(attemptPrint, 100);
+                    return;
+                  }
+                  window.focus();
+                  window.print();
+                } catch (error) {
+                  window.print();
+                }
+              }
               function waitForContent() {
                 if (document.body && document.body.innerHTML && document.body.innerHTML.trim() !== '') {
-                  // Additional delay to ensure SVG is rendered
                   setTimeout(attemptPrint, 200);
                 } else {
                   setTimeout(waitForContent, 50);
                 }
               }
-              
-              // Trigger print when ready
-              if (document.readyState === 'complete') {
-                waitForContent();
-              } else {
-                window.onload = function() {
-                  waitForContent();
-                };
-              }
+              if (document.readyState === 'complete') waitForContent();
+              else window.onload = function() { waitForContent(); };
             })();
           </script>
         </body>
@@ -826,18 +1043,9 @@ const Inventory = () => {
         popup.document.open();
         popup.document.write(printHtml);
         popup.document.close();
-        // Some browsers block auto-print inside the popup script.
-        // Force print from the opener after content is ready.
         const attempt = () => {
           try {
             if (!popup || popup.closed) return;
-            const ready = popup.document?.readyState === 'complete';
-            const hasBody = !!popup.document?.body;
-            const hasHtml = (popup.document?.body?.innerHTML || '').trim().length > 0;
-            if (!ready || !hasBody || !hasHtml) {
-              setTimeout(attempt, 60);
-              return;
-            }
             popup.focus();
             popup.print();
             popup.onafterprint = () => {
@@ -853,7 +1061,6 @@ const Inventory = () => {
     } catch {
       // ignore and fall back
     }
-
     printHtmlViaIframe(printHtml);
   };
 
@@ -878,6 +1085,8 @@ const Inventory = () => {
         hsnCode: currentProduct.hsnCode,
         packagingType: currentProduct.packagingType,
         unit: (currentProduct.unit ?? '').trim(),
+        usp: (currentProduct.usp ?? '').trim(),
+        ingredients: (currentProduct.ingredients ?? '').trim(),
         isActive: true
       };
 
@@ -933,6 +1142,8 @@ const Inventory = () => {
               hsnCode: '',
               packagingType: '',
               unit: '',
+              usp: '',
+              ingredients: '',
             });
             setShowModal(true);
           }}>
@@ -1106,6 +1317,29 @@ const Inventory = () => {
                   />
                 </div>
               </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>USP</label>
+                  <input
+                    type="text"
+                    value={currentProduct.usp || ''}
+                    onChange={(e) => setCurrentProduct({ ...currentProduct, usp: e.target.value })}
+                    placeholder="e.g., Freshly packed"
+                    maxLength={200}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Ingredients</label>
+                  <textarea
+                    value={currentProduct.ingredients || ''}
+                    onChange={(e) => setCurrentProduct({ ...currentProduct, ingredients: e.target.value })}
+                    placeholder="e.g., Elachi, Sugar, Salt"
+                    rows={3}
+                    maxLength={500}
+                  />
+                </div>
+              </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Unit Price (₹)</label>
@@ -1184,9 +1418,196 @@ const Inventory = () => {
               <button className="close-button" onClick={closeBarcodePreview} type="button">×</button>
             </div>
 
+            <style>
+              {`
+                .preview-container {
+                  display: flex;
+                  flex-direction: column;
+                  gap: 6mm;
+                  transform: scale(0.72);
+                  transform-origin: top left;
+                }
+                .label-row {
+                  width: 100mm;
+                  height: 50mm;
+                }
+                .label {
+                  width: 100mm;
+                  height: 50mm;
+                  padding: 0;
+                  box-sizing: border-box;
+                  font-family: Arial, sans-serif;
+                  font-size: 6pt;
+                  color: #000;
+                  overflow: hidden;
+                }
+                .sticker-grid {
+                  position: relative;
+                  width: 100mm;
+                  height: 50mm;
+                  display: flex;
+                }
+                .sticker-grid:before {
+                  content: '';
+                  position: absolute;
+                  left: 50mm;
+                  top: 0;
+                  bottom: 0;
+                  border-left: 1px solid #000;
+                  pointer-events: none;
+                }
+                .sticker-col-left {
+                  width: 50mm;
+                  padding: 2mm 2mm 1mm 2mm;
+                  box-sizing: border-box;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.35mm;
+                }
+                .sticker-col-right {
+                  width: 50mm;
+                  padding: 3.5mm 1mm 1mm 1mm;
+                  box-sizing: border-box;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 0.35mm;
+                }
+                .sticker-product-name {
+                  font-size: 10pt;
+                  font-weight: 900;
+                  text-align: center;
+                  line-height: 1.1;
+                  word-wrap: break-word;
+                  overflow: hidden;
+                  flex-shrink: 0;
+                  min-height: 8mm;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                }
+                .sticker-barcode-wrap {
+                  flex-shrink: 0;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                }
+                .sticker-barcode-svg {
+                  width: 46mm !important;
+                  height: auto !important;
+                  display: block;
+                  margin: 0 auto;
+                }
+                .sticker-line {
+                  font-size: 7pt;
+                  line-height: 1.1;
+                  word-wrap: break-word;
+                  overflow-wrap: break-word;
+                  white-space: normal;
+                  text-align: center;
+                }
+                .sticker-field {
+                  width: 100%;
+                  display: flex;
+                  flex-direction: row;
+                  align-items: flex-start;
+                  gap: 1mm;
+                }
+                .sticker-label {
+                  width: 24mm;
+                  font-size: 7pt;
+                  line-height: 1.1;
+                  font-weight: 400;
+                  text-align: left;
+                  white-space: nowrap;
+                }
+                .sticker-value {
+                  flex: 1;
+                  font-size: 7pt;
+                  line-height: 1.1;
+                  font-weight: 400;
+                  text-align: left;
+                  word-wrap: break-word;
+                  overflow-wrap: break-word;
+                }
+                .sticker-section-title {
+                  font-weight: 400;
+                  font-size: 7pt;
+                  margin-top: 1mm;
+                }
+                .sticker-usp-row {
+                  display: flex;
+                  flex-direction: row;
+                  align-items: flex-start;
+                  gap: 1mm;
+                }
+                .sticker-usp-title {
+                  font-weight: 400;
+                  font-size: 7pt;
+                  line-height: 1.1;
+                  white-space: nowrap;
+                }
+                .sticker-repacked-title {
+                  font-weight: 400;
+                  font-size: 8pt;
+                  text-align: center;
+                  margin-top: 1mm;
+                }
+                .sticker-company-name {
+                  font-weight: 900;
+                  font-size: 9pt;
+                  text-align: center;
+                }
+                .sticker-company-address {
+                  font-weight: 700;
+                  font-size: 7pt;
+                  text-align: center;
+                  max-height: 10mm;
+                  overflow: hidden;
+                  display: -webkit-box;
+                  -webkit-line-clamp: 3;
+                  -webkit-box-orient: vertical;
+                }
+                .sticker-ingredients {
+                  max-height: 9mm;
+                  overflow: hidden;
+                  display: -webkit-box;
+                  -webkit-line-clamp: 3;
+                  -webkit-box-orient: vertical;
+                }
+                .sticker-fssai-row {
+                  margin-top: 0;
+                  display: flex;
+                  align-items: center;
+                  justify-content: flex-start;
+                  gap: 1mm;
+                }
+                .fssai-logo-img {
+                  width: 18mm;
+                  height: 10mm;
+                  object-fit: contain;
+                  display: block;
+                  margin: 0;
+                  flex-shrink: 0;
+                }
+                .fssai-text {
+                  font-weight: 700;
+                  text-align: left;
+                  font-size: 7pt;
+                  line-height: 1.1;
+                  flex: 1;
+                }
+                .sticker-usp-line {
+                  font-weight: 400;
+                  font-size: 6pt;
+                  word-wrap: break-word;
+                  overflow-wrap: break-word;
+                }
+              `}
+            </style>
+
             <div className="barcode-preview-content">
               <p className="preview-info">
-                Preview of {barcodePreviewProducts.length} barcode label(s) - 50mm × 25mm (2 per row)
+                Preview of {barcodePreviewProducts.length} barcode sticker(s) - 100mm × 50mm (1 per page)
               </p>
 
               <div className="company-details-section">
@@ -1203,6 +1624,28 @@ const Inventory = () => {
                       maxLength={50}
                     />
                   </div>
+                    <div className="input-field-group">
+                      <label>Company Address:</label>
+                      <input
+                        type="text"
+                        placeholder="Enter company address"
+                        value={barcodeCompanyAddress}
+                        onChange={(e) => setBarcodeCompanyAddress(e.target.value)}
+                        className="company-address-input"
+                        maxLength={120}
+                      />
+                    </div>
+                    <div className="input-field-group">
+                      <label>Customer Care:</label>
+                      <input
+                        type="text"
+                        placeholder="e.g., 9876543210"
+                        value={barcodeCustomerCare}
+                        onChange={(e) => setBarcodeCustomerCare(e.target.value)}
+                        className="customer-care-input"
+                        maxLength={30}
+                      />
+                    </div>
                   <div className="input-field-group">
                     <label>FSSAI License:</label>
                     <input
@@ -1214,6 +1657,17 @@ const Inventory = () => {
                       maxLength={30}
                     />
                   </div>
+                    <div className="input-field-group">
+                      <label>Packing Licence No:</label>
+                      <input
+                        type="text"
+                        placeholder="Enter packing licence number"
+                        value={barcodePackingLicense}
+                        onChange={(e) => setBarcodePackingLicense(e.target.value)}
+                        className="packing-licence-input"
+                        maxLength={30}
+                      />
+                    </div>
                   <div className="input-field-group">
                     <label>Packed Date:</label>
                     <input
@@ -1269,6 +1723,45 @@ const Inventory = () => {
                           />
                           <span className="input-unit">months</span>
                         </div>
+                        <div className="input-field-group">
+                          <label>Batch No:</label>
+                          <input
+                            type="text"
+                            placeholder="e.g., B123"
+                            value={barcodeBatchNoByProductId[p.productId] || ''}
+                            onChange={(e) =>
+                              setBarcodeBatchNoByProductId({
+                                ...barcodeBatchNoByProductId,
+                                [p.productId]: e.target.value,
+                              })
+                            }
+                            className="batch-no-input"
+                            maxLength={30}
+                          />
+                        </div>
+                        <div className="input-field-group">
+                          <label>USP:</label>
+                          <input
+                            type="text"
+                            placeholder="e.g., Freshly packed"
+                            value={barcodeUspByProductId[p.productId] || ''}
+                            onChange={(e) => setBarcodeUspByProductId({ ...barcodeUspByProductId, [p.productId]: e.target.value })}
+                            className="usp-input"
+                            maxLength={80}
+                          />
+                        </div>
+                        <div className="input-field-group">
+                          <label>Ingredients:</label>
+                          <textarea
+                            placeholder="e.g., Elachi, Sugar, Salt"
+                            value={barcodeIngredientsByProductId[p.productId] || ''}
+                            onChange={(e) =>
+                              setBarcodeIngredientsByProductId({ ...barcodeIngredientsByProductId, [p.productId]: e.target.value })
+                            }
+                            className="ingredients-input"
+                            rows={2}
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1279,6 +1772,8 @@ const Inventory = () => {
                   {(barcodePreviewProducts[0]?.barcode) || '1000A'} + 250 = {(barcodePreviewProducts[0]?.barcode) || '1000A'}250). Leave blank for pieces/cups.
                   <br />
                   💡 <strong>Best Before:</strong> Enter number of months (e.g., 12, 24, 36). Default is 12 months. Will display as &quot;12 months&quot; on the barcode.
+                  <br />
+                  💡 <strong>USP / Ingredients:</strong> Enter these per product for the sticker.
                 </p>
               </div>
 
