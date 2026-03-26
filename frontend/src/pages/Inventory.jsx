@@ -46,6 +46,7 @@ const Inventory = () => {
   const [barcodeWeights, setBarcodeWeights] = useState({});
   const [barcodeBestBeforeMonths, setBarcodeBestBeforeMonths] = useState({});
   const [barcodeBatchNoByProductId, setBarcodeBatchNoByProductId] = useState({});
+  const [barcodeManualPriceByProductId, setBarcodeManualPriceByProductId] = useState({});
   // Per-product additional marketing fields (enter in barcode preview modal).
   const [barcodeUspByProductId, setBarcodeUspByProductId] = useState({});
   const [barcodeIngredientsByProductId, setBarcodeIngredientsByProductId] = useState({});
@@ -263,14 +264,18 @@ const Inventory = () => {
 
     const w = (barcodeWeights?.[product?.productId] || '').toString().trim();
     const weight = w ? `${w}gm` : '';
-    // Base price is per 1 kg; when weight (gm) is entered, price = base * (weight / 1000)
+    const packagingType = (product?.packagingType || '').toString().trim().toLowerCase();
+    const isPieces = packagingType === 'pieces';
+
+    // When packaging is Loose (weight-based), adjust price by packed weight.
+    // When packaging is Pieces, keep price the same even if weight changes.
     const basePricePerKg = product?.sellingPricePerUnit != null ? Number(product.sellingPricePerUnit) : null;
     let price = '';
     let amountExclTax = null; // numeric amount for packed quantity (without GST)
     if (basePricePerKg != null) {
       if (w) {
         const weightGm = parseFloat(w);
-        const priceForWeight = Number.isNaN(weightGm) || weightGm <= 0 ? basePricePerKg : (basePricePerKg * weightGm) / 1000;
+        const priceForWeight = isPieces || Number.isNaN(weightGm) || weightGm <= 0 ? basePricePerKg : (basePricePerKg * weightGm) / 1000;
         amountExclTax = priceForWeight;
         price = `₹${Math.round(priceForWeight * 100) / 100}`;
       } else {
@@ -281,9 +286,21 @@ const Inventory = () => {
 
     // sellingPricePerUnit is already GST-inclusive, so "MRP (Incl of all taxes)" should
     // not add GST again. We only adjust the amount based on the packed weight (gm).
-    const mrpInclTax = amountExclTax != null ? amountExclTax : null;
+    let mrpInclTax = amountExclTax != null ? amountExclTax : null;
+
+    // Optional manual override from barcode preview modal.
+    const manualMrpRaw = (barcodeManualPriceByProductId?.[product?.productId] || '').toString().trim();
+    if (manualMrpRaw) {
+      const manualMrp = parseFloat(manualMrpRaw);
+      if (Number.isFinite(manualMrp) && manualMrp > 0) {
+        mrpInclTax = manualMrp;
+      }
+    }
 
     const unitSalePrice = mrpInclTax != null ? `₹${Math.round(mrpInclTax * 100) / 100}` : '';
+    if (mrpInclTax != null) {
+      price = unitSalePrice;
+    }
 
     const usp = (barcodeUspByProductId?.[product?.productId] || '').toString().trim();
     const ingredients = (barcodeIngredientsByProductId?.[product?.productId] || '').toString().trim();
@@ -322,6 +339,7 @@ const Inventory = () => {
     setBarcodeWeights({});
     setBarcodeBestBeforeMonths({});
     setBarcodeBatchNoByProductId({});
+    setBarcodeManualPriceByProductId({});
     const uspMap = {};
     const ingredientsMap = {};
     arr.forEach((p) => {
@@ -401,7 +419,7 @@ const Inventory = () => {
                   <div className="sticker-line sticker-ingredients">Ingredients: —</div>
                 )}
 
-                <div className="sticker-repacked-title">REPACKED &amp; MARKETED BY</div>
+                <div className="sticker-repacked-title">PACKED &amp; MARKETED BY</div>
                 <div className="sticker-company-name">{info.companyName || '—'}</div>
                 <div className="sticker-company-address">{info.companyAddress || '—'}</div>
 
@@ -594,7 +612,7 @@ const Inventory = () => {
               <div class="sticker-col-right">
                 ${ingredients ? `<div class="sticker-line sticker-ingredients">Ingredients: ${ingredients}</div>` : `<div class="sticker-line sticker-ingredients">Ingredients: —</div>`}
 
-                <div class="sticker-repacked-title">REPACKED &amp; MARKETED BY</div>
+                <div class="sticker-repacked-title">Packed</div>
                 <div class="sticker-company-name">${companyName}</div>
                 <div class="sticker-company-address">${companyAddress || '—'}</div>
 
@@ -1122,6 +1140,19 @@ const Inventory = () => {
 
   return (
     <div className={containerClass}>
+      <style>
+        {`
+          /* Hide number input spinners (up/down arrows) across this page */
+          input[type="number"]::-webkit-outer-spin-button,
+          input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          input[type="number"] {
+            -moz-appearance: textfield;
+          }
+        `}
+      </style>
       <div className={headerClass}>
         <div>
           <h1>📦 Product Management</h1>
@@ -1701,6 +1732,23 @@ const Inventory = () => {
                             className="weight-input"
                           />
                           <span className="input-unit">gm</span>
+                        </div>
+                        <div className="input-field-group">
+                          <label>Manual MRP (Incl of all taxes):</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="e.g., 7200"
+                            value={barcodeManualPriceByProductId[p.productId] || ''}
+                            onChange={(e) =>
+                              setBarcodeManualPriceByProductId({
+                                ...barcodeManualPriceByProductId,
+                                [p.productId]: e.target.value,
+                              })
+                            }
+                            className="manual-mrp-input"
+                          />
                         </div>
                         <div className="input-field-group">
                           <label>Best Before (months):</label>

@@ -250,11 +250,11 @@ const Billing = () => {
       if (existing) {
         return prev.map(item =>
           item.productId === product.productId
-            ? { ...item, quantity: parseFloat(Number(item.quantity + qty).toFixed(2)) }
+            ? { ...item, quantity: parseFloat(Number(item.quantity + qty).toFixed(3)) }
             : item
         );
       }
-      return [{ ...product, unitPrice: product.sellingPricePerUnit, quantity: parseFloat(Number(qty).toFixed(2)) }, ...prev];
+      return [{ ...product, unitPrice: product.sellingPricePerUnit, quantity: parseFloat(Number(qty).toFixed(3)) }, ...prev];
     });
     setSearchResults([]);
     setSearchTerm('');
@@ -265,7 +265,7 @@ const Billing = () => {
     setCart(prev => prev.map(item => {
       if (item.productId === productId) {
         const newQty = Math.max(0.1, item.quantity + delta);
-        return { ...item, quantity: parseFloat(newQty.toFixed(2)) };
+        return { ...item, quantity: parseFloat(newQty.toFixed(3)) };
       }
       return item;
     }).filter(item => item.quantity > 0));
@@ -612,6 +612,10 @@ const Billing = () => {
       };
       const response = await invoiceService.create(invoiceData);
       setLastInvoice(response.data);
+      // Clear discount fields for next invoice.
+      setDiscountPercent(0);
+      setDiscountAmount(0);
+      setDiscountType('percent');
       setPreviewDraft(null);
       setCart([]);
       if (andPrint) {
