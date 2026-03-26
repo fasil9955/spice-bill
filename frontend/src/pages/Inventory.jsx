@@ -44,6 +44,9 @@ const Inventory = () => {
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   });
   const [barcodeWeights, setBarcodeWeights] = useState({});
+  // Per-product unit to display in "Net Quantity" (gm or ml).
+  // Weight input value is always numeric; suffix is selected separately for the label.
+  const [barcodeNetQtyUnitByProductId, setBarcodeNetQtyUnitByProductId] = useState({});
   const [barcodeBestBeforeMonths, setBarcodeBestBeforeMonths] = useState({});
   const [barcodeBatchNoByProductId, setBarcodeBatchNoByProductId] = useState({});
   const [barcodeManualPriceByProductId, setBarcodeManualPriceByProductId] = useState({});
@@ -232,8 +235,20 @@ const Inventory = () => {
     if (!yyyyMmDd || typeof yyyyMmDd !== 'string') return '';
     const m = yyyyMmDd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) return yyyyMmDd;
-    const [, yyyy, mm, dd] = m;
-    return `${dd}/${mm}/${yyyy}`;
+    const [, yyyy, mm] = m;
+    // Sticker format: only month + year (no day)
+    return `${mm}/${yyyy}`;
+  };
+
+  // Batch No format: B-MMYY based on "Packed On" date.
+  // Example: 2026-03-25 => B-0326
+  const formatBatchNoFromPackedDate = (yyyyMmDd) => {
+    if (!yyyyMmDd || typeof yyyyMmDd !== 'string') return '';
+    const m = yyyyMmDd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return '';
+    const [, yyyy, mm] = m;
+    const yy = yyyy.slice(-2);
+    return `B-${mm}${yy}`;
   };
 
   const getBarcodeValue = (product) => {
@@ -263,7 +278,8 @@ const Inventory = () => {
     const batchNo = (barcodeBatchNoByProductId?.[product?.productId] || '').toString().trim();
 
     const w = (barcodeWeights?.[product?.productId] || '').toString().trim();
-    const weight = w ? `${w}gm` : '';
+    const netQtyUnit = (barcodeNetQtyUnitByProductId?.[product?.productId] || 'gm').toString().trim();
+    const weight = w ? `${w}${netQtyUnit}` : '';
     const packagingType = (product?.packagingType || '').toString().trim().toLowerCase();
     const isPieces = packagingType === 'pieces';
 
@@ -337,17 +353,23 @@ const Inventory = () => {
     setBarcodeCustomerCareEmail('');
     setBarcodePackingLicense('');
     setBarcodeWeights({});
+    setBarcodeNetQtyUnitByProductId({});
     setBarcodeBestBeforeMonths({});
     setBarcodeBatchNoByProductId({});
     setBarcodeManualPriceByProductId({});
     const uspMap = {};
     const ingredientsMap = {};
+    const netQtyUnitMap = {};
     arr.forEach((p) => {
       uspMap[p.productId] = (p.usp || '').toString();
       ingredientsMap[p.productId] = (p.ingredients || '').toString();
+      const unitRaw = (p.unit || '').toString().trim().toLowerCase();
+      const suffix = unitRaw === 'l' || unitRaw === 'ml' ? 'ml' : 'gm';
+      netQtyUnitMap[p.productId] = suffix;
     });
     setBarcodeUspByProductId(uspMap);
     setBarcodeIngredientsByProductId(ingredientsMap);
+    setBarcodeNetQtyUnitByProductId(netQtyUnitMap);
     setShowBarcodePreview(true);
     try {
       const res = await authService.getCompanyDetails();
@@ -464,6 +486,24 @@ const Inventory = () => {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- getBarcodeValue is stable, omit to avoid extra re-runs
   }, [showBarcodePreview, barcodePreviewProducts, barcodeWeights]);
+
+  // Auto-fill Batch No (B-MMYY) from Packed On date in barcode preview.
+  // Only fills when the user has not entered a batch number yet.
+  useEffect(() => {
+    if (!showBarcodePreview) return;
+    if (!Array.isArray(barcodePreviewProducts) || barcodePreviewProducts.length === 0) return;
+    const autoBatch = formatBatchNoFromPackedDate(barcodePackedDate);
+    if (!autoBatch) return;
+
+    setBarcodeBatchNoByProductId((prev) => {
+      const next = { ...(prev || {}) };
+      barcodePreviewProducts.forEach((p) => {
+        const cur = (next[p.productId] || '').toString().trim();
+        if (!cur) next[p.productId] = autoBatch;
+      });
+      return next;
+    });
+  }, [showBarcodePreview, barcodePackedDate, barcodePreviewProducts]);
 
   const getBarcodeOptions = () => ({
     format: 'CODE128',
@@ -1721,7 +1761,7 @@ const Inventory = () => {
                       </div>
                       <div className="product-input-fields">
                         <div className="input-field-group">
-                          <label>Weight (grams):</label>
+                          <label>Net Quantity Value:</label>
                           <input
                             type="number"
                             min="0"
@@ -1731,7 +1771,23 @@ const Inventory = () => {
                             onChange={(e) => setBarcodeWeights({ ...barcodeWeights, [p.productId]: e.target.value })}
                             className="weight-input"
                           />
-                          <span className="input-unit">gm</span>
+                          <span className="input-unit">{barcodeNetQtyUnitByProductId[p.productId] || 'gm'}</span>
+                        </div>
+                        <div className="input-field-group">
+                          <label>Net Quantity Unit:</label>
+                          <select
+                            value={barcodeNetQtyUnitByProductId[p.productId] || 'gm'}
+                            onChange={(e) =>
+                              setBarcodeNetQtyUnitByProductId({
+                                ...barcodeNetQtyUnitByProductId,
+                                [p.productId]: e.target.value,
+                              })
+                            }
+                            className="net-qty-unit-select"
+                          >
+                            <option value="gm">gm</option>
+                            <option value="ml">ml</option>
+                          </select>
                         </div>
                         <div className="input-field-group">
                           <label>Manual MRP (Incl of all taxes):</label>
@@ -1816,7 +1872,7 @@ const Inventory = () => {
                 </div>
 
                 <p className="weight-info">
-                  💡 <strong>Weight:</strong> For weight-based products, enter weight (e.g., 250gm) - it will be appended to barcode (
+                  💡 <strong>Net Quantity Value:</strong> For weight/volume-based products, enter value (e.g., 250) and choose unit gm or ml - it will be appended to barcode (
                   {(barcodePreviewProducts[0]?.barcode) || '1000A'} + 250 = {(barcodePreviewProducts[0]?.barcode) || '1000A'}250). Leave blank for pieces/cups.
                   <br />
                   💡 <strong>Best Before:</strong> Enter number of months (e.g., 12, 24, 36). Default is 12 months. Will display as &quot;12 months&quot; on the barcode.
