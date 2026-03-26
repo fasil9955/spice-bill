@@ -505,6 +505,22 @@ const Inventory = () => {
     });
   }, [showBarcodePreview, barcodePackedDate, barcodePreviewProducts]);
 
+  // Auto-fill Best Before (months) with 12 if empty.
+  // Only fills when the user has not entered a value yet.
+  useEffect(() => {
+    if (!showBarcodePreview) return;
+    if (!Array.isArray(barcodePreviewProducts) || barcodePreviewProducts.length === 0) return;
+
+    setBarcodeBestBeforeMonths((prev) => {
+      const next = { ...(prev || {}) };
+      barcodePreviewProducts.forEach((p) => {
+        const cur = (next[p.productId] ?? '').toString().trim();
+        if (!cur) next[p.productId] = 12;
+      });
+      return next;
+    });
+  }, [showBarcodePreview, barcodePreviewProducts]);
+
   const getBarcodeOptions = () => ({
     format: 'CODE128',
     displayValue: true,
@@ -585,6 +601,39 @@ const Inventory = () => {
   const printBarcodesFromPreview = () => {
     const list = [...barcodePreviewProducts];
     if (list.length === 0) return;
+
+    const isBlank = (v) => v == null || String(v).trim() === '';
+    const missing = [];
+
+    // Company-level required fields (everything except Manual MRP).
+    if (isBlank(barcodeCompanyName)) missing.push('Company Name');
+    if (isBlank(barcodeCompanyAddress)) missing.push('Company Address');
+    if (isBlank(barcodeCustomerCare)) missing.push('Customer Care Phone');
+    if (isBlank(barcodeCustomerCareEmail)) missing.push('Customer Care Email');
+    if (isBlank(barcodePackingLicense)) missing.push('Packing Licence No (LMPC Reg No)');
+    if (isBlank(barcodePackedDate)) missing.push('Packed Date');
+
+    // Per-product required fields (except Manual MRP).
+    list.forEach((p) => {
+      const unit = (barcodeNetQtyUnitByProductId?.[p.productId] || 'gm').toString().trim();
+      const qtyVal = barcodeWeights?.[p.productId] ?? '';
+      const bestBeforeMonths = barcodeBestBeforeMonths?.[p.productId] ?? '';
+      const batchNo = barcodeBatchNoByProductId?.[p.productId] ?? '';
+      const usp = barcodeUspByProductId?.[p.productId] ?? '';
+      const ingredients = barcodeIngredientsByProductId?.[p.productId] ?? '';
+
+      if (isBlank(qtyVal)) missing.push(`Net Quantity Value (${p.productName})`);
+      if (isBlank(unit)) missing.push(`Net Quantity Unit (${p.productName})`);
+      if (isBlank(bestBeforeMonths)) missing.push(`Best Before Months (${p.productName})`);
+      if (isBlank(batchNo)) missing.push(`Batch No (${p.productName})`);
+      if (isBlank(usp)) missing.push(`USP (${p.productName})`);
+      if (isBlank(ingredients)) missing.push(`Ingredients (${p.productName})`);
+    });
+
+    if (missing.length > 0) {
+      alert(`Please fill required fields before printing:\n- ${missing.slice(0, 12).join('\n- ')}`);
+      return;
+    }
 
     const escapeMultilineForPrintHtml = (s) =>
       escapeForPrintHtml(s).replace(/\n/g, '<br/>');
