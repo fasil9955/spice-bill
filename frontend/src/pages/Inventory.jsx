@@ -419,7 +419,7 @@ const Inventory = () => {
                   <div className="sticker-line sticker-ingredients">Ingredients: —</div>
                 )}
 
-                <div className="sticker-repacked-title">PACKED &amp; MARKETED BY</div>
+                <div className="sticker-repacked-title">REPACKED AND MARKETED BY</div>
                 <div className="sticker-company-name">{info.companyName || '—'}</div>
                 <div className="sticker-company-address">{info.companyAddress || '—'}</div>
 
@@ -612,7 +612,7 @@ const Inventory = () => {
               <div class="sticker-col-right">
                 ${ingredients ? `<div class="sticker-line sticker-ingredients">Ingredients: ${ingredients}</div>` : `<div class="sticker-line sticker-ingredients">Ingredients: —</div>`}
 
-                <div class="sticker-repacked-title">Packed</div>
+                <div class="sticker-repacked-title">REPACKED AND MARKETED BY</div>
                 <div class="sticker-company-name">${companyName}</div>
                 <div class="sticker-company-address">${companyAddress || '—'}</div>
 
