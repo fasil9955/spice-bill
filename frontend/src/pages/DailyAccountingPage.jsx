@@ -97,6 +97,33 @@ const DailyAccountingPage = () => {
       setOpeningUpi(sumData?.openingUpi != null ? String(sumData.openingUpi) : '');
       setCashBalance(sumData?.closingCash != null ? String(sumData.closingCash) : '');
 
+      let nextCards = [];
+      let nextUpis = [];
+      const rawPd = sumData?.paymentDetailsJson;
+      if (rawPd && typeof rawPd === 'string') {
+        try {
+          const p = JSON.parse(rawPd);
+          if (Array.isArray(p.cards)) {
+            nextCards = p.cards.map((e, i) => ({
+              id: Date.now() + i,
+              name: (e.name || 'Card').toString(),
+              amount: e.amount != null ? String(e.amount) : '0',
+            }));
+          }
+          if (Array.isArray(p.upis)) {
+            nextUpis = p.upis.map((e, i) => ({
+              id: Date.now() + 10000 + i,
+              name: (e.name || 'GPay/UPI').toString(),
+              amount: e.amount != null ? String(e.amount) : '0',
+            }));
+          }
+        } catch {
+          /* ignore bad JSON */
+        }
+      }
+      setCardEntries(nextCards);
+      setGpayEntries(nextUpis);
+
       setExpenses(Array.isArray(expRes?.data) ? expRes.data : []);
       setEmployees(Array.isArray(empRes?.data) ? empRes.data : []);
     } catch (err) {
@@ -150,34 +177,46 @@ const DailyAccountingPage = () => {
     return acc;
   }, {});
 
-  const saveClosing = async (closingCashOverride, closingGpayOverride) => {
+  const persistAccountingSummary = async ({
+    cards,
+    upis,
+    closingCashOverride,
+    closingGpayOverride,
+  } = {}) => {
+    const c = cards ?? cardEntries;
+    const u = upis ?? gpayEntries;
     const billing = parseFloat(billingBookSales);
     const billingVal = Number.isFinite(billing) && billing >= 0 ? billing : 0;
     const closingCashVal = closingCashOverride !== undefined ? closingCashOverride : (parseFloat(cashBalance) || 0);
-    const closingGpayVal = closingGpayOverride !== undefined ? closingGpayOverride : gpayEntries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const closingGpayVal =
+      closingGpayOverride !== undefined ? closingGpayOverride : u.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const paymentDetailsJson = JSON.stringify({
+      cards: c.map((e) => ({ name: e.name || 'Card', amount: String(e.amount ?? '') })),
+      upis: u.map((e) => ({ name: e.name || 'GPay/UPI', amount: String(e.amount ?? '') })),
+    });
     try {
       await accountingService.updateDaySummary(isoDate, {
         billingBookSales: billingVal,
         closingCash: closingCashVal,
         closingGpayTotal: closingGpayVal,
+        paymentDetailsJson,
       });
     } catch (err) {
-      console.error('Save closing failed', err);
+      console.error('Save accounting summary failed', err);
     }
+  };
+
+  const saveClosing = async (closingCashOverride, closingGpayOverride) => {
+    await persistAccountingSummary({
+      closingCashOverride,
+      closingGpayOverride,
+    });
   };
 
   const handleSaveBillingBook = async () => {
     const val = parseFloat(billingBookSales);
     if (!Number.isFinite(val) || val < 0) return;
-    try {
-      await accountingService.updateDaySummary(isoDate, {
-        billingBookSales: val,
-        closingCash: parseFloat(cashBalance) || 0,
-        closingGpayTotal: gpayEntries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0),
-      });
-    } catch (err) {
-      console.error('Save billing book failed', err);
-    }
+    await persistAccountingSummary();
   };
 
   const handleAddExpense = async (e) => {
@@ -241,28 +280,36 @@ const DailyAccountingPage = () => {
   const addCardEntry = () => {
     const amt = parseFloat(cardAmount);
     if (!Number.isFinite(amt) || amt <= 0) return;
-    setCardEntries((prev) => [...prev, { id: Date.now(), name: (cardName || '').trim() || 'Card', amount: cardAmount }]);
+    const newEntry = { id: Date.now(), name: (cardName || '').trim() || 'Card', amount: cardAmount };
+    const next = [...cardEntries, newEntry];
+    setCardEntries(next);
     setCardName('');
     setCardAmount('');
+    persistAccountingSummary({ cards: next });
   };
 
   const addGpayEntry = () => {
     const amt = parseFloat(gpayAmount);
     if (!Number.isFinite(amt) || amt <= 0) return;
-    const newTotal = totalGpayManual + amt;
-    setGpayEntries((prev) => [...prev, { id: Date.now(), name: (gpayName || '').trim() || 'GPay/UPI', amount: gpayAmount }]);
+    const newEntry = { id: Date.now(), name: (gpayName || '').trim() || 'GPay/UPI', amount: gpayAmount };
+    const next = [...gpayEntries, newEntry];
+    const newTotal = next.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    setGpayEntries(next);
     setGpayName('');
     setGpayAmount('');
-    saveClosing(undefined, newTotal);
+    persistAccountingSummary({ upis: next, closingGpayOverride: newTotal });
   };
 
-  const removeCardEntry = (id) => setCardEntries((prev) => prev.filter((e) => e.id !== id));
+  const removeCardEntry = (id) => {
+    const next = cardEntries.filter((e) => e.id !== id);
+    setCardEntries(next);
+    persistAccountingSummary({ cards: next });
+  };
   const removeGpayEntry = (id) => {
-    const entry = gpayEntries.find((e) => e.id === id);
-    const entryAmount = entry ? parseFloat(entry.amount) || 0 : 0;
-    const newTotal = Math.max(0, totalGpayManual - entryAmount);
-    setGpayEntries((prev) => prev.filter((e) => e.id !== id));
-    saveClosing(undefined, newTotal);
+    const next = gpayEntries.filter((e) => e.id !== id);
+    const newTotal = next.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    setGpayEntries(next);
+    persistAccountingSummary({ upis: next, closingGpayOverride: newTotal });
   };
 
   const handlePrintReport = () => {
@@ -315,8 +362,34 @@ const DailyAccountingPage = () => {
       ${expensesListHtml}
       <p class="print-row"><strong>Total Expenses:</strong><span class="print-amount">₹${totalExpenses.toFixed(2)}</span></p>
       <h2>Payments (Card+GPay+Cash)</h2>
-      <p class="print-row">Card:<span class="print-amount">₹${totalCardManual.toFixed(2)}</span></p>
-      <p class="print-row">GPay / UPI:<span class="print-amount">₹${totalGpayManual.toFixed(2)}</span></p>
+      ${
+        cardEntries.length === 0
+          ? `<p class="print-row">Card (total):<span class="print-amount">₹${totalCardManual.toFixed(2)}</span></p>`
+          : cardEntries
+              .map((e) => {
+                const label = `${escapeHtml(String(e.name || 'Card'))} (Card)`;
+                const v = (parseFloat(e.amount) || 0).toFixed(2);
+                return `<p class="print-row">${label}:<span class="print-amount">₹${v}</span></p>`;
+              })
+              .join('') +
+            (cardEntries.length > 1
+              ? `<p class="print-row"><strong>Card total:</strong><span class="print-amount">₹${totalCardManual.toFixed(2)}</span></p>`
+              : '')
+      }
+      ${
+        gpayEntries.length === 0
+          ? `<p class="print-row">GPay / UPI (total):<span class="print-amount">₹${totalGpayManual.toFixed(2)}</span></p>`
+          : gpayEntries
+              .map((e) => {
+                const label = `${escapeHtml(String(e.name || 'UPI'))} (UPI)`;
+                const v = (parseFloat(e.amount) || 0).toFixed(2);
+                return `<p class="print-row">${label}:<span class="print-amount">₹${v}</span></p>`;
+              })
+              .join('') +
+            (gpayEntries.length > 1
+              ? `<p class="print-row"><strong>GPay / UPI total:</strong><span class="print-amount">₹${totalGpayManual.toFixed(2)}</span></p>`
+              : '')
+      }
       <p class="print-row">Cash Balance:<span class="print-amount">₹${cashBalanceNum.toFixed(2)}</span></p>
       <p class="print-row"><strong>Total:</strong><span class="print-amount">₹${totalPayments.toFixed(2)}</span></p>
       <p class="last-row">${moreOrShortage}</p>

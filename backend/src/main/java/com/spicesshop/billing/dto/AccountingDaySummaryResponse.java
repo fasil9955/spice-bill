@@ -14,6 +14,9 @@ public class AccountingDaySummaryResponse {
     /** This day's closing GPay total. */
     private BigDecimal closingGpayTotal;
 
+    /** JSON string: manual card / UPI lines for this day. */
+    private String paymentDetailsJson;
+
     public AccountingDaySummaryResponse() {}
 
     public AccountingDaySummaryResponse(String reportDate, BigDecimal billingBookSales) {
@@ -77,6 +80,14 @@ public class AccountingDaySummaryResponse {
 
     public void setClosingGpayTotal(BigDecimal closingGpayTotal) {
         this.closingGpayTotal = closingGpayTotal;
+    }
+
+    public String getPaymentDetailsJson() {
+        return this.paymentDetailsJson;
+    }
+
+    public void setPaymentDetailsJson(String paymentDetailsJson) {
+        this.paymentDetailsJson = paymentDetailsJson;
     }
 
     @Override

@@ -21,7 +21,7 @@ public class AccountingDaySummaryService {
 
     @Transactional
     public AccountingDaySummary upsertSummary(String companyName, LocalDate reportDate, BigDecimal billingBookSales,
-            BigDecimal closingCash, BigDecimal closingGpayTotal) {
+            BigDecimal closingCash, BigDecimal closingGpayTotal, String paymentDetailsJson) {
         AccountingDaySummary summary = this.accountingDaySummaryRepository
             .findByCompanyNameAndReportDate(companyName, reportDate)
             .orElseGet(AccountingDaySummary::new);
@@ -31,6 +31,7 @@ public class AccountingDaySummaryService {
         summary.setBillingBookSales(billingBookSales != null ? billingBookSales : java.math.BigDecimal.ZERO);
         if (closingCash != null) summary.setClosingCash(closingCash);
         if (closingGpayTotal != null) summary.setClosingGpayTotal(closingGpayTotal);
+        if (paymentDetailsJson != null) summary.setPaymentDetailsJson(paymentDetailsJson);
 
         return this.accountingDaySummaryRepository.save(summary);
     }

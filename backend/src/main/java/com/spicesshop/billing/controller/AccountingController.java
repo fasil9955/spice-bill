@@ -46,6 +46,7 @@ public class AccountingController {
                 summary.getBillingBookSales() : BigDecimal.ZERO;
             BigDecimal closingCash = (summary != null && summary.getClosingCash() != null) ? summary.getClosingCash() : null;
             BigDecimal closingGpayTotal = (summary != null && summary.getClosingGpayTotal() != null) ? summary.getClosingGpayTotal() : null;
+            String paymentDetailsJson = (summary != null) ? summary.getPaymentDetailsJson() : null;
 
             // Opening = yesterday's closing
             LocalDate yesterday = date.minusDays(1);
@@ -53,8 +54,10 @@ public class AccountingController {
             BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
             BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingGpayTotal).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
-            return ResponseEntity.ok(new AccountingDaySummaryResponse(
-                date.toString(), billingBookSales, openingCash, openingUpi, closingCash, closingGpayTotal));
+            AccountingDaySummaryResponse body = new AccountingDaySummaryResponse(
+                date.toString(), billingBookSales, openingCash, openingUpi, closingCash, closingGpayTotal);
+            body.setPaymentDetailsJson(paymentDetailsJson);
+            return ResponseEntity.ok(body);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -77,18 +80,25 @@ public class AccountingController {
             }
             BigDecimal closingCash = toBigDecimal(payload.get("closingCash"));
             BigDecimal closingGpayTotal = toBigDecimal(payload.get("closingGpayTotal"));
+            String paymentDetailsJson = null;
+            Object pd = payload.get("paymentDetailsJson");
+            if (pd != null) {
+                paymentDetailsJson = pd.toString();
+            }
 
             AccountingDaySummary summary = this.accountingDaySummaryService.upsertSummary(
-                companyName, date, billingBookSales, closingCash, closingGpayTotal);
+                companyName, date, billingBookSales, closingCash, closingGpayTotal, paymentDetailsJson);
 
             LocalDate yesterday = date.minusDays(1);
             Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
             BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
             BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingGpayTotal).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
-            return ResponseEntity.ok(new AccountingDaySummaryResponse(
+            AccountingDaySummaryResponse body = new AccountingDaySummaryResponse(
                 date.toString(), summary.getBillingBookSales(), openingCash, openingUpi,
-                summary.getClosingCash(), summary.getClosingGpayTotal()));
+                summary.getClosingCash(), summary.getClosingGpayTotal());
+            body.setPaymentDetailsJson(summary.getPaymentDetailsJson());
+            return ResponseEntity.ok(body);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

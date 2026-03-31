@@ -29,6 +29,10 @@ public class AccountingDaySummary {
     @Column(name = "closing_gpay_total", precision = 12, scale = 2)
     private BigDecimal closingGpayTotal;
 
+    /** JSON: {"cards":[{"name":"...","amount":"..."}],"upis":[...]} */
+    @Column(name = "payment_details_json", columnDefinition = "TEXT")
+    private String paymentDetailsJson;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -70,6 +74,10 @@ public class AccountingDaySummary {
         this.closingGpayTotal = closingGpayTotal;
     }
 
+    public void setPaymentDetailsJson(String paymentDetailsJson) {
+        this.paymentDetailsJson = paymentDetailsJson;
+    }
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
@@ -100,6 +108,10 @@ public class AccountingDaySummary {
 
     public BigDecimal getClosingGpayTotal() {
         return this.closingGpayTotal;
+    }
+
+    public String getPaymentDetailsJson() {
+        return this.paymentDetailsJson;
     }
 
     public LocalDateTime getCreatedAt() {
