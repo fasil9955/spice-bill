@@ -255,6 +255,9 @@ const Inventory = () => {
     const base = (product?.barcode || '').toString().trim();
     const w = (barcodeWeights?.[product?.productId] || '').toString().trim();
     if (!base) return '';
+    // Pieces: net quantity is for the label only; do not append weight to the barcode.
+    const packagingType = (product?.packagingType || '').toString().trim().toLowerCase();
+    if (packagingType === 'pieces') return base;
     return w ? `${base}${w}` : base;
   };
 
