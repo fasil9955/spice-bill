@@ -82,6 +82,7 @@ public class AuthService {
 
         return new CompanyDetailsResponse(
             admin.getCompanyName(),
+            admin.getBarcodeLabelCompanyName(),
             admin.getGstNumber(),
             admin.getFssaiLicense(),
             admin.getAddress(),
@@ -105,6 +106,14 @@ public class AuthService {
         User cashier = this.userRepository.findByCompanyNameAndRole(companyName, User.Role.CASHIER)
             .orElseThrow(() -> new RuntimeException("Cashier not found"));
 
+        String barcodeLabelName = request.getBarcodeLabelCompanyName();
+        if (barcodeLabelName != null) {
+            barcodeLabelName = barcodeLabelName.trim();
+            if (barcodeLabelName.isEmpty()) {
+                barcodeLabelName = null;
+            }
+        }
+        admin.setBarcodeLabelCompanyName(barcodeLabelName);
         admin.setGstNumber(request.getGstNumber());
         admin.setFssaiLicense(request.getFssaiLicense());
         admin.setAddress(request.getAddress());
@@ -119,6 +128,7 @@ public class AuthService {
         admin.setB2bInvoiceStart(request.getB2bInvoiceStart());
         this.userRepository.save(admin);
 
+        cashier.setBarcodeLabelCompanyName(barcodeLabelName);
         cashier.setGstNumber(request.getGstNumber());
         cashier.setFssaiLicense(request.getFssaiLicense());
         cashier.setAddress(request.getAddress());
@@ -135,6 +145,7 @@ public class AuthService {
 
         return new CompanyDetailsResponse(
             admin.getCompanyName(),
+            admin.getBarcodeLabelCompanyName(),
             admin.getGstNumber(),
             admin.getFssaiLicense(),
             admin.getAddress(),

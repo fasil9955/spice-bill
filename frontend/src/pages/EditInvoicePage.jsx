@@ -4,6 +4,18 @@ import { invoiceService, productService } from '../services/api';
 import { Search, Plus, Minus, ShoppingCart, ArrowLeft, X } from 'lucide-react';
 import './Billing.css';
 
+const DISCOUNT_PERCENT_MAX = 30;
+
+/** Parse quantity string without spurious binary float (e.g. 0.125 stays 0.125). */
+const parseQty = (raw) => {
+  if (raw == null || raw === '') return NaN;
+  const s = String(raw).trim().replace(',', '.');
+  if (s === '' || s === '.') return NaN;
+  const n = parseFloat(s);
+  if (!Number.isFinite(n)) return NaN;
+  return n;
+};
+
 const EditInvoicePage = () => {
   const { invoiceId } = useParams();
   const navigate = useNavigate();
@@ -11,6 +23,8 @@ const EditInvoicePage = () => {
   const [items, setItems] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [amounts, setAmounts] = useState({ cash: 0, card: 0, upi: 0 });
+  const [discountType, setDiscountType] = useState('amount');
+  const [discountPercent, setDiscountPercent] = useState(0);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -18,7 +32,11 @@ const EditInvoicePage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [selectedForCart, setSelectedForCart] = useState(null);
+  const [selectedQtyInput, setSelectedQtyInput] = useState('1');
+  const [editingQty, setEditingQty] = useState({});
   const searchInputRef = useRef(null);
+  const selectedQtyRef = useRef(null);
 
   useEffect(() => {
     const load = async () => {
@@ -52,14 +70,18 @@ const EditInvoicePage = () => {
           card: Number(inv.cardAmount) || 0,
           upi: Number(inv.upiAmount) || 0
         });
-        setDiscountAmount(Number(inv.discountAmount) || 0);
-        setItems((inv.items || []).map(it => ({
+        const disc = Number(inv.discountAmount) || 0;
+        setDiscountAmount(disc);
+        setDiscountPercent(0);
+        setDiscountType('amount');
+        const mapped = (inv.items || []).map(it => ({
           productId: it.product?.productId,
           productName: it.productName || '-',
           unit: it.unit || '',
           quantity: Number(it.quantity) || 0,
           unitPrice: Number(it.unitPrice) || 0
-        })));
+        }));
+        setItems(mapped);
         setProducts(Array.isArray(prodRes?.data) ? prodRes.data : []);
       } catch (err) {
         console.error('Failed to load invoice', err);
@@ -88,49 +110,155 @@ const EditInvoicePage = () => {
     setHighlightedIndex(filtered.length > 0 ? 0 : -1);
   };
 
-  const addProduct = (product, qty = 1) => {
-    const existing = items.find(it => it.productId === product.productId);
-    if (existing) {
-      setItems(prev => prev.map(it =>
-        it.productId === product.productId
-          ? { ...it, quantity: it.quantity + qty }
-          : it
-      ));
-    } else {
-      setItems(prev => [...prev, {
+  const subtotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+
+  const getDiscountValue = () => {
+    const sub = subtotal;
+    if (discountType === 'percent') {
+      const pct = Math.min(Number(discountPercent) || 0, DISCOUNT_PERCENT_MAX);
+      return (sub * pct) / 100;
+    }
+    return Math.min(Number(discountAmount) || 0, sub);
+  };
+
+  const discount = getDiscountValue();
+  const total = Math.max(0, subtotal - discount);
+
+  /** Add or merge line; newest / last added appears at top */
+  const addLineToCart = (product, qtyNum) => {
+    const q = typeof qtyNum === 'number' && Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1;
+    setItems(prev => {
+      const idx = prev.findIndex(it => it.productId === product.productId);
+      if (idx >= 0) {
+        const row = prev[idx];
+        const mergedQty = (Number(row.quantity) || 0) + q;
+        const newRow = { ...row, quantity: mergedQty };
+        return [newRow, ...prev.filter((_, i) => i !== idx)];
+      }
+      return [{
         productId: product.productId,
         productName: product.productName || '-',
         unit: product.unit || '',
-        quantity: qty,
+        quantity: q,
         unitPrice: Number(product.sellingPricePerUnit ?? product.unitPrice) || 0
-      }]);
-    }
+      }, ...prev];
+    });
     setSearchTerm('');
     setSearchResults([]);
     setHighlightedIndex(-1);
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  const tryAddSelectedToCart = () => {
+    if (!selectedForCart) return;
+    const trimmed = (selectedQtyInput || '').trim();
+    if (trimmed === '') {
+      alert('Please enter a quantity.');
+      return;
+    }
+    const num = parseQty(trimmed);
+    if (!Number.isFinite(num) || num <= 0) {
+      alert('Quantity must be greater than 0.');
+      return;
+    }
+    addLineToCart(selectedForCart, num);
+    setSelectedForCart(null);
+    setSelectedQtyInput('1');
     searchInputRef.current?.focus();
   };
 
-  const updateItemQty = (index, delta) => {
-    setItems(prev => prev.map((it, i) => {
-      if (i !== index) return it;
-      const newQty = Math.max(0.01, it.quantity + delta);
+  const runSearchSubmit = async () => {
+    const rawInput = searchInputRef.current?.value;
+    const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
+    if (!trimmed) return;
+    if (highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+      const p = searchResults[highlightedIndex];
+      setSelectedForCart(p);
+      setSelectedQtyInput('1');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      setSearchTerm('');
+      setTimeout(() => selectedQtyRef.current?.focus(), 50);
+      return;
+    }
+    try {
+      const response = await productService.parseBarcode(trimmed);
+      const { product, weight } = response.data;
+      if (!product) throw new Error('No product');
+      let qty = 1;
+      if (weight != null && Number(weight) > 0) {
+        const w = Number(weight);
+        const unit = (product.unit || '').toLowerCase();
+        qty = (unit === 'kg' || unit === 'l') ? w / 1000 : w;
+        qty = parseFloat(Number(qty).toFixed(6));
+      }
+      addLineToCart(product, qty);
+      setSearchTerm('');
+      setSearchResults([]);
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+    } catch {
+      if (searchResults.length === 1) {
+        setSelectedForCart(searchResults[0]);
+        setSelectedQtyInput('1');
+        setSearchResults([]);
+        setHighlightedIndex(-1);
+        setSearchTerm('');
+        setTimeout(() => selectedQtyRef.current?.focus(), 50);
+      } else if (searchResults.length > 1) {
+        searchInputRef.current?.focus();
+      } else {
+        alert('Product not found. Scan barcode or type name to search.');
+      }
+    }
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    runSearchSubmit();
+  };
+
+  const updateItemQty = (productId, delta) => {
+    setItems(prev => prev.map(it => {
+      if (it.productId !== productId) return it;
+      const newQty = Math.max(0.0001, (Number(it.quantity) || 0) + delta);
       return { ...it, quantity: newQty };
-    }).filter(it => it.quantity > 0));
+    }).filter(it => (Number(it.quantity) || 0) > 0));
+    setEditingQty(prev => ({ ...prev, [productId]: undefined }));
   };
 
-  const updateItemField = (index, field, value) => {
-    setItems(prev => prev.map((it, i) => i !== index ? it : { ...it, [field]: value }));
+  const updateItemField = (productId, field, value) => {
+    setItems(prev => prev.map(it => (it.productId === productId ? { ...it, [field]: value } : it)));
   };
 
-  const removeItem = (index) => {
+  const handleQtyFocus = (productId, currentQty) => {
+    setEditingQty(prev => ({ ...prev, [productId]: String(currentQty) }));
+  };
+  const handleQtyChange = (productId, value) => {
+    setEditingQty(prev => ({ ...prev, [productId]: value }));
+  };
+  const handleQtyBlur = (productId) => {
+    const raw = editingQty[productId];
+    if (raw === undefined) return;
+    if (raw === '' || raw === '.') {
+      setEditingQty(prev => ({ ...prev, [productId]: undefined }));
+      return;
+    }
+    const num = parseQty(raw);
+    if (!Number.isFinite(num) || num <= 0) {
+      setEditingQty(prev => ({ ...prev, [productId]: undefined }));
+      return;
+    }
+    setItems(prev => prev.map(it => (it.productId === productId ? { ...it, quantity: num } : it)));
+    setEditingQty(prev => ({ ...prev, [productId]: undefined }));
+  };
+  const handleQtyKeyDown = (e) => {
+    if (e.key === 'Enter') e.target.blur();
+  };
+
+  const removeItem = (productId) => {
     if (items.length <= 1) return;
-    setItems(prev => prev.filter((_, i) => i !== index));
+    setItems(prev => prev.filter(it => it.productId !== productId));
   };
-
-  const subtotal = items.reduce((sum, it) => sum + (it.quantity * it.unitPrice), 0);
-  const discount = Math.min(Number(discountAmount) || 0, subtotal);
-  const total = Math.max(0, subtotal - discount);
 
   const handleSave = async () => {
     if (!invoice || items.length === 0) return;
@@ -144,8 +272,8 @@ const EditInvoicePage = () => {
         discountAmount: discount,
         items: items.map(it => ({
           product: { productId: it.productId },
-          quantity: it.quantity,
-          unitPrice: it.unitPrice
+          quantity: Number(it.quantity) || 0,
+          unitPrice: Number(it.unitPrice) || 0
         }))
       };
       await invoiceService.update(invoice.invoiceId, payload);
@@ -173,15 +301,17 @@ const EditInvoicePage = () => {
   return (
     <div className="billing-container">
       <div className="billing-header">
-        <div className="billing-header-actions">
-          <button className="back-button" onClick={() => navigate('/dashboard/bills')}>
-            <ArrowLeft size={18} /> Back
-          </button>
-          <h1>✏️ Edit Invoice #{invoice.invoiceNumber}</h1>
-        </div>
-        <div className="billing-header-actions">
-          <button className="nav-link-button" onClick={() => navigate('/dashboard/bills')}>📚 Bills</button>
-          <button className="nav-link-button" onClick={() => navigate('/dashboard/billing')}>🧾 Create Invoice</button>
+        <div className="billing-header-main">
+          <div className="billing-header-actions">
+            <button className="back-button" onClick={() => navigate('/dashboard/bills')}>
+              <ArrowLeft size={18} /> Back
+            </button>
+            <h1>✏️ Edit Invoice #{invoice.invoiceNumber}</h1>
+          </div>
+          <div className="billing-header-actions">
+            <button className="nav-link-button" onClick={() => navigate('/dashboard/bills')}>📚 Bills</button>
+            <button className="nav-link-button" onClick={() => navigate('/dashboard/billing')}>🧾 Create Invoice</button>
+          </div>
         </div>
       </div>
 
@@ -192,19 +322,19 @@ const EditInvoicePage = () => {
               Date: {new Date(invoice.createdAt).toLocaleString()} · Customer: {invoice.b2bCustomer?.customerName || 'Retail'}
             </p>
             <div className="billing-search-bar cart-search-bar">
-              <form onSubmit={(e) => { e.preventDefault(); if (searchResults[highlightedIndex]) addProduct(searchResults[highlightedIndex]); }}>
+              <form onSubmit={handleSearchSubmit} className="billing-search-form">
                 <Search size={20} className="billing-search-icon" />
                 <input
                   ref={searchInputRef}
                   type="text"
                   className="billing-search-input"
-                  placeholder="Search product to add..."
+                  placeholder="Scan barcode or search product..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightedIndex(i => (i < searchResults.length - 1 ? i + 1 : 0)); }
-                    if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1)); }
-                    if (e.key === 'Enter' && searchResults[highlightedIndex]) { e.preventDefault(); addProduct(searchResults[highlightedIndex]); }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightedIndex(i => (i > 0 ? i - 1 : Math.max(0, searchResults.length - 1))); }
+                    if (e.key === 'Enter' && searchResults[highlightedIndex]) { e.preventDefault(); runSearchSubmit(); }
                   }}
                   autoComplete="off"
                 />
@@ -216,7 +346,14 @@ const EditInvoicePage = () => {
                       key={p.productId}
                       className={`product-search-item select-only ${idx === highlightedIndex ? 'highlighted' : ''}`}
                       onMouseEnter={() => setHighlightedIndex(idx)}
-                      onClick={() => addProduct(p)}
+                      onClick={() => {
+                        setSelectedForCart(p);
+                        setSelectedQtyInput('1');
+                        setSearchResults([]);
+                        setHighlightedIndex(-1);
+                        setSearchTerm('');
+                        setTimeout(() => selectedQtyRef.current?.focus(), 50);
+                      }}
                     >
                       <div className="product-search-item-info">
                         <span>{p.productName}{p.unit ? ` (${p.unit})` : ''}</span>
@@ -227,6 +364,29 @@ const EditInvoicePage = () => {
                 </div>
               )}
             </div>
+
+            {selectedForCart && (
+              <div className="selected-item-temp">
+                <div className="selected-item-info">
+                  <span className="selected-item-name">{selectedForCart.productName}{selectedForCart.unit ? ` (${selectedForCart.unit})` : ''}</span>
+                  <span className="selected-item-price">₹{selectedForCart.sellingPricePerUnit ?? selectedForCart.unitPrice}</span>
+                </div>
+                <div className="selected-item-actions">
+                  <label className="selected-item-qty-label">Qty</label>
+                  <input
+                    ref={selectedQtyRef}
+                    type="text"
+                    inputMode="decimal"
+                    className="selected-item-qty-input"
+                    value={selectedQtyInput}
+                    onChange={(e) => setSelectedQtyInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); tryAddSelectedToCart(); } }}
+                  />
+                  <button type="button" className="add-to-cart-btn" onClick={tryAddSelectedToCart}>Add to cart</button>
+                  <button type="button" className="clear-selected-btn" onClick={() => { setSelectedForCart(null); setSelectedQtyInput('1'); searchInputRef.current?.focus(); }} aria-label="Clear"><X size={16} /></button>
+                </div>
+              </div>
+            )}
 
             <div className="section-header">
               <ShoppingCart size={20} />
@@ -245,8 +405,8 @@ const EditInvoicePage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((it, idx) => (
-                    <tr key={idx}>
+                  {items.map((it) => (
+                    <tr key={it.productId}>
                       <td>{it.productName}{it.unit ? ` (${it.unit})` : ''}</td>
                       <td>{it.unit || '-'}</td>
                       <td>
@@ -256,26 +416,28 @@ const EditInvoicePage = () => {
                           step="0.01"
                           className="edit-invoice-input edit-rate"
                           value={it.unitPrice}
-                          onChange={(e) => updateItemField(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          onChange={(e) => updateItemField(it.productId, 'unitPrice', parseFloat(e.target.value) || 0)}
                         />
                       </td>
                       <td>
                         <div className="quantity-control">
-                          <button type="button" onClick={() => updateItemQty(idx, -1)} aria-label="Decrease"><Minus size={14}/></button>
+                          <button type="button" onClick={() => updateItemQty(it.productId, -1)} aria-label="Decrease"><Minus size={14}/></button>
                           <input
-                            type="number"
-                            min="0.01"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             className="quantity-input"
-                            value={it.quantity}
-                            onChange={(e) => updateItemField(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                            value={editingQty[it.productId] ?? String(it.quantity)}
+                            onChange={(e) => handleQtyChange(it.productId, e.target.value)}
+                            onFocus={() => handleQtyFocus(it.productId, it.quantity)}
+                            onBlur={() => handleQtyBlur(it.productId)}
+                            onKeyDown={handleQtyKeyDown}
                           />
-                          <button type="button" onClick={() => updateItemQty(idx, 1)} aria-label="Increase"><Plus size={14}/></button>
+                          <button type="button" onClick={() => updateItemQty(it.productId, 1)} aria-label="Increase"><Plus size={14}/></button>
                         </div>
                       </td>
-                      <td>₹{(it.quantity * it.unitPrice).toFixed(2)}</td>
+                      <td>₹{((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)).toFixed(2)}</td>
                       <td>
-                        <button type="button" className="remove-btn" onClick={() => removeItem(idx)} disabled={items.length <= 1}><X size={16}/></button>
+                        <button type="button" className="remove-btn" onClick={() => removeItem(it.productId)} disabled={items.length <= 1}><X size={16}/></button>
                       </td>
                     </tr>
                   ))}
@@ -290,19 +452,46 @@ const EditInvoicePage = () => {
                 <span>Subtotal</span>
                 <span>₹{subtotal.toFixed(2)}</span>
               </div>
-              <div className="totals-row totals-discount edit-discount-row">
-                <span>Discount (₹)</span>
-                <span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="edit-invoice-input"
-                    value={discountAmount}
-                    onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                  />
-                </span>
+              <div className="discount-section" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Discount</h3>
+                <div className="discount-toggle">
+                  <button type="button" className={`discount-toggle-btn ${discountType === 'percent' ? 'active' : ''}`} onClick={() => setDiscountType('percent')}>%</button>
+                  <button type="button" className={`discount-toggle-btn ${discountType === 'amount' ? 'active' : ''}`} onClick={() => setDiscountType('amount')}>₹</button>
+                </div>
+                {discountType === 'percent' && (
+                  <div className="discount-input-row">
+                    <input
+                      type="number"
+                      min="0"
+                      max={DISCOUNT_PERCENT_MAX}
+                      step="0.5"
+                      value={discountPercent || ''}
+                      onChange={(e) => setDiscountPercent(Math.min(DISCOUNT_PERCENT_MAX, parseFloat(e.target.value) || 0))}
+                      placeholder="0"
+                    />
+                    <span>%</span>
+                  </div>
+                )}
+                {discountType === 'amount' && (
+                  <div className="discount-input-row">
+                    <span>₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={discountAmount || ''}
+                      onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                    />
+                  </div>
+                )}
               </div>
+              {discount > 0 && (
+                <div className="totals-row totals-discount">
+                  <span>Discount applied</span>
+                  <span>- ₹{discount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="totals-row total-amount">
                 <span>Total</span>
                 <span>₹{total.toFixed(2)}</span>

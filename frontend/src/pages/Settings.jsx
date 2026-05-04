@@ -12,6 +12,7 @@ const Settings = () => {
 
   const [company, setCompany] = useState({
     companyName: '',
+    barcodeLabelCompanyName: '',
     gstNumber: '',
     fssaiLicense: '',
     address: '',
@@ -39,6 +40,7 @@ const Settings = () => {
       const d = response.data;
       setCompany({
         companyName: d.companyName ?? '',
+        barcodeLabelCompanyName: d.barcodeLabelCompanyName ?? '',
         gstNumber: d.gstNumber ?? '',
         fssaiLicense: d.fssaiLicense ?? '',
         address: d.address ?? '',
@@ -69,6 +71,7 @@ const Settings = () => {
     setMessage({ type: '', text: '' });
     try {
       await authService.updateCompanyDetails({
+        barcodeLabelCompanyName: (company.barcodeLabelCompanyName || '').trim(),
         gstNumber: company.gstNumber,
         fssaiLicense: company.fssaiLicense,
         address: company.address,
@@ -156,6 +159,20 @@ const Settings = () => {
             <div className="form-group">
               <label>Company Name</label>
               <input type="text" value={company.companyName} readOnly disabled className="readonly-input" />
+              <p className="settings-field-hint">Used on invoices and billing (your registered company name).</p>
+            </div>
+            <div className="form-group">
+              <label>Name on barcode labels</label>
+              <input
+                type="text"
+                value={company.barcodeLabelCompanyName}
+                onChange={(e) => setCompany({ ...company, barcodeLabelCompanyName: e.target.value })}
+                placeholder="Optional — e.g. brand name for printed product stickers"
+                maxLength={200}
+              />
+              <p className="settings-field-hint">
+                If set, barcode printing uses this by default. Leave blank to use the company name above on labels.
+              </p>
             </div>
             <div className="form-row">
               <div className="form-group">

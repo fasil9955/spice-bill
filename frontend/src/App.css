@@ -95,6 +95,12 @@
   color: #666;
   cursor: not-allowed;
 }
+.settings-field-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.35;
+}
 
 .nav-link-button {
   padding: 8px 16px;
@@ -1329,4 +1335,13 @@
 }
 .employee-form .form-group label .required {
   color: #dc2626;
+}
+
+/* Barcode preview – helper under printed company name */
+.barcode-field-hint {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+  line-height: 1.35;
 }

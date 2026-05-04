@@ -1,6 +1,8 @@
 package com.spicesshop.billing.dto;
 
 public class CompanyDetailsRequest {
+    /** Optional name printed on barcode labels only (does not change billing company name). */
+    private String barcodeLabelCompanyName;
     private String gstNumber;
     private String fssaiLicense;
     private String address;
@@ -17,6 +19,7 @@ public class CompanyDetailsRequest {
     public CompanyDetailsRequest() {}
 
     public CompanyDetailsRequest(
+            String barcodeLabelCompanyName,
             String gstNumber,
             String fssaiLicense,
             String address,
@@ -30,6 +33,7 @@ public class CompanyDetailsRequest {
             String branchName,
             Integer b2bInvoiceStart
     ) {
+        this.barcodeLabelCompanyName = barcodeLabelCompanyName;
         this.gstNumber = gstNumber;
         this.fssaiLicense = fssaiLicense;
         this.address = address;
@@ -42,6 +46,14 @@ public class CompanyDetailsRequest {
         this.ifscCode = ifscCode;
         this.branchName = branchName;
         this.b2bInvoiceStart = b2bInvoiceStart;
+    }
+
+    public String getBarcodeLabelCompanyName() {
+        return this.barcodeLabelCompanyName;
+    }
+
+    public void setBarcodeLabelCompanyName(String barcodeLabelCompanyName) {
+        this.barcodeLabelCompanyName = barcodeLabelCompanyName;
     }
 
     public String getGstNumber() {
@@ -148,6 +160,8 @@ public class CompanyDetailsRequest {
         if (!other.canEqual(this)) return false;
         Object this$b2bInvoiceStart = getB2bInvoiceStart(), other$b2bInvoiceStart = other.getB2bInvoiceStart();
         if ((this$b2bInvoiceStart == null) ? (other$b2bInvoiceStart != null) : !this$b2bInvoiceStart.equals(other$b2bInvoiceStart)) return false;
+        Object this$barcodeLabelCompanyName = getBarcodeLabelCompanyName(), other$barcodeLabelCompanyName = other.getBarcodeLabelCompanyName();
+        if ((this$barcodeLabelCompanyName == null) ? (other$barcodeLabelCompanyName != null) : !this$barcodeLabelCompanyName.equals(other$barcodeLabelCompanyName)) return false;
         Object this$gstNumber = getGstNumber(), other$gstNumber = other.getGstNumber();
         if ((this$gstNumber == null) ? (other$gstNumber != null) : !this$gstNumber.equals(other$gstNumber)) return false;
         Object this$fssaiLicense = getFssaiLicense(), other$fssaiLicense = other.getFssaiLicense();
@@ -176,6 +190,8 @@ public class CompanyDetailsRequest {
         int result = 1;
         Object $b2bInvoiceStart = getB2bInvoiceStart();
         result = result * PRIME + (($b2bInvoiceStart == null) ? 43 : $b2bInvoiceStart.hashCode());
+        Object $barcodeLabelCompanyName = getBarcodeLabelCompanyName();
+        result = result * PRIME + (($barcodeLabelCompanyName == null) ? 43 : $barcodeLabelCompanyName.hashCode());
         Object $gstNumber = getGstNumber();
         result = result * PRIME + (($gstNumber == null) ? 43 : $gstNumber.hashCode());
         Object $fssaiLicense = getFssaiLicense();
@@ -197,6 +213,6 @@ public class CompanyDetailsRequest {
 
     @Override
     public String toString() {
-        return "CompanyDetailsRequest(gstNumber=" + getGstNumber() + ", fssaiLicense=" + getFssaiLicense() + ", address=" + getAddress() + ", phoneNumber=" + getPhoneNumber() + ", bankName=" + getBankName() + ", accountNumber=" + getAccountNumber() + ", ifscCode=" + getIfscCode() + ", branchName=" + getBranchName() + ", b2bInvoiceStart=" + getB2bInvoiceStart() + ")";
+        return "CompanyDetailsRequest(barcodeLabelCompanyName=" + getBarcodeLabelCompanyName() + ", gstNumber=" + getGstNumber() + ", fssaiLicense=" + getFssaiLicense() + ", address=" + getAddress() + ", phoneNumber=" + getPhoneNumber() + ", bankName=" + getBankName() + ", accountNumber=" + getAccountNumber() + ", ifscCode=" + getIfscCode() + ", branchName=" + getBranchName() + ", b2bInvoiceStart=" + getB2bInvoiceStart() + ")";
     }
 }

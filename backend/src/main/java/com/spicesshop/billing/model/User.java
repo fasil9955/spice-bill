@@ -15,6 +15,10 @@ public class User {
     @Column(name = "company_name", nullable = false)
     private String companyName;
 
+    /** Optional display name for printed barcode labels only (billing uses {@link #companyName}). */
+    @Column(name = "barcode_label_company_name", length = 200)
+    private String barcodeLabelCompanyName;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
     private Role role;
@@ -97,6 +101,14 @@ public class User {
 
     public void setCompanyName(String companyName) {
         this.companyName = companyName;
+    }
+
+    public String getBarcodeLabelCompanyName() {
+        return this.barcodeLabelCompanyName;
+    }
+
+    public void setBarcodeLabelCompanyName(String barcodeLabelCompanyName) {
+        this.barcodeLabelCompanyName = barcodeLabelCompanyName;
     }
 
     public void setRole(Role role) {

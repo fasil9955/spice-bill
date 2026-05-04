@@ -2,6 +2,8 @@ package com.spicesshop.billing.dto;
 
 public class CompanyDetailsResponse {
     private String companyName;
+    /** Display name for barcode labels only; optional — falls back to companyName in clients when empty. */
+    private String barcodeLabelCompanyName;
     private String gstNumber;
     private String fssaiLicense;
     private String address;
@@ -17,8 +19,9 @@ public class CompanyDetailsResponse {
 
     public CompanyDetailsResponse() {}
 
-    public CompanyDetailsResponse(String companyName, String gstNumber, String fssaiLicense, String address, String phoneNumber, String packingLicenceNo, String customerCareNumber, String customerCareEmail, String bankName, String accountNumber, String ifscCode, String branchName, Integer b2bInvoiceStart) {
+    public CompanyDetailsResponse(String companyName, String barcodeLabelCompanyName, String gstNumber, String fssaiLicense, String address, String phoneNumber, String packingLicenceNo, String customerCareNumber, String customerCareEmail, String bankName, String accountNumber, String ifscCode, String branchName, Integer b2bInvoiceStart) {
         this.companyName = companyName;
+        this.barcodeLabelCompanyName = barcodeLabelCompanyName;
         this.gstNumber = gstNumber;
         this.fssaiLicense = fssaiLicense;
         this.address = address;
@@ -39,6 +42,14 @@ public class CompanyDetailsResponse {
 
     public void setCompanyName(String companyName) {
         this.companyName = companyName;
+    }
+
+    public String getBarcodeLabelCompanyName() {
+        return this.barcodeLabelCompanyName;
+    }
+
+    public void setBarcodeLabelCompanyName(String barcodeLabelCompanyName) {
+        this.barcodeLabelCompanyName = barcodeLabelCompanyName;
     }
 
     public String getGstNumber() {
@@ -147,6 +158,8 @@ public class CompanyDetailsResponse {
         if ((this$b2bInvoiceStart == null) ? (other$b2bInvoiceStart != null) : !this$b2bInvoiceStart.equals(other$b2bInvoiceStart)) return false;
         Object this$companyName = getCompanyName(), other$companyName = other.getCompanyName();
         if ((this$companyName == null) ? (other$companyName != null) : !this$companyName.equals(other$companyName)) return false;
+        Object this$barcodeLabelCompanyName = getBarcodeLabelCompanyName(), other$barcodeLabelCompanyName = other.getBarcodeLabelCompanyName();
+        if ((this$barcodeLabelCompanyName == null) ? (other$barcodeLabelCompanyName != null) : !this$barcodeLabelCompanyName.equals(other$barcodeLabelCompanyName)) return false;
         Object this$gstNumber = getGstNumber(), other$gstNumber = other.getGstNumber();
         if ((this$gstNumber == null) ? (other$gstNumber != null) : !this$gstNumber.equals(other$gstNumber)) return false;
         Object this$fssaiLicense = getFssaiLicense(), other$fssaiLicense = other.getFssaiLicense();
@@ -177,6 +190,8 @@ public class CompanyDetailsResponse {
         result = result * PRIME + (($b2bInvoiceStart == null) ? 43 : $b2bInvoiceStart.hashCode());
         Object $companyName = getCompanyName();
         result = result * PRIME + (($companyName == null) ? 43 : $companyName.hashCode());
+        Object $barcodeLabelCompanyName = getBarcodeLabelCompanyName();
+        result = result * PRIME + (($barcodeLabelCompanyName == null) ? 43 : $barcodeLabelCompanyName.hashCode());
         Object $gstNumber = getGstNumber();
         result = result * PRIME + (($gstNumber == null) ? 43 : $gstNumber.hashCode());
         Object $fssaiLicense = getFssaiLicense();
@@ -198,6 +213,6 @@ public class CompanyDetailsResponse {
 
     @Override
     public String toString() {
-        return "CompanyDetailsResponse(companyName=" + getCompanyName() + ", gstNumber=" + getGstNumber() + ", fssaiLicense=" + getFssaiLicense() + ", address=" + getAddress() + ", phoneNumber=" + getPhoneNumber() + ", bankName=" + getBankName() + ", accountNumber=" + getAccountNumber() + ", ifscCode=" + getIfscCode() + ", branchName=" + getBranchName() + ", b2bInvoiceStart=" + getB2bInvoiceStart() + ")";
+        return "CompanyDetailsResponse(companyName=" + getCompanyName() + ", barcodeLabelCompanyName=" + getBarcodeLabelCompanyName() + ", gstNumber=" + getGstNumber() + ", fssaiLicense=" + getFssaiLicense() + ", address=" + getAddress() + ", phoneNumber=" + getPhoneNumber() + ", bankName=" + getBankName() + ", accountNumber=" + getAccountNumber() + ", ifscCode=" + getIfscCode() + ", branchName=" + getBranchName() + ", b2bInvoiceStart=" + getB2bInvoiceStart() + ")";
     }
 }

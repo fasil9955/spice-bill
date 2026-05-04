@@ -338,17 +338,10 @@ public class InvoiceService {
         }
         existingInvoice.setTotalPackages(updatedInvoice.getTotalPackages());
 
+        // Preserve B2B customer linkage exactly as selected in edit flow.
+        // Do not recreate customer records during invoice update.
         if (updatedInvoice.getB2bCustomer() != null) {
-            B2BCustomer updatedCust = updatedInvoice.getB2bCustomer();
-            B2BCustomer b2bCustomer = findOrCreateB2BCustomer(
-                updatedCust.getCustomerName(), 
-                updatedCust.getGstNumber(), 
-                updatedCust.getBillingAddress(), 
-                updatedCust.getShippingAddress(), 
-                updatedCust.getPhone(), 
-                updatedCust.getEmail()
-            );
-            existingInvoice.setB2bCustomer(b2bCustomer);
+            existingInvoice.setB2bCustomer(updatedInvoice.getB2bCustomer());
         }
 
         List<InvoiceItem> normalizedItems = normalizeInvoiceItems(items);

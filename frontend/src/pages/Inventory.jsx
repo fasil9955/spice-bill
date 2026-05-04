@@ -350,7 +350,8 @@ const Inventory = () => {
       return;
     }
     setBarcodePreviewProducts(arr);
-    setBarcodeCompanyName(user?.companyName || arr[0]?.companyName || '');
+    // Printed company name: user can override in the modal; default filled from company settings (API) below
+    setBarcodeCompanyName('');
     setBarcodeCompanyAddress('');
     setBarcodeCustomerCare('');
     setBarcodeCustomerCareEmail('');
@@ -376,14 +377,21 @@ const Inventory = () => {
     setShowBarcodePreview(true);
     try {
       const res = await authService.getCompanyDetails();
-      const fssai = res?.data?.fssaiLicense ?? '';
+      const d = res?.data || {};
+      const fssai = d.fssaiLicense ?? '';
       setBarcodeFssai(fssai);
-      setBarcodeCompanyAddress(res?.data?.address ?? '');
-      setBarcodeCustomerCare(res?.data?.customerCareNumber ?? res?.data?.phoneNumber ?? '');
-      setBarcodeCustomerCareEmail(res?.data?.customerCareEmail ?? '');
-      setBarcodePackingLicense(res?.data?.packingLicenceNo ?? '');
+      // Sticker name: Settings → "Name on barcode labels", else billing company name — still editable before print
+      const labelName = (d.barcodeLabelCompanyName || '').toString().trim();
+      const billingName = (d.companyName || '').toString().trim();
+      const fallbackName = (user?.companyName || arr[0]?.companyName || '').toString().trim();
+      setBarcodeCompanyName(labelName || billingName || fallbackName);
+      setBarcodeCompanyAddress(d.address ?? '');
+      setBarcodeCustomerCare(d.customerCareNumber ?? d.phoneNumber ?? '');
+      setBarcodeCustomerCareEmail(d.customerCareEmail ?? '');
+      setBarcodePackingLicense(d.packingLicenceNo ?? '');
     } catch {
       setBarcodeFssai('');
+      setBarcodeCompanyName((user?.companyName || arr[0]?.companyName || '').toString().trim());
     }
   };
 
@@ -1737,15 +1745,18 @@ const Inventory = () => {
                 <h3>Company Details:</h3>
                 <div className="company-inputs-row">
                   <div className="input-field-group">
-                    <label>Company Name:</label>
+                    <label>Company name (printed on sticker)</label>
                     <input
                       type="text"
-                      placeholder="Enter company name"
+                      placeholder="Defaults from Settings → Name on barcode labels"
                       value={barcodeCompanyName}
                       onChange={(e) => setBarcodeCompanyName(e.target.value)}
                       className="company-name-input"
-                      maxLength={50}
+                      maxLength={200}
                     />
+                    <span className="barcode-field-hint">
+                      Pre-filled from admin Settings (label name, then billing company). You can change it for this print only — it is not saved here.
+                    </span>
                   </div>
                     <div className="input-field-group">
                       <label>Company Address:</label>
