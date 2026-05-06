@@ -57,6 +57,8 @@ const Billing = () => {
   const [selectedForCart, setSelectedForCart] = useState(null); // product selected from search, pending qty + add
   const [selectedQtyInput, setSelectedQtyInput] = useState(''); // string so user can type 0.25, 0, etc.; default empty (nil)
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Tracks whether user navigated the search results with arrow keys (so Enter should pick a highlighted item)
+  const usedSearchArrowsRef = useRef(false);
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
   const handlePreviewRef = useRef(null);
@@ -113,6 +115,8 @@ const Billing = () => {
   const handleSearchChange = async (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
+    // New term typed/scanned – treat as fresh search; dropdown navigation (arrows) not yet used.
+    usedSearchArrowsRef.current = false;
     if (trimmed.length > 0) {
       try {
         const response = await productService.getAll();
@@ -136,19 +140,22 @@ const Billing = () => {
     // Arrow navigation within dropdown
     if (e.key === 'ArrowDown' && searchResults.length > 0) {
       e.preventDefault();
+      usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i < searchResults.length - 1 ? i + 1 : 0));
       return;
     }
     if (e.key === 'ArrowUp' && searchResults.length > 0) {
       e.preventDefault();
+      usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1));
       return;
     }
 
-    // Enter: if dropdown has results and a valid highlighted row (first row is 0 by default), select it.
-    // Otherwise treat as barcode / parseBarcode path (runs after short delay for scanners).
+    // Enter key behaviour:
+    // - If user navigated dropdown with arrows and a product is highlighted, Enter selects that product.
+    // - Otherwise (typical barcode scan), we delay handling slightly and then treat it as a barcode.
     if (e.key === 'Enter') {
-      if (searchResults.length > 0 && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+      if (usedSearchArrowsRef.current && searchResults.length > 0 && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
         e.preventDefault();
         const p = searchResults[highlightedIndex];
         setSelectedForCart(p);
