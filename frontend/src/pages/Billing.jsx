@@ -16,6 +16,13 @@ import {
   X,
   Phone
 } from 'lucide-react';
+import {
+  getStockCeilingForAdd,
+  wouldExceedStock,
+  wouldExceedStockDirect,
+  parseProductStock,
+} from '../utils/stockValidation';
+import InsufficientStockModal from '../components/InsufficientStockModal';
 
 const DISCOUNT_PERCENT_MAX = 30;
 const BILLING_CART_KEY = 'spice_billing_cart';
@@ -50,13 +57,14 @@ const Billing = () => {
   const [selectedForCart, setSelectedForCart] = useState(null); // product selected from search, pending qty + add
   const [selectedQtyInput, setSelectedQtyInput] = useState(''); // string so user can type 0.25, 0, etc.; default empty (nil)
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  // Tracks whether user navigated the search results with arrow keys (so Enter should pick a highlighted item)
-  const usedSearchArrowsRef = useRef(false);
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
   const handlePreviewRef = useRef(null);
   const handleSaveAndPrintRef = useRef(null);
+  const insufficientRetryRef = useRef(null);
   const navigate = useNavigate();
+
+  const [insufficientStockContext, setInsufficientStockContext] = useState(null);
 
   useEffect(() => {
     handlePreviewRef.current = handlePreview;
@@ -105,8 +113,6 @@ const Billing = () => {
   const handleSearchChange = async (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
-    // New term typed/scanned – treat as fresh search; dropdown navigation (arrows) not yet used.
-    usedSearchArrowsRef.current = false;
     if (trimmed.length > 0) {
       try {
         const response = await productService.getAll();
@@ -130,22 +136,19 @@ const Billing = () => {
     // Arrow navigation within dropdown
     if (e.key === 'ArrowDown' && searchResults.length > 0) {
       e.preventDefault();
-      usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i < searchResults.length - 1 ? i + 1 : 0));
       return;
     }
     if (e.key === 'ArrowUp' && searchResults.length > 0) {
       e.preventDefault();
-      usedSearchArrowsRef.current = true;
       setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1));
       return;
     }
 
-    // Enter key behaviour:
-    // - If user navigated dropdown with arrows and a product is highlighted, Enter selects that product.
-    // - Otherwise (typical barcode scan), we delay handling slightly and then treat it as a barcode.
+    // Enter: if dropdown has results and a valid highlighted row (first row is 0 by default), select it.
+    // Otherwise treat as barcode / parseBarcode path (runs after short delay for scanners).
     if (e.key === 'Enter') {
-      if (usedSearchArrowsRef.current && searchResults.length > 0 && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+      if (searchResults.length > 0 && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
         e.preventDefault();
         const p = searchResults[highlightedIndex];
         setSelectedForCart(p);
@@ -245,26 +248,83 @@ const Billing = () => {
 
   const addToCart = (product, initialQty = 1) => {
     const qty = typeof initialQty === 'number' && initialQty > 0 ? initialQty : 1;
+    const roundedQty = parseFloat(Number(qty).toFixed(3));
     setCart(prev => {
       const existing = prev.find(item => item.productId === product.productId);
+      const currentInCart = existing ? Number(existing.quantity) || 0 : 0;
+      const ceiling = getStockCeilingForAdd(product, existing);
+      if (wouldExceedStock(ceiling, currentInCart, roundedQty)) {
+        insufficientRetryRef.current = { type: 'ADD_CART', qty: roundedQty };
+        setInsufficientStockContext({
+          product,
+          ceiling,
+          requestedTotalQty: currentInCart + roundedQty,
+        });
+        return prev;
+      }
+      const incomingStock = parseProductStock(product);
+      const stockSnapshot = incomingStock !== null ? incomingStock : existing?.stockOnHand ?? null;
       if (existing) {
         return prev.map(item =>
           item.productId === product.productId
-            ? { ...item, quantity: parseFloat(Number(item.quantity + qty).toFixed(3)) }
+            ? {
+                ...item,
+                quantity: parseFloat(Number(item.quantity + roundedQty).toFixed(3)),
+                stockOnHand: stockSnapshot ?? item.stockOnHand,
+              }
             : item
         );
       }
-      return [{ ...product, unitPrice: product.sellingPricePerUnit, quantity: parseFloat(Number(qty).toFixed(3)) }, ...prev];
+      return [
+        {
+          ...product,
+          unitPrice: product.sellingPricePerUnit,
+          quantity: roundedQty,
+          stockOnHand: stockSnapshot,
+        },
+        ...prev,
+      ];
     });
     setSearchResults([]);
     setSearchTerm('');
     setTimeout(() => searchInputRef.current?.focus(), 0);
   };
 
+  const handleInsufficientStockResolved = (freshProduct) => {
+    const r = insufficientRetryRef.current;
+    insufficientRetryRef.current = null;
+    setInsufficientStockContext(null);
+    if (!freshProduct || !r) return;
+    if (r.type === 'ADD_CART') {
+      addToCart(freshProduct, r.qty);
+    } else if (r.type === 'SET_QTY') {
+      const ceiling = parseProductStock(freshProduct);
+      setCart(prev => prev.map(item =>
+        item.productId === r.productId
+          ? {
+              ...item,
+              quantity: parseFloat(Number(r.newQty).toFixed(3)),
+              stockOnHand: ceiling,
+            }
+          : item
+      ));
+    }
+  };
+
   const updateQuantity = (productId, delta) => {
     setCart(prev => prev.map(item => {
       if (item.productId === productId) {
         const newQty = Math.max(0.1, item.quantity + delta);
+        const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
+        if (wouldExceedStockDirect(ceiling, newQty)) {
+          insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty };
+          setInsufficientStockContext({
+            product: item,
+            ceiling,
+            requestedTotalQty: newQty,
+          });
+          return item;
+        }
         return { ...item, quantity: parseFloat(newQty.toFixed(3)) };
       }
       return item;
@@ -277,6 +337,16 @@ const Billing = () => {
     setCart(prev => prev.map(item => {
       if (item.productId !== productId) return item;
       const qty = num <= 0 ? 0 : parseFloat(Number(num).toFixed(3));
+      const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
+      if (wouldExceedStockDirect(ceiling, qty)) {
+        insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty: qty };
+        setInsufficientStockContext({
+          product: item,
+          ceiling,
+          requestedTotalQty: qty,
+        });
+        return item;
+      }
       return { ...item, quantity: qty };
     }).filter(item => item.quantity > 0));
     setEditingQty(prev => ({ ...prev, [productId]: undefined }));
@@ -1050,6 +1120,21 @@ const Billing = () => {
           </div>
         </div>
       ); })()}
+
+      <InsufficientStockModal
+        open={Boolean(insufficientStockContext)}
+        productId={insufficientStockContext?.product?.productId}
+        productName={insufficientStockContext?.product?.productName}
+        unit={insufficientStockContext?.product?.unit}
+        currentStock={insufficientStockContext?.ceiling}
+        requestedTotalQty={insufficientStockContext?.requestedTotalQty}
+        qtyDecimals={3}
+        onClose={() => {
+          insufficientRetryRef.current = null;
+          setInsufficientStockContext(null);
+        }}
+        onStockAdded={handleInsufficientStockResolved}
+      />
     </div>
   );
 };

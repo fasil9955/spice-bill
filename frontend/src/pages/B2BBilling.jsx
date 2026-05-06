@@ -4,6 +4,13 @@ import { productService, invoiceService, authService, b2bCustomerService } from 
 import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees } from '../utils/invoicePrint';
 import './Billing.css';
 import { Search, Plus, Minus, ShoppingCart, Printer, ArrowLeft, X, UserPlus, Pencil } from 'lucide-react';
+import {
+  getStockCeilingForAdd,
+  wouldExceedStock,
+  wouldExceedStockDirect,
+  parseProductStock,
+} from '../utils/stockValidation';
+import InsufficientStockModal from '../components/InsufficientStockModal';
 
 const DISCOUNT_PERCENT_MAX = 30;
 
@@ -54,7 +61,9 @@ const B2BBilling = () => {
   const [nextBillNumber, setNextBillNumber] = useState('');
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
+  const insufficientRetryRef = useRef(null);
   const navigate = useNavigate();
+  const [insufficientStockContext, setInsufficientStockContext] = useState(null);
   const { invoiceId: editInvoiceId } = useParams();
   const editMode = !!editInvoiceId;
   const [editLoading, setEditLoading] = useState(!!editInvoiceId);
@@ -277,33 +286,86 @@ const B2BBilling = () => {
 
   const addToCart = (product, initialQty = 1) => {
     const qty = typeof initialQty === 'number' && initialQty > 0 ? initialQty : 1;
+    const roundedQty = parseFloat(Number(qty).toFixed(2));
     const gstPct = Number(product.category?.gstPercentage) ?? 0;
     setCart(prev => {
       const existing = prev.find(item => item.productId === product.productId);
+      const currentInCart = existing ? Number(existing.quantity) || 0 : 0;
+      const ceiling = getStockCeilingForAdd(product, existing);
+      if (wouldExceedStock(ceiling, currentInCart, roundedQty)) {
+        insufficientRetryRef.current = { type: 'ADD_CART', qty: roundedQty };
+        setInsufficientStockContext({
+          product,
+          ceiling,
+          requestedTotalQty: currentInCart + roundedQty,
+        });
+        return prev;
+      }
+      const incomingStock = parseProductStock(product);
+      const stockSnapshot = incomingStock !== null ? incomingStock : existing?.stockOnHand ?? null;
       if (existing) {
         return prev.map(item =>
           item.productId === product.productId
-            ? { ...item, quantity: parseFloat(Number(item.quantity + qty).toFixed(2)) }
+            ? {
+                ...item,
+                quantity: parseFloat(Number(item.quantity + roundedQty).toFixed(2)),
+                stockOnHand: stockSnapshot ?? item.stockOnHand,
+              }
             : item
         );
       }
-      return [{
-        ...product,
-        unitPrice: product.sellingPricePerUnit ?? product.unitPrice,
-        quantity: parseFloat(Number(qty).toFixed(2)),
-        hsnCode: product.hsnCode || '',
-        gstPercentage: gstPct
-      }, ...prev];
+      return [
+        {
+          ...product,
+          unitPrice: product.sellingPricePerUnit ?? product.unitPrice,
+          quantity: roundedQty,
+          hsnCode: product.hsnCode || '',
+          gstPercentage: gstPct,
+          stockOnHand: stockSnapshot,
+        },
+        ...prev,
+      ];
     });
     setSearchResults([]);
     setSearchTerm('');
     setTimeout(() => searchInputRef.current?.focus(), 0);
   };
 
+  const handleInsufficientStockResolved = (freshProduct) => {
+    const r = insufficientRetryRef.current;
+    insufficientRetryRef.current = null;
+    setInsufficientStockContext(null);
+    if (!freshProduct || !r) return;
+    if (r.type === 'ADD_CART') {
+      addToCart(freshProduct, r.qty);
+    } else if (r.type === 'SET_QTY') {
+      const ceiling = parseProductStock(freshProduct);
+      setCart(prev => prev.map(item =>
+        item.productId === r.productId
+          ? {
+              ...item,
+              quantity: parseFloat(Number(r.newQty).toFixed(2)),
+              stockOnHand: ceiling,
+            }
+          : item
+      ));
+    }
+  };
+
   const updateQuantity = (productId, delta) => {
     setCart(prev => prev.map(item => {
       if (item.productId === productId) {
         const newQty = Math.max(0.1, item.quantity + delta);
+        const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
+        if (wouldExceedStockDirect(ceiling, newQty)) {
+          insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty };
+          setInsufficientStockContext({
+            product: item,
+            ceiling,
+            requestedTotalQty: newQty,
+          });
+          return item;
+        }
         return { ...item, quantity: parseFloat(newQty.toFixed(2)) };
       }
       return item;
@@ -316,6 +378,16 @@ const B2BBilling = () => {
     setCart(prev => prev.map(item => {
       if (item.productId !== productId) return item;
       const qty = num <= 0 ? 0 : parseFloat(Number(num).toFixed(3));
+      const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
+      if (wouldExceedStockDirect(ceiling, qty)) {
+        insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty: qty };
+        setInsufficientStockContext({
+          product: item,
+          ceiling,
+          requestedTotalQty: qty,
+        });
+        return item;
+      }
       return { ...item, quantity: qty };
     }).filter(item => item.quantity > 0));
     setEditingQty(prev => ({ ...prev, [productId]: undefined }));
@@ -1310,6 +1382,21 @@ const B2BBilling = () => {
           </div>
         );
       })()}
+
+      <InsufficientStockModal
+        open={Boolean(insufficientStockContext)}
+        productId={insufficientStockContext?.product?.productId}
+        productName={insufficientStockContext?.product?.productName}
+        unit={insufficientStockContext?.product?.unit}
+        currentStock={insufficientStockContext?.ceiling}
+        requestedTotalQty={insufficientStockContext?.requestedTotalQty}
+        qtyDecimals={2}
+        onClose={() => {
+          insufficientRetryRef.current = null;
+          setInsufficientStockContext(null);
+        }}
+        onStockAdded={handleInsufficientStockResolved}
+      />
     </div>
   );
 };

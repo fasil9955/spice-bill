@@ -53,6 +53,8 @@ export const productService = {
   parseBarcode: (fullBarcode) => api.get(`/products/barcode/parse/${encodeURIComponent(fullBarcode)}`),
   create: (data) => api.post('/products', data),
   update: (id, data) => api.put(`/products/${id}`, data),
+  /** Add to on-hand quantity (positive). Returns updated product. */
+  adjustStock: (id, addQty) => api.patch(`/products/${id}/stock-adjust`, { addQty }),
   delete: (id) => api.delete(`/products/${id}`),
 };
 
@@ -78,7 +80,12 @@ export const invoiceService = {
   getNextInvoiceNumber: (invoiceType = 'RETAIL') => api.get(`/invoices/next-invoice-number?invoiceType=${encodeURIComponent(invoiceType)}`),
   getNextB2BInvoiceNumber: () => api.get('/invoices/b2b/next-invoice-number'),
   getAll: () => api.get('/invoices'),
-  getByDate: (date) => api.get(`/invoices/date?date=${encodeURIComponent(date)}`),
+  /** @param {{ activeSalesOnly?: boolean }} [options] — exclude cancelled / pending-cancellation from totals */
+  getByDate: (date, options = {}) => {
+    const params = new URLSearchParams({ date });
+    if (options.activeSalesOnly) params.set('activeSalesOnly', 'true');
+    return api.get(`/invoices/date?${params.toString()}`);
+  },
   getById: (id) => api.get(`/invoices/${id}`),
   getByNumber: (number) => api.get(`/invoices/number/${number}`),
   getB2B: () => api.get('/invoices/b2b'),

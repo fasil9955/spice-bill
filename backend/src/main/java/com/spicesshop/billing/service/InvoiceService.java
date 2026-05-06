@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -275,7 +276,21 @@ public class InvoiceService {
     }
 
     public List<Invoice> getInvoicesByDate(LocalDate date, String companyName) {
-        return this.invoiceRepository.findByCompanyNameAndDate(companyName, date);
+        return getInvoicesByDate(date, companyName, false);
+    }
+
+    /**
+     * When {@code activeSalesOnly} is true, excludes invoices that are cancelled or awaiting cancellation approval,
+     * so totals match realised retail sales for accounting.
+     */
+    public List<Invoice> getInvoicesByDate(LocalDate date, String companyName, boolean activeSalesOnly) {
+        List<Invoice> list = this.invoiceRepository.findByCompanyNameAndDate(companyName, date);
+        if (!activeSalesOnly) {
+            return list;
+        }
+        return list.stream()
+            .filter(inv -> inv.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .collect(Collectors.toList());
     }
 
     public List<Invoice> getInvoicesByDateRange(LocalDateTime startDate, LocalDateTime endDate, String companyName) {

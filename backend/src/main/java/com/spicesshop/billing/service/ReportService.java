@@ -40,7 +40,10 @@ public class ReportService {
         DailySalesReport report = new DailySalesReport();
         report.setCompanyName(companyName);
         report.setReportDate(date);
-        report.setTotalInvoices(invoices.size());
+        long activeCount = invoices.stream()
+            .filter(inv -> inv.getStatus() == null || inv.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .count();
+        report.setTotalInvoices((int) activeCount);
 
         BigDecimal totalSales = BigDecimal.ZERO;
         BigDecimal totalTax = BigDecimal.ZERO;
@@ -52,6 +55,9 @@ public class ReportService {
         BigDecimal mixedSales = BigDecimal.ZERO;
 
         for (Invoice invoice : invoices) {
+            if (invoice.getStatus() != null && invoice.getStatus() != Invoice.InvoiceStatus.ACTIVE) {
+                continue;
+            }
             totalSales = totalSales.add(invoice.getTotalAmount());
             totalTax = totalTax.add(invoice.getTaxAmount());
             totalDiscount = totalDiscount.add(invoice.getDiscountAmount());
@@ -100,19 +106,25 @@ public class ReportService {
         summary.setCompanyName(companyName);
         summary.setYear(year);
         summary.setMonth(month);
-        summary.setTotalInvoices(invoices.size());
 
         BigDecimal totalSales = BigDecimal.ZERO;
         BigDecimal totalTax = BigDecimal.ZERO;
         BigDecimal totalDiscount = BigDecimal.ZERO;
         int totalItems = 0;
+        int activeInvoiceCount = 0;
 
         for (Invoice invoice : invoices) {
+            if (invoice.getStatus() != null && invoice.getStatus() != Invoice.InvoiceStatus.ACTIVE) {
+                continue;
+            }
+            activeInvoiceCount++;
             totalSales = totalSales.add(invoice.getTotalAmount());
             totalTax = totalTax.add(invoice.getTaxAmount());
             totalDiscount = totalDiscount.add(invoice.getDiscountAmount());
             totalItems += invoice.getItems().size();
         }
+
+        summary.setTotalInvoices(activeInvoiceCount);
 
         summary.setTotalSales(totalSales);
         summary.setTotalTax(totalTax);

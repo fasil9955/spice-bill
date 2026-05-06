@@ -247,11 +247,12 @@ public class InvoiceController {
 
     @GetMapping({"/date"})
     public ResponseEntity<?> getInvoicesByDate(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date, 
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false, defaultValue = "false") boolean activeSalesOnly,
             HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
-            return ResponseEntity.ok(this.invoiceService.getInvoicesByDate(date, companyName));
+            return ResponseEntity.ok(this.invoiceService.getInvoicesByDate(date, companyName, activeSalesOnly));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

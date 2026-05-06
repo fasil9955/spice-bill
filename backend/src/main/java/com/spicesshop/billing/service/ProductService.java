@@ -236,4 +236,23 @@ public class ProductService {
         product.setQuantity(quantity);
         this.productRepository.save(product);
     }
+
+    /** Add inbound stock (e.g. quick adjustment from billing screen). */
+    @Transactional
+    public Product addStockDelta(Integer productId, BigDecimal addQty, String companyName) {
+        if (addQty == null || addQty.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("Add quantity must be greater than zero");
+        }
+
+        Product product = this.productRepository.findById(productId)
+            .orElseThrow(() -> new RuntimeException("Product not found"));
+
+        if (!product.getCompanyName().equals(companyName)) {
+            throw new RuntimeException("Product not found or access denied");
+        }
+
+        BigDecimal current = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
+        product.setQuantity(current.add(addQty));
+        return this.productRepository.save(product);
+    }
 }

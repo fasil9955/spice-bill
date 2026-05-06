@@ -6,6 +6,7 @@ import com.spicesshop.billing.model.Product;
 import com.spicesshop.billing.service.ProductService;
 import com.spicesshop.billing.util.CompanyExtractor;
 import jakarta.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -85,6 +86,29 @@ public class ProductController {
                 product.setUnit("".equals(unitVal) ? null : unitVal);
             }
             return ResponseEntity.ok(this.productService.createProduct(product));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Increase on-hand quantity without sending the full product body (billing quick stock-in).
+     * Body: { "addQty": number }
+     */
+    @PatchMapping({"/{id}/stock-adjust"})
+    public ResponseEntity<?> adjustStock(@PathVariable Integer id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            Object aq = body != null ? body.get("addQty") : null;
+            if (aq == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "addQty is required"));
+            }
+            BigDecimal addQty = new BigDecimal(aq.toString());
+            Product updated = this.productService.addStockDelta(id, addQty, companyName);
+            return ResponseEntity.ok(updated);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

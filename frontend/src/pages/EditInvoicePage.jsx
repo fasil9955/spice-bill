@@ -3,6 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { invoiceService, productService } from '../services/api';
 import { Search, Plus, Minus, ShoppingCart, ArrowLeft, X } from 'lucide-react';
 import './Billing.css';
+import {
+  getEditInvoiceMaxQty,
+  wouldExceedStock,
+  wouldExceedStockDirect,
+} from '../utils/stockValidation';
+import InsufficientStockModal from '../components/InsufficientStockModal';
 
 const DISCOUNT_PERCENT_MAX = 30;
 
@@ -37,6 +43,10 @@ const EditInvoicePage = () => {
   const [editingQty, setEditingQty] = useState({});
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
+  const insufficientRetryRef = useRef(null);
+  /** Original invoiced qty per product — used with current DB stock for edit limits */
+  const initialInvoiceQtyByProductIdRef = useRef({});
+  const [insufficientStockContext, setInsufficientStockContext] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -81,6 +91,12 @@ const EditInvoicePage = () => {
           quantity: Number(it.quantity) || 0,
           unitPrice: Number(it.unitPrice) || 0
         }));
+        const qtyMap = {};
+        for (const row of mapped) {
+          if (!row.productId) continue;
+          qtyMap[row.productId] = (qtyMap[row.productId] || 0) + (Number(row.quantity) || 0);
+        }
+        initialInvoiceQtyByProductIdRef.current = qtyMap;
         setItems(mapped);
         setProducts(Array.isArray(prodRes?.data) ? prodRes.data : []);
       } catch (err) {
@@ -125,10 +141,26 @@ const EditInvoicePage = () => {
   const total = Math.max(0, subtotal - discount);
 
   /** Add or merge line; newest / last added appears at top */
-  const addLineToCart = (product, qtyNum) => {
+  const addLineToCart = (product, qtyNum, productStockOverride = null) => {
     const q = typeof qtyNum === 'number' && Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 1;
     setItems(prev => {
       const idx = prev.findIndex(it => it.productId === product.productId);
+      const currentInCart = idx >= 0 ? Number(prev[idx].quantity) || 0 : 0;
+      const maxAllowed = getEditInvoiceMaxQty(
+        products,
+        product.productId,
+        initialInvoiceQtyByProductIdRef.current,
+        productStockOverride ?? product
+      );
+      if (wouldExceedStock(maxAllowed, currentInCart, q)) {
+        insufficientRetryRef.current = { type: 'EDIT_ADD_LINE', qty: q, productSnapshot: product };
+        setInsufficientStockContext({
+          product,
+          ceiling: maxAllowed,
+          requestedTotalQty: currentInCart + q,
+        });
+        return prev;
+      }
       if (idx >= 0) {
         const row = prev[idx];
         const mergedQty = (Number(row.quantity) || 0) + q;
@@ -165,6 +197,21 @@ const EditInvoicePage = () => {
     setSelectedForCart(null);
     setSelectedQtyInput('1');
     searchInputRef.current?.focus();
+  };
+
+  const handleInsufficientStockResolved = (freshProduct) => {
+    const r = insufficientRetryRef.current;
+    insufficientRetryRef.current = null;
+    setInsufficientStockContext(null);
+    if (!freshProduct || !r) return;
+    setProducts(prev => prev.map(p => (p.productId === freshProduct.productId ? { ...p, ...freshProduct } : p)));
+    if (r.type === 'EDIT_ADD_LINE') {
+      addLineToCart(r.productSnapshot, r.qty, freshProduct);
+    } else if (r.type === 'EDIT_SET_QTY') {
+      setItems(prev => prev.map(it =>
+        it.productId === r.productId ? { ...it, quantity: r.newQty } : it
+      ));
+    }
   };
 
   const runSearchSubmit = async () => {
@@ -221,6 +268,16 @@ const EditInvoicePage = () => {
     setItems(prev => prev.map(it => {
       if (it.productId !== productId) return it;
       const newQty = Math.max(0.0001, (Number(it.quantity) || 0) + delta);
+      const maxAllowed = getEditInvoiceMaxQty(products, productId, initialInvoiceQtyByProductIdRef.current);
+      if (wouldExceedStockDirect(maxAllowed, newQty)) {
+        insufficientRetryRef.current = { type: 'EDIT_SET_QTY', productId, newQty };
+        setInsufficientStockContext({
+          product: it,
+          ceiling: maxAllowed,
+          requestedTotalQty: newQty,
+        });
+        return it;
+      }
       return { ...it, quantity: newQty };
     }).filter(it => (Number(it.quantity) || 0) > 0));
     setEditingQty(prev => ({ ...prev, [productId]: undefined }));
@@ -245,6 +302,18 @@ const EditInvoicePage = () => {
     }
     const num = parseQty(raw);
     if (!Number.isFinite(num) || num <= 0) {
+      setEditingQty(prev => ({ ...prev, [productId]: undefined }));
+      return;
+    }
+    const maxAllowed = getEditInvoiceMaxQty(products, productId, initialInvoiceQtyByProductIdRef.current);
+    if (wouldExceedStockDirect(maxAllowed, num)) {
+      const row = items.find((it) => it.productId === productId);
+      insufficientRetryRef.current = { type: 'EDIT_SET_QTY', productId, newQty: num };
+      setInsufficientStockContext({
+        product: row ? { ...row, productId } : { productId, productName: '—', unit: '' },
+        ceiling: maxAllowed,
+        requestedTotalQty: num,
+      });
       setEditingQty(prev => ({ ...prev, [productId]: undefined }));
       return;
     }
@@ -528,6 +597,21 @@ const EditInvoicePage = () => {
           </div>
         </div>
       </div>
+
+      <InsufficientStockModal
+        open={Boolean(insufficientStockContext)}
+        productId={insufficientStockContext?.product?.productId}
+        productName={insufficientStockContext?.product?.productName}
+        unit={insufficientStockContext?.product?.unit}
+        currentStock={insufficientStockContext?.ceiling}
+        requestedTotalQty={insufficientStockContext?.requestedTotalQty}
+        qtyDecimals={3}
+        onClose={() => {
+          insufficientRetryRef.current = null;
+          setInsufficientStockContext(null);
+        }}
+        onStockAdded={handleInsufficientStockResolved}
+      />
     </div>
   );
 };

@@ -6,7 +6,7 @@ import {
   expenseService,
   employeeService,
 } from '../services/api';
-import { ArrowLeft, Printer, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Printer, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import './DailyAccountingPage.css';
 
 const getTodayDateString = () => new Date().toISOString().slice(0, 10);
@@ -47,6 +47,8 @@ const DailyAccountingPage = () => {
   const [displayDate, setDisplayDate] = useState(formatDisplayDate(getTodayDateString()));
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [pendingCancellationNotice, setPendingCancellationNotice] = useState(false);
+  const [pendingCancellationCount, setPendingCancellationCount] = useState(0);
 
   const [invoices, setInvoices] = useState([]);
   const [billingBookSales, setBillingBookSales] = useState('');
@@ -81,7 +83,7 @@ const DailyAccountingPage = () => {
     setDataLoaded(false);
     try {
       const [invRes, sumRes, expRes, empRes] = await Promise.all([
-        invoiceService.getByDate(isoDate),
+        invoiceService.getByDate(isoDate, { activeSalesOnly: true }),
         accountingService.getDaySummary(isoDate).catch(() => ({ data: {} })),
         expenseService.getByDate(isoDate),
         employeeService.getAll().catch(() => ({ data: [] })),
@@ -136,6 +138,31 @@ const DailyAccountingPage = () => {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  /** Admin: remind to process retail cancellation requests before day-close accounting */
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const raw = localStorage.getItem('user');
+        if (!raw) return;
+        const u = JSON.parse(raw);
+        if (u.role !== 'ADMIN') return;
+        const res = await invoiceService.getCancellationRequests();
+        const list = Array.isArray(res?.data) ? res.data : [];
+        if (!cancelled && list.length > 0) {
+          setPendingCancellationCount(list.length);
+          setPendingCancellationNotice(true);
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleLoadData = () => {
@@ -402,6 +429,50 @@ const DailyAccountingPage = () => {
 
   return (
     <div className="daily-accounting-page">
+      {pendingCancellationNotice && (
+        <div
+          className="daily-accounting-gate-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="daily-accounting-gate-title"
+        >
+          <div className="daily-accounting-gate-modal">
+            <div className="daily-accounting-gate-icon">
+              <AlertTriangle size={40} strokeWidth={2} />
+            </div>
+            <h2 id="daily-accounting-gate-title">Cancellation requests pending</h2>
+            <p>
+              There {pendingCancellationCount === 1 ? 'is' : 'are'}{' '}
+              <strong>{pendingCancellationCount}</strong> retail invoice cancellation request
+              {pendingCancellationCount === 1 ? '' : 's'} waiting for approval.
+            </p>
+            <p className="daily-accounting-gate-hint">
+              Approve or reject these from <strong>Cancellation Requests</strong> so your accounting totals stay correct.
+              Pending and cancelled bills are excluded from system sales on this page.
+            </p>
+            <div className="daily-accounting-gate-actions">
+              <button
+                type="button"
+                className="daily-accounting-gate-primary"
+                onClick={() => {
+                  setPendingCancellationNotice(false);
+                  navigate('/dashboard/cancellation-requests');
+                }}
+              >
+                Open cancellation requests
+              </button>
+              <button
+                type="button"
+                className="daily-accounting-gate-secondary"
+                onClick={() => setPendingCancellationNotice(false)}
+              >
+                Continue to accounting
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="daily-accounting-header">
         <div>
           <h1>Accounting &amp; Day Close</h1>
