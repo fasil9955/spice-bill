@@ -132,9 +132,9 @@ public class InvoiceController {
     private static BigDecimal toBigDecimal(Object val) {
         if (val == null) return BigDecimal.ZERO;
         if (val instanceof BigDecimal) return (BigDecimal) val;
-        if (val instanceof Number) return BigDecimal.valueOf(((Number) val).doubleValue());
         try {
-            return new BigDecimal(val.toString());
+            // Prefer string form so values like 0.125 are not corrupted by double rounding
+            return new BigDecimal(val.toString().trim());
         } catch (Exception e) {
             return BigDecimal.ZERO;
         }

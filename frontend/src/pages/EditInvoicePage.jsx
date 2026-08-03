@@ -17,9 +17,28 @@ const parseQty = (raw) => {
   if (raw == null || raw === '') return NaN;
   const s = String(raw).trim().replace(',', '.');
   if (s === '' || s === '.') return NaN;
-  const n = parseFloat(s);
+  // Prefer decimal string path — avoids Number() mangling where possible
+  const n = Number(s);
   if (!Number.isFinite(n)) return NaN;
   return n;
+};
+
+/** Stable display for qty inputs (keeps 0.125 as "0.125", not "0.13" / "0.3"). */
+const formatQtyDisplay = (q) => {
+  if (q == null || q === '') return '';
+  if (typeof q === 'string') {
+    const t = q.trim();
+    if (t === '' || t === '.') return t;
+    // Keep user-typed / API string when it already looks like a decimal
+    if (/^-?\d+(\.\d+)?$/.test(t)) return t.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/\.$/, '') || '0';
+  }
+  const n = Number(q);
+  if (!Number.isFinite(n)) return '';
+  // Up to 6 dp, strip trailing zeros — never round down to 2 dp
+  return n
+    .toFixed(6)
+    .replace(/(\.\d*?[1-9])0+$/, '$1')
+    .replace(/\.0+$/, '');
 };
 
 const EditInvoicePage = () => {
@@ -84,13 +103,19 @@ const EditInvoicePage = () => {
         setDiscountAmount(disc);
         setDiscountPercent(0);
         setDiscountType('amount');
-        const mapped = (inv.items || []).map(it => ({
-          productId: it.product?.productId,
-          productName: it.productName || '-',
-          unit: it.unit || '',
-          quantity: Number(it.quantity) || 0,
-          unitPrice: Number(it.unitPrice) || 0
-        }));
+        const mapped = (inv.items || []).map(it => {
+          // Keep API decimal text when present (BigDecimal serializes as number/string)
+          const rawQty = it.quantity;
+          const qtyNum = parseQty(rawQty);
+          return {
+            productId: it.product?.productId,
+            productName: it.productName || '-',
+            unit: it.unit || '',
+            quantity: Number.isFinite(qtyNum) ? qtyNum : 0,
+            quantityText: formatQtyDisplay(rawQty),
+            unitPrice: Number(it.unitPrice) || 0
+          };
+        });
         const qtyMap = {};
         for (const row of mapped) {
           if (!row.productId) continue;
@@ -164,7 +189,7 @@ const EditInvoicePage = () => {
       if (idx >= 0) {
         const row = prev[idx];
         const mergedQty = (Number(row.quantity) || 0) + q;
-        const newRow = { ...row, quantity: mergedQty };
+        const newRow = { ...row, quantity: mergedQty, quantityText: formatQtyDisplay(mergedQty) };
         return [newRow, ...prev.filter((_, i) => i !== idx)];
       }
       return [{
@@ -172,6 +197,7 @@ const EditInvoicePage = () => {
         productName: product.productName || '-',
         unit: product.unit || '',
         quantity: q,
+        quantityText: formatQtyDisplay(q),
         unitPrice: Number(product.sellingPricePerUnit ?? product.unitPrice) || 0
       }, ...prev];
     });
@@ -209,7 +235,9 @@ const EditInvoicePage = () => {
       addLineToCart(r.productSnapshot, r.qty, freshProduct);
     } else if (r.type === 'EDIT_SET_QTY') {
       setItems(prev => prev.map(it =>
-        it.productId === r.productId ? { ...it, quantity: r.newQty } : it
+        it.productId === r.productId
+          ? { ...it, quantity: r.newQty, quantityText: formatQtyDisplay(r.newQty) }
+          : it
       ));
     }
   };
@@ -267,7 +295,8 @@ const EditInvoicePage = () => {
   const updateItemQty = (productId, delta) => {
     setItems(prev => prev.map(it => {
       if (it.productId !== productId) return it;
-      const newQty = Math.max(0.0001, (Number(it.quantity) || 0) + delta);
+      // Small step so weight qtys like 0.125 are not jumped by whole units
+      const newQty = Math.max(0.000001, parseFloat(((Number(it.quantity) || 0) + delta).toFixed(6)));
       const maxAllowed = getEditInvoiceMaxQty(products, productId, initialInvoiceQtyByProductIdRef.current);
       if (wouldExceedStockDirect(maxAllowed, newQty)) {
         insufficientRetryRef.current = { type: 'EDIT_SET_QTY', productId, newQty };
@@ -278,7 +307,7 @@ const EditInvoicePage = () => {
         });
         return it;
       }
-      return { ...it, quantity: newQty };
+      return { ...it, quantity: newQty, quantityText: formatQtyDisplay(newQty) };
     }).filter(it => (Number(it.quantity) || 0) > 0));
     setEditingQty(prev => ({ ...prev, [productId]: undefined }));
   };
@@ -287,10 +316,16 @@ const EditInvoicePage = () => {
     setItems(prev => prev.map(it => (it.productId === productId ? { ...it, [field]: value } : it)));
   };
 
-  const handleQtyFocus = (productId, currentQty) => {
-    setEditingQty(prev => ({ ...prev, [productId]: String(currentQty) }));
+  const handleQtyFocus = (productId, currentQty, quantityText) => {
+    setEditingQty(prev => ({
+      ...prev,
+      [productId]: quantityText != null && quantityText !== ''
+        ? String(quantityText)
+        : formatQtyDisplay(currentQty)
+    }));
   };
   const handleQtyChange = (productId, value) => {
+    // Allow free typing (including "0.", "0.12") — do not coerce until blur
     setEditingQty(prev => ({ ...prev, [productId]: value }));
   };
   const handleQtyBlur = (productId) => {
@@ -317,7 +352,13 @@ const EditInvoicePage = () => {
       setEditingQty(prev => ({ ...prev, [productId]: undefined }));
       return;
     }
-    setItems(prev => prev.map(it => (it.productId === productId ? { ...it, quantity: num } : it)));
+    // Keep the typed string so "0.125" is not reformatted away
+    const typed = String(raw).trim().replace(',', '.');
+    setItems(prev => prev.map(it => (
+      it.productId === productId
+        ? { ...it, quantity: num, quantityText: typed }
+        : it
+    )));
     setEditingQty(prev => ({ ...prev, [productId]: undefined }));
   };
   const handleQtyKeyDown = (e) => {
@@ -341,7 +382,10 @@ const EditInvoicePage = () => {
         discountAmount: discount,
         items: items.map(it => ({
           product: { productId: it.productId },
-          quantity: Number(it.quantity) || 0,
+          // Send as string so backend keeps exact decimals (e.g. 0.125)
+          quantity: it.quantityText != null && it.quantityText !== ''
+            ? it.quantityText
+            : formatQtyDisplay(it.quantity),
           unitPrice: Number(it.unitPrice) || 0
         }))
       };
@@ -490,18 +534,18 @@ const EditInvoicePage = () => {
                       </td>
                       <td>
                         <div className="quantity-control">
-                          <button type="button" onClick={() => updateItemQty(it.productId, -1)} aria-label="Decrease"><Minus size={14}/></button>
+                          <button type="button" onClick={() => updateItemQty(it.productId, -0.001)} aria-label="Decrease"><Minus size={14}/></button>
                           <input
                             type="text"
                             inputMode="decimal"
                             className="quantity-input"
-                            value={editingQty[it.productId] ?? String(it.quantity)}
+                            value={editingQty[it.productId] ?? (it.quantityText ?? formatQtyDisplay(it.quantity))}
                             onChange={(e) => handleQtyChange(it.productId, e.target.value)}
-                            onFocus={() => handleQtyFocus(it.productId, it.quantity)}
+                            onFocus={() => handleQtyFocus(it.productId, it.quantity, it.quantityText)}
                             onBlur={() => handleQtyBlur(it.productId)}
                             onKeyDown={handleQtyKeyDown}
                           />
-                          <button type="button" onClick={() => updateItemQty(it.productId, 1)} aria-label="Increase"><Plus size={14}/></button>
+                          <button type="button" onClick={() => updateItemQty(it.productId, 0.001)} aria-label="Increase"><Plus size={14}/></button>
                         </div>
                       </td>
                       <td>₹{((Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)).toFixed(2)}</td>

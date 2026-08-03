@@ -11,6 +11,12 @@ import {
   parseProductStock,
 } from '../utils/stockValidation';
 import InsufficientStockModal from '../components/InsufficientStockModal';
+import {
+  filterProductsLocal,
+  parseBarcodeLocal,
+  qtyFromBarcodeWeight,
+  upsertProductInList,
+} from '../utils/productLookup';
 
 const DISCOUNT_PERCENT_MAX = 30;
 
@@ -62,6 +68,9 @@ const B2BBilling = () => {
   const searchInputRef = useRef(null);
   const selectedQtyRef = useRef(null);
   const insufficientRetryRef = useRef(null);
+  const productsCacheRef = useRef([]);
+  const searchDebounceRef = useRef(null);
+  const lastInputAtRef = useRef(0);
   const navigate = useNavigate();
   const [insufficientStockContext, setInsufficientStockContext] = useState(null);
   const { invoiceId: editInvoiceId } = useParams();
@@ -101,6 +110,24 @@ const B2BBilling = () => {
     fetchB2bCustomers();
     if (!editMode) fetchNextBillNumber();
   }, [editMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await productService.getAll();
+        if (!cancelled) {
+          productsCacheRef.current = Array.isArray(res?.data) ? res.data : [];
+        }
+      } catch {
+        if (!cancelled) productsCacheRef.current = [];
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
 
   // Server-side search: when user types in customer search, fetch from API (debounced). Don't show loading so input stays focused.
   const customerSearchDebounceRef = useRef(null);
@@ -172,37 +199,47 @@ const B2BBilling = () => {
     (c.gstNumber || '').toLowerCase().includes((customerSearch || '').toLowerCase())
   );
 
-  const handleSearchChange = async (val) => {
+  const handleSearchChange = (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
-    if (trimmed.length > 0) {
-      try {
-        const response = await productService.getAll();
-        const filtered = response.data.filter(p =>
-          (p.productName || '').toLowerCase().includes(trimmed.toLowerCase()) ||
-          (p.barcode || '').toLowerCase().includes(trimmed.toLowerCase())
-        );
-        setSearchResults(filtered);
-        setHighlightedIndex(filtered.length > 0 ? 0 : -1);
-      } catch {
-        setSearchResults([]);
-        setHighlightedIndex(-1);
-      }
-    } else {
+
+    const now = Date.now();
+    const gap = now - lastInputAtRef.current;
+    lastInputAtRef.current = now;
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+
+    if (!trimmed) {
       setSearchResults([]);
       setHighlightedIndex(-1);
+      return;
     }
+
+    // Skip dropdown updates during barcode scanner character burst
+    if (gap > 0 && gap < 45) return;
+
+    searchDebounceRef.current = setTimeout(() => {
+      const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
+      setSearchResults(filtered.slice(0, 40));
+      setHighlightedIndex(filtered.length > 0 ? 0 : -1);
+    }, 60);
   };
 
   const handleSearchKeyDown = (e) => {
-    if (searchResults.length === 0) return;
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ArrowDown' && searchResults.length > 0) {
       e.preventDefault();
       setHighlightedIndex(i => (i < searchResults.length - 1 ? i + 1 : 0));
-    } else if (e.key === 'ArrowUp') {
+      return;
+    }
+    if (e.key === 'ArrowUp' && searchResults.length > 0) {
       e.preventDefault();
       setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1));
-    } else if (e.key === 'Enter' && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
+      return;
+    }
+    if (e.key === 'Enter' && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
       e.preventDefault();
       const p = searchResults[highlightedIndex];
       setSelectedForCart(p);
@@ -211,7 +248,9 @@ const B2BBilling = () => {
       setHighlightedIndex(-1);
       setSearchTerm('');
       setTimeout(() => selectedQtyRef.current?.focus(), 50);
-    } else if (e.key === 'Escape') {
+      return;
+    }
+    if (e.key === 'Escape') {
       setSearchResults([]);
       setHighlightedIndex(-1);
       searchInputRef.current?.blur();
@@ -234,35 +273,57 @@ const B2BBilling = () => {
       setTimeout(() => selectedQtyRef.current?.focus(), 50);
       return;
     }
-    try {
-      const response = await productService.parseBarcode(trimmed);
-      const { product, weight } = response.data;
-      if (!product) throw new Error('No product');
-      let qty = 1;
-      if (weight != null && Number(weight) > 0) {
-        const w = Number(weight);
-        const unit = (product.unit || '').toLowerCase();
-        // For weight/volume units like kg or litre, treat barcode weight as grams/ml and convert to kg/l
-        qty = (unit === 'kg' || unit === 'l') ? w / 1000 : w;
-        qty = parseFloat(Number(qty).toFixed(3));
+
+    let product = null;
+    let weight = 0;
+    const local = parseBarcodeLocal(productsCacheRef.current, trimmed);
+    if (local?.product) {
+      product = local.product;
+      weight = local.weight || 0;
+    } else {
+      try {
+        const response = await productService.parseBarcode(trimmed);
+        product = response?.data?.product || null;
+        weight = response?.data?.weight != null ? Number(response.data.weight) : 0;
+        if (product) {
+          productsCacheRef.current = upsertProductInList(productsCacheRef.current, product);
+        }
+      } catch {
+        product = null;
       }
-      addToCart(product, qty);
+    }
+
+    if (product) {
+      addToCart(product, qtyFromBarcodeWeight(product, weight));
       setSearchTerm('');
       setSearchResults([]);
       setTimeout(() => searchInputRef.current?.focus(), 0);
-    } catch {
-      if (searchResults.length === 1) {
-        setSelectedForCart(searchResults[0]);
-        setSelectedQtyInput('1');
-        setSearchResults([]);
-        setHighlightedIndex(-1);
-        setSearchTerm('');
-        setTimeout(() => selectedQtyRef.current?.focus(), 50);
-      } else if (searchResults.length > 1) {
-        searchInputRef.current?.focus();
-      } else {
-        alert('Product not found. Scan barcode or type name to search.');
-      }
+      return;
+    }
+
+    const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
+    if (filtered.length === 1) {
+      setSelectedForCart(filtered[0]);
+      setSelectedQtyInput('1');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      setSearchTerm('');
+      setTimeout(() => selectedQtyRef.current?.focus(), 50);
+    } else if (filtered.length > 1) {
+      setSearchResults(filtered.slice(0, 40));
+      setHighlightedIndex(0);
+      searchInputRef.current?.focus();
+    } else if (searchResults.length === 1) {
+      setSelectedForCart(searchResults[0]);
+      setSelectedQtyInput('1');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      setSearchTerm('');
+      setTimeout(() => selectedQtyRef.current?.focus(), 50);
+    } else if (searchResults.length > 1) {
+      searchInputRef.current?.focus();
+    } else {
+      alert('Product not found. Scan barcode or type name to search.');
     }
   };
 
@@ -336,6 +397,7 @@ const B2BBilling = () => {
     insufficientRetryRef.current = null;
     setInsufficientStockContext(null);
     if (!freshProduct || !r) return;
+    productsCacheRef.current = upsertProductInList(productsCacheRef.current, freshProduct);
     if (r.type === 'ADD_CART') {
       addToCart(freshProduct, r.qty);
     } else if (r.type === 'SET_QTY') {
@@ -355,7 +417,7 @@ const B2BBilling = () => {
   const updateQuantity = (productId, delta) => {
     setCart(prev => prev.map(item => {
       if (item.productId === productId) {
-        const newQty = Math.max(0.1, item.quantity + delta);
+        const newQty = Math.max(0.001, parseFloat((Number(item.quantity) + delta).toFixed(6)));
         const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
         if (wouldExceedStockDirect(ceiling, newQty)) {
           insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty };

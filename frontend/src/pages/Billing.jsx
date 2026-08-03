@@ -23,6 +23,12 @@ import {
   parseProductStock,
 } from '../utils/stockValidation';
 import InsufficientStockModal from '../components/InsufficientStockModal';
+import {
+  filterProductsLocal,
+  parseBarcodeLocal,
+  qtyFromBarcodeWeight,
+  upsertProductInList,
+} from '../utils/productLookup';
 
 const DISCOUNT_PERCENT_MAX = 30;
 const BILLING_CART_KEY = 'spice_billing_cart';
@@ -64,9 +70,33 @@ const Billing = () => {
   const handlePreviewRef = useRef(null);
   const handleSaveAndPrintRef = useRef(null);
   const insufficientRetryRef = useRef(null);
+  /** Cached products for fast local search / barcode parse (loaded once). */
+  const productsCacheRef = useRef([]);
+  const searchDebounceRef = useRef(null);
+  const lastInputAtRef = useRef(0);
   const navigate = useNavigate();
 
   const [insufficientStockContext, setInsufficientStockContext] = useState(null);
+
+  const syncProductsCache = (list) => {
+    productsCacheRef.current = Array.isArray(list) ? list : [];
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await productService.getAll();
+        if (!cancelled) syncProductsCache(res?.data || []);
+      } catch {
+        if (!cancelled) syncProductsCache([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     handlePreviewRef.current = handlePreview;
@@ -112,28 +142,43 @@ const Billing = () => {
     }
   }, [cart]);
 
-  const handleSearchChange = async (val) => {
+  const handleSearchChange = (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
     // New term typed/scanned – treat as fresh search; dropdown navigation (arrows) not yet used.
     usedSearchArrowsRef.current = false;
-    if (trimmed.length > 0) {
-      try {
-        const response = await productService.getAll();
-        const filtered = response.data.filter(p =>
-          (p.productName || '').toLowerCase().includes(trimmed.toLowerCase()) ||
-          (p.barcode || '').toLowerCase().includes(trimmed.toLowerCase())
-        );
-        setSearchResults(filtered);
-        setHighlightedIndex(filtered.length > 0 ? 0 : -1);
-      } catch {
-        setSearchResults([]);
-        setHighlightedIndex(-1);
-      }
-    } else {
+
+    const now = Date.now();
+    const gap = now - lastInputAtRef.current;
+    lastInputAtRef.current = now;
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+
+    if (!trimmed) {
       setSearchResults([]);
       setHighlightedIndex(-1);
+      return;
     }
+
+    // Barcode scanners fire keys very fast (< ~40ms). Skip dropdown spam during the burst;
+    // Enter will resolve the full code from the cached list.
+    const looksLikeScannerBurst = gap > 0 && gap < 45;
+    if (looksLikeScannerBurst) {
+      return;
+    }
+
+    // Local filter only (no network) — products loaded once on page open
+    const applyFilter = () => {
+      const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
+      setSearchResults(filtered.slice(0, 40));
+      setHighlightedIndex(filtered.length > 0 ? 0 : -1);
+    };
+
+    // Short debounce for normal typing; instant if cache already warm and single-char pause
+    searchDebounceRef.current = setTimeout(applyFilter, 60);
   };
 
   const handleSearchKeyDown = (e) => {
@@ -153,7 +198,7 @@ const Billing = () => {
 
     // Enter key behaviour:
     // - If user navigated dropdown with arrows and a product is highlighted, Enter selects that product.
-    // - Otherwise (typical barcode scan), we delay handling slightly and then treat it as a barcode.
+    // - Otherwise (typical barcode scan), resolve immediately from local cache (fallback API).
     if (e.key === 'Enter') {
       if (usedSearchArrowsRef.current && searchResults.length > 0 && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
         e.preventDefault();
@@ -166,11 +211,15 @@ const Billing = () => {
         setTimeout(() => selectedQtyRef.current?.focus(), 50);
         return;
       }
-      // Barcode / direct search path: delay a bit so the full scan string is in the input, then submit.
+      // Tiny delay so the last scanner character lands in the input, then parse (local-first).
       e.preventDefault();
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = null;
+      }
       setTimeout(() => {
         runSearchSubmit();
-      }, 150);
+      }, 30);
       return;
     }
 
@@ -191,38 +240,61 @@ const Billing = () => {
     const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
     if (!trimmed) return;
 
-    try {
-      const response = await productService.parseBarcode(trimmed);
-      const { product, weight } = response.data;
-      if (!product) {
-        throw new Error('No product');
+    // 1) Instant local parse from cached products (no network)
+    let product = null;
+    let weight = 0;
+    const local = parseBarcodeLocal(productsCacheRef.current, trimmed);
+    if (local?.product) {
+      product = local.product;
+      weight = local.weight || 0;
+    } else {
+      // 2) Fallback: API parse (cache empty / new product not loaded yet)
+      try {
+        const response = await productService.parseBarcode(trimmed);
+        product = response?.data?.product || null;
+        weight = response?.data?.weight != null ? Number(response.data.weight) : 0;
+        if (product) {
+          syncProductsCache(upsertProductInList(productsCacheRef.current, product));
+        }
+      } catch {
+        product = null;
       }
-      // Weight from barcode is in grams (e.g. 250 = 250 gm). Convert to product unit for quantity.
-      let qty = 1;
-      if (weight != null && Number(weight) > 0) {
-        const w = Number(weight);
-        const unit = (product.unit || '').toLowerCase();
-        // For weight/volume units like kg or litre, treat barcode weight as grams/ml and convert to kg/l
-        qty = (unit === 'kg' || unit === 'l') ? w / 1000 : w;
-        qty = parseFloat(Number(qty).toFixed(3));
-      }
+    }
+
+    if (product) {
+      const qty = qtyFromBarcodeWeight(product, weight);
       addToCart(product, qty);
       setSearchTerm('');
       setSearchResults([]);
+      setHighlightedIndex(-1);
       setTimeout(() => searchInputRef.current?.focus(), 0);
-    } catch {
-      if (searchResults.length === 1) {
-        setSelectedForCart(searchResults[0]);
-        setSelectedQtyInput('');
-        setSearchResults([]);
-        setHighlightedIndex(-1);
-        setSearchTerm('');
-        setTimeout(() => selectedQtyRef.current?.focus(), 50);
-      } else if (searchResults.length > 1) {
-        searchInputRef.current?.focus();
-      } else {
-        alert('Product not found. Scan barcode or type name to search.');
-      }
+      return;
+    }
+
+    // 3) Fallback: single search hit → qty strip
+    const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
+    if (filtered.length === 1) {
+      setSelectedForCart(filtered[0]);
+      setSelectedQtyInput('');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      setSearchTerm('');
+      setTimeout(() => selectedQtyRef.current?.focus(), 50);
+    } else if (filtered.length > 1) {
+      setSearchResults(filtered.slice(0, 40));
+      setHighlightedIndex(0);
+      searchInputRef.current?.focus();
+    } else if (searchResults.length === 1) {
+      setSelectedForCart(searchResults[0]);
+      setSelectedQtyInput('');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      setSearchTerm('');
+      setTimeout(() => selectedQtyRef.current?.focus(), 50);
+    } else if (searchResults.length > 1) {
+      searchInputRef.current?.focus();
+    } else {
+      alert('Product not found. Scan barcode or type name to search.');
     }
   };
 
@@ -302,6 +374,7 @@ const Billing = () => {
     insufficientRetryRef.current = null;
     setInsufficientStockContext(null);
     if (!freshProduct || !r) return;
+    syncProductsCache(upsertProductInList(productsCacheRef.current, freshProduct));
     if (r.type === 'ADD_CART') {
       addToCart(freshProduct, r.qty);
     } else if (r.type === 'SET_QTY') {
@@ -321,7 +394,7 @@ const Billing = () => {
   const updateQuantity = (productId, delta) => {
     setCart(prev => prev.map(item => {
       if (item.productId === productId) {
-        const newQty = Math.max(0.1, item.quantity + delta);
+        const newQty = Math.max(0.001, parseFloat((Number(item.quantity) + delta).toFixed(6)));
         const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
         if (wouldExceedStockDirect(ceiling, newQty)) {
           insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty };
@@ -682,7 +755,8 @@ const Billing = () => {
         ...(cashierUserId != null && { cashier: { userId: cashierUserId } }),
         items: cart.map(item => ({
           product: { productId: item.productId },
-          quantity: item.quantity,
+          // String keeps exact decimals (e.g. 0.125) through JSON → BigDecimal
+          quantity: String(item.quantity),
           unitPrice: item.unitPrice,
           discountAmount: 0
         }))

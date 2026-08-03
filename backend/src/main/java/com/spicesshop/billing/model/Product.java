@@ -51,10 +51,10 @@ public class Product {
     @Column(name = "ingredients", columnDefinition = "TEXT")
     private String ingredients;
 
-    @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
+    @Column(name = "quantity", nullable = false, precision = 12, scale = 6)
     private BigDecimal quantity;
 
-    @Column(name = "min_stock_level", precision = 10, scale = 2)
+    @Column(name = "min_stock_level", precision = 12, scale = 6)
     private BigDecimal minStockLevel;
 
     @Column(name = "is_active")

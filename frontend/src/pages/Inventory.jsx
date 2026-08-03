@@ -452,7 +452,6 @@ const Inventory = () => {
                   <div className="sticker-line sticker-ingredients">Ingredients: —</div>
                 )}
 
-                <div className="sticker-repacked-title">REPACKED AND MARKETED BY</div>
                 <div className="sticker-company-name">{info.companyName || '—'}</div>
                 <div className="sticker-company-address">{info.companyAddress || '—'}</div>
 
@@ -712,7 +711,6 @@ const Inventory = () => {
               <div class="sticker-col-right">
                 ${ingredients ? `<div class="sticker-line sticker-ingredients">Ingredients: ${ingredients}</div>` : `<div class="sticker-line sticker-ingredients">Ingredients: —</div>`}
 
-                <div class="sticker-repacked-title">REPACKED AND MARKETED BY</div>
                 <div class="sticker-company-name">${companyName}</div>
                 <div class="sticker-company-address">${companyAddress || '—'}</div>
 
@@ -892,12 +890,6 @@ const Inventory = () => {
               line-height: 1.1;
               white-space: nowrap;
             }
-            .sticker-repacked-title {
-              font-weight: 400;
-              font-size: 8pt;
-              text-align: center;
-              margin-top: 1mm;
-            }
             .sticker-company-name {
               font-weight: 900;
               font-size: 9pt;
@@ -971,12 +963,6 @@ const Inventory = () => {
               align-items: center;
               gap: 0.3mm;
               margin-bottom: 1mm;
-            }
-            .label-repacked {
-              font-size: 7pt;
-              font-weight: 900;
-              line-height: 1.1;
-              letter-spacing: 0.01em;
             }
             .label-company-name {
               font-size: 8pt;
@@ -1676,12 +1662,6 @@ const Inventory = () => {
                   font-size: 7pt;
                   line-height: 1.1;
                   white-space: nowrap;
-                }
-                .sticker-repacked-title {
-                  font-weight: 400;
-                  font-size: 8pt;
-                  text-align: center;
-                  margin-top: 1mm;
                 }
                 .sticker-company-name {
                   font-weight: 900;

@@ -31,7 +31,7 @@ public class InvoiceItem {
     @Column(name = "barcode")
     private String barcode;
 
-    @Column(name = "quantity", nullable = false, precision = 10, scale = 2)
+    @Column(name = "quantity", nullable = false, precision = 12, scale = 6)
     private BigDecimal quantity;
 
     @Column(name = "unit_price", nullable = false, precision = 10, scale = 2)
