@@ -4,6 +4,20 @@ import { invoiceService, authService, courierService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe } from '../utils/invoicePrint';
 import { ArrowLeft, Search, Printer, Trash2, Pencil, X, Truck } from 'lucide-react';
 
+const formatBillDateTime = (value) => {
+  if (!value) return { date: '—', time: '' };
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return { date: String(value), time: '' };
+    return {
+      date: d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    };
+  } catch {
+    return { date: String(value), time: '' };
+  }
+};
+
 const B2BBillsPage = () => {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -174,7 +188,7 @@ const B2BBillsPage = () => {
         <table className="bills-table">
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Date & Time</th>
               <th>Inv #</th>
               <th>Customer</th>
               <th>GST</th>
@@ -188,9 +202,16 @@ const B2BBillsPage = () => {
               <tr><td colSpan="7" className="loading">Loading B2B bills...</td></tr>
             ) : filteredInvoices.length === 0 ? (
               <tr><td colSpan="7" className="no-data">No B2B invoices found</td></tr>
-            ) : filteredInvoices.map(inv => (
+            ) : filteredInvoices.map(inv => {
+              const when = formatBillDateTime(inv.createdAt);
+              return (
               <tr key={inv.invoiceId}>
-                <td>{new Date(inv.createdAt).toLocaleDateString()}</td>
+                <td>
+                  <div className="bill-datetime">
+                    <span>{when.date}</span>
+                    {when.time ? <span className="bill-time">{when.time}</span> : null}
+                  </div>
+                </td>
                 <td>{inv.invoiceNumber}</td>
                 <td>{inv.b2bCustomer?.customerName || '–'}</td>
                 <td>{inv.b2bCustomer?.gstNumber || '–'}</td>
@@ -205,7 +226,8 @@ const B2BBillsPage = () => {
                   )}
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>

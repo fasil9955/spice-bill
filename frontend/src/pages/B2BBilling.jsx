@@ -13,9 +13,9 @@ import {
 import InsufficientStockModal from '../components/InsufficientStockModal';
 import {
   filterProductsLocal,
-  parseBarcodeLocal,
   qtyFromBarcodeWeight,
   upsertProductInList,
+  resolveBarcodeHybrid,
 } from '../utils/productLookup';
 
 const DISCOUNT_PERCENT_MAX = 30;
@@ -113,7 +113,7 @@ const B2BBilling = () => {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const loadProducts = async () => {
       try {
         const res = await productService.getAll();
         if (!cancelled) {
@@ -122,10 +122,63 @@ const B2BBilling = () => {
       } catch {
         if (!cancelled) productsCacheRef.current = [];
       }
-    })();
+    };
+    loadProducts();
+
+    const refreshId = setInterval(() => {
+      if (document.visibilityState === 'visible') loadProducts();
+    }, 2 * 60 * 1000);
+
     return () => {
       cancelled = true;
+      clearInterval(refreshId);
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, []);
+
+  // After PC sleep / unlock / tab return: refocus search + refresh product cache
+  const blockScanFocusRef = useRef(false);
+  useEffect(() => {
+    blockScanFocusRef.current = !!(selectedForCart || showPreview || insufficientStockContext);
+  }, [selectedForCart, showPreview, insufficientStockContext]);
+
+  useEffect(() => {
+    let wasHidden = document.visibilityState === 'hidden';
+
+    const resumeAfterWake = () => {
+      productService
+        .getAll()
+        .then((res) => {
+          productsCacheRef.current = Array.isArray(res?.data) ? res.data : [];
+        })
+        .catch(() => {});
+      const tryFocus = () => {
+        if (document.visibilityState !== 'visible') return;
+        if (blockScanFocusRef.current) return;
+        searchInputRef.current?.focus();
+      };
+      setTimeout(tryFocus, 100);
+      setTimeout(tryFocus, 500);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHidden = true;
+        return;
+      }
+      if (!wasHidden) return;
+      wasHidden = false;
+      resumeAfterWake();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    const onPageShow = (e) => {
+      if (e.persisted) resumeAfterWake();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
 
@@ -239,17 +292,7 @@ const B2BBilling = () => {
       setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1));
       return;
     }
-    if (e.key === 'Enter' && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
-      e.preventDefault();
-      const p = searchResults[highlightedIndex];
-      setSelectedForCart(p);
-      setSelectedQtyInput('1');
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      setSearchTerm('');
-      setTimeout(() => selectedQtyRef.current?.focus(), 50);
-      return;
-    }
+    // Enter → form submit → hybrid barcode (local → API → refresh). Do not steal via dropdown here.
     if (e.key === 'Escape') {
       setSearchResults([]);
       setHighlightedIndex(-1);
@@ -263,6 +306,30 @@ const B2BBilling = () => {
     const rawInput = searchInputRef.current?.value;
     const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
     if (!trimmed) return;
+
+    // Hybrid barcode first (don't let a highlighted dropdown row steal a full scan)
+    const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
+      parseBarcodeApi: (code) => productService.parseBarcode(code),
+      refreshProducts: async () => {
+        const res = await productService.getAll();
+        const list = Array.isArray(res?.data) ? res.data : [];
+        productsCacheRef.current = list;
+        return list;
+      },
+    });
+    if (resolved?.productsCache) {
+      productsCacheRef.current = resolved.productsCache;
+    }
+
+    if (resolved?.product) {
+      addToCart(resolved.product, qtyFromBarcodeWeight(resolved.product, resolved.weight || 0));
+      setSearchTerm('');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+      return;
+    }
+
     if (highlightedIndex >= 0 && searchResults[highlightedIndex]) {
       const p = searchResults[highlightedIndex];
       setSelectedForCart(p);
@@ -271,33 +338,6 @@ const B2BBilling = () => {
       setHighlightedIndex(-1);
       setSearchTerm('');
       setTimeout(() => selectedQtyRef.current?.focus(), 50);
-      return;
-    }
-
-    let product = null;
-    let weight = 0;
-    const local = parseBarcodeLocal(productsCacheRef.current, trimmed);
-    if (local?.product) {
-      product = local.product;
-      weight = local.weight || 0;
-    } else {
-      try {
-        const response = await productService.parseBarcode(trimmed);
-        product = response?.data?.product || null;
-        weight = response?.data?.weight != null ? Number(response.data.weight) : 0;
-        if (product) {
-          productsCacheRef.current = upsertProductInList(productsCacheRef.current, product);
-        }
-      } catch {
-        product = null;
-      }
-    }
-
-    if (product) {
-      addToCart(product, qtyFromBarcodeWeight(product, weight));
-      setSearchTerm('');
-      setSearchResults([]);
-      setTimeout(() => searchInputRef.current?.focus(), 0);
       return;
     }
 

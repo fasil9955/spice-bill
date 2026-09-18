@@ -124,6 +124,19 @@
   flex-wrap: wrap;
 }
 
+.bill-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+.bill-datetime .bill-time {
+  font-size: 12px;
+  color: #4b5563;
+  font-weight: 600;
+}
+
 /* Bills page – date filter and toolbar */
 .bills-actions {
   display: flex;

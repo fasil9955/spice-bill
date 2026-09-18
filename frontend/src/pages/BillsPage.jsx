@@ -6,6 +6,20 @@ import { ArrowLeft, Search, Printer, Trash2, Truck, Pencil, X, Plus } from 'luci
 
 const getTodayDateString = () => new Date().toISOString().slice(0, 10);
 
+const formatBillDateTime = (value) => {
+  if (!value) return { date: '—', time: '' };
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return { date: String(value), time: '' };
+    return {
+      date: d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+    };
+  } catch {
+    return { date: String(value), time: '' };
+  }
+};
+
 const BillsPage = () => {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -191,7 +205,7 @@ const BillsPage = () => {
         <table className="bills-table">
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Date & Time</th>
               <th>Inv #</th>
               <th>Type</th>
               <th>Customer</th>
@@ -205,9 +219,16 @@ const BillsPage = () => {
               <tr><td colSpan="7" className="loading">Loading bills...</td></tr>
             ) : filteredInvoices.length === 0 ? (
               <tr><td colSpan="7" className="no-data">No invoices found</td></tr>
-            ) : filteredInvoices.map(inv => (
+            ) : filteredInvoices.map(inv => {
+              const when = formatBillDateTime(inv.createdAt);
+              return (
               <tr key={inv.invoiceId}>
-                <td>{new Date(inv.createdAt).toLocaleDateString()}</td>
+                <td>
+                  <div className="bill-datetime">
+                    <span>{when.date}</span>
+                    {when.time ? <span className="bill-time">{when.time}</span> : null}
+                  </div>
+                </td>
                 <td>{inv.invoiceNumber}</td>
                 <td><span className="type-badge">{inv.invoiceType}</span></td>
                 <td>{inv.b2bCustomer?.customerName || 'Retail'}</td>
@@ -222,7 +243,8 @@ const BillsPage = () => {
                   )}
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>

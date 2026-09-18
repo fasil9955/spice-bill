@@ -18,6 +18,110 @@
   max-width: 420px;
 }
 
+.billing-cart-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+  margin: 0 0 10px 0;
+}
+.billing-cart-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+}
+.billing-cart-tab-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.billing-cart-tab.active {
+  border-color: #c2410c;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.billing-cart-tab-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.billing-cart-tab.active .billing-cart-tab-count {
+  background: #fed7aa;
+}
+.billing-cart-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  color: #6b7280;
+  cursor: pointer;
+}
+.billing-cart-tab-close:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.billing-hold-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed #c2410c;
+  border-radius: 999px;
+  background: #fff;
+  color: #c2410c;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.billing-hold-btn:hover {
+  background: #fff7ed;
+}
+.billing-cart-customer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 0 12px 0;
+}
+.billing-cart-customer label {
+  font-size: 13px;
+  color: #4b5563;
+  white-space: nowrap;
+}
+.billing-cart-customer input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .cart-section .section-header,
 .cart-section .cart-table-wrapper {
   width: 100%;

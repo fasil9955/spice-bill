@@ -54,6 +54,67 @@ export function parseBarcodeLocal(products, fullBarcode) {
   return null;
 }
 
+/**
+ * Hybrid barcode resolve: local cache first (fast), then API parse.
+ * If both miss, refresh the full product list and retry once.
+ *
+ * @param {object[]} productsCache current cached list
+ * @param {string} fullBarcode scanned code
+ * @param {{ parseBarcodeApi: (code: string) => Promise<any>, refreshProducts: () => Promise<object[]> }} deps
+ * @returns {Promise<{ product: object, weight: number, productsCache: object[] } | null>}
+ */
+export async function resolveBarcodeHybrid(productsCache, fullBarcode, deps) {
+  const code = (fullBarcode || '').trim();
+  if (!code) return null;
+
+  const { parseBarcodeApi, refreshProducts } = deps || {};
+  let cache = Array.isArray(productsCache) ? productsCache : [];
+
+  const fromApi = async () => {
+    if (typeof parseBarcodeApi !== 'function') return null;
+    try {
+      const response = await parseBarcodeApi(code);
+      const product = response?.data?.product || null;
+      if (!product) return null;
+      const weight = response?.data?.weight != null ? Number(response.data.weight) : 0;
+      cache = upsertProductInList(cache, product);
+      return { product, weight: Number.isFinite(weight) ? weight : 0, productsCache: cache };
+    } catch {
+      return null;
+    }
+  };
+
+  // 1) Instant local
+  const local = parseBarcodeLocal(cache, code);
+  if (local?.product) {
+    return { product: local.product, weight: local.weight || 0, productsCache: cache };
+  }
+
+  // 2) API parse (new product / cache stale)
+  const apiHit = await fromApi();
+  if (apiHit) return apiHit;
+
+  // 3) Refresh full list, then retry local + API once
+  if (typeof refreshProducts === 'function') {
+    try {
+      const fresh = await refreshProducts();
+      if (Array.isArray(fresh)) cache = fresh;
+    } catch {
+      /* keep cache */
+    }
+  }
+
+  const localRetry = parseBarcodeLocal(cache, code);
+  if (localRetry?.product) {
+    return { product: localRetry.product, weight: localRetry.weight || 0, productsCache: cache };
+  }
+
+  const apiRetry = await fromApi();
+  if (apiRetry) return apiRetry;
+
+  return null;
+}
+
 /** Convert barcode weight (grams/ml) to cart qty based on product unit. */
 export function qtyFromBarcodeWeight(product, weight) {
   if (weight == null || !(Number(weight) > 0)) return 1;

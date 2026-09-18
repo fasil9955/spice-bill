@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productService, invoiceService, authService } from '../services/api';
 import './Billing.css';
@@ -14,7 +14,8 @@ import {
   QrCode,
   ArrowLeft,
   X,
-  Phone
+  Phone,
+  PauseCircle
 } from 'lucide-react';
 import {
   getStockCeilingForAdd,
@@ -25,36 +26,72 @@ import {
 import InsufficientStockModal from '../components/InsufficientStockModal';
 import {
   filterProductsLocal,
-  parseBarcodeLocal,
   qtyFromBarcodeWeight,
   upsertProductInList,
+  resolveBarcodeHybrid,
 } from '../utils/productLookup';
 
 const DISCOUNT_PERCENT_MAX = 30;
 const BILLING_CART_KEY = 'spice_billing_cart';
+const BILLING_CARTS_KEY = 'spice_billing_carts';
 
-const loadCartFromStorage = () => {
+const newCartId = () => `cart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+const createEmptySession = (index = 1) => ({
+  id: newCartId(),
+  label: `Cart ${index}`,
+  customerName: '',
+  cart: [],
+  paymentMethod: 'CASH',
+  amounts: { cash: 0, card: 0, upi: 0 },
+  discountType: 'percent',
+  discountPercent: 0,
+  discountAmount: 0,
+});
+
+const loadBillingSessions = () => {
   try {
-    const saved = localStorage.getItem(BILLING_CART_KEY);
+    const saved = localStorage.getItem(BILLING_CARTS_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
+      if (parsed && Array.isArray(parsed.sessions) && parsed.sessions.length > 0) {
+        const sessions = parsed.sessions.map((s, i) => ({
+          ...createEmptySession(i + 1),
+          ...s,
+          amounts: { cash: 0, card: 0, upi: 0, ...(s.amounts || {}) },
+          cart: Array.isArray(s.cart) ? s.cart : [],
+          customerName: s.customerName || '',
+        }));
+        const activeId = sessions.some((s) => s.id === parsed.activeId)
+          ? parsed.activeId
+          : sessions[0].id;
+        return { sessions, activeId };
+      }
+    }
+    const legacy = localStorage.getItem(BILLING_CART_KEY);
+    if (legacy) {
+      const cart = JSON.parse(legacy);
+      if (Array.isArray(cart) && cart.length > 0) {
+        const session = { ...createEmptySession(1), cart };
+        return { sessions: [session], activeId: session.id };
+      }
     }
   } catch {
-    return [];
+    /* fall through to empty session */
   }
-  return [];
+  const session = createEmptySession(1);
+  return { sessions: [session], activeId: session.id };
 };
 
 const Billing = () => {
-  const [cart, setCart] = useState(loadCartFromStorage);
+  const initialBilling = useRef(null);
+  if (!initialBilling.current) {
+    initialBilling.current = loadBillingSessions();
+  }
+  const [sessions, setSessions] = useState(initialBilling.current.sessions);
+  const [activeId, setActiveId] = useState(initialBilling.current.activeId);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [amounts, setAmounts] = useState({ cash: 0, card: 0, upi: 0 });
-  const [discountType, setDiscountType] = useState('percent'); // 'percent' | 'amount'
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [discountAmount, setDiscountAmount] = useState(0);
   const [showPreview, setShowPreview] = useState(false);
   const [previewDraft, setPreviewDraft] = useState(null); // draft with invoice number before save
   const [lastInvoice, setLastInvoice] = useState(null);
@@ -78,9 +115,112 @@ const Billing = () => {
 
   const [insufficientStockContext, setInsufficientStockContext] = useState(null);
 
+  const activeSession = sessions.find((s) => s.id === activeId) || sessions[0] || createEmptySession(1);
+  const cart = activeSession.cart || [];
+  const paymentMethod = activeSession.paymentMethod || 'CASH';
+  const amounts = activeSession.amounts || { cash: 0, card: 0, upi: 0 };
+  const discountType = activeSession.discountType || 'percent';
+  const discountPercent = activeSession.discountPercent || 0;
+  const discountAmount = activeSession.discountAmount || 0;
+
+  const patchActive = (patchOrFn) => {
+    setSessions((prev) => prev.map((s) => {
+      if (s.id !== activeId) return s;
+      const patch = typeof patchOrFn === 'function' ? patchOrFn(s) : patchOrFn;
+      return { ...s, ...patch };
+    }));
+  };
+
+  const setCart = (updater) => {
+    setSessions((prev) => prev.map((s) => {
+      if (s.id !== activeId) return s;
+      const next = typeof updater === 'function' ? updater(s.cart || []) : updater;
+      return { ...s, cart: next };
+    }));
+  };
+
+  const setPaymentMethod = (value) => patchActive({ paymentMethod: value });
+  const setAmounts = (updater) => {
+    patchActive((s) => ({
+      amounts: typeof updater === 'function' ? updater(s.amounts || { cash: 0, card: 0, upi: 0 }) : updater,
+    }));
+  };
+  const setDiscountType = (value) => patchActive({ discountType: value });
+  const setDiscountPercent = (value) => patchActive({ discountPercent: value });
+  const setDiscountAmount = (value) => patchActive({ discountAmount: value });
+
+  const resetPendingProductUi = () => {
+    setSelectedForCart(null);
+    setSelectedQtyInput('');
+    setEditingQty({});
+    setSearchResults([]);
+    setHighlightedIndex(-1);
+    setSearchTerm('');
+    setShowPreview(false);
+    setPreviewDraft(null);
+  };
+
+  const switchCart = (id) => {
+    if (!id || id === activeId) return;
+    resetPendingProductUi();
+    setActiveId(id);
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  const holdAndNewCart = () => {
+    if ((activeSession.cart || []).length === 0) {
+      alert('Add items to this cart first, then hold it to bill another customer.');
+      return;
+    }
+    const next = createEmptySession(sessions.length + 1);
+    resetPendingProductUi();
+    setSessions((prev) => [...prev, next]);
+    setActiveId(next.id);
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  const closeCart = (id, e) => {
+    e?.stopPropagation?.();
+    const target = sessions.find((s) => s.id === id);
+    if (target?.cart?.length > 0 && !window.confirm('Close this held cart? Items in it will be discarded.')) {
+      return;
+    }
+    if (sessions.length === 1) {
+      const reset = { ...createEmptySession(1), id: sessions[0].id, label: 'Cart 1' };
+      setSessions([reset]);
+      setActiveId(reset.id);
+      resetPendingProductUi();
+      return;
+    }
+    const remaining = sessions.filter((s) => s.id !== id);
+    setSessions(remaining);
+    if (activeId === id) {
+      resetPendingProductUi();
+      setActiveId(remaining[0].id);
+    }
+  };
+
+  const cartTabLabel = (session, index) => {
+    const name = (session.customerName || '').trim();
+    if (name) return name;
+    return session.label || `Cart ${index + 1}`;
+  };
+
   const syncProductsCache = (list) => {
     productsCacheRef.current = Array.isArray(list) ? list : [];
   };
+
+  const refreshProductsCache = useCallback(async () => {
+    try {
+      const res = await productService.getAll();
+      const list = Array.isArray(res?.data) ? res.data : [];
+      syncProductsCache(list);
+      return list;
+    } catch {
+      /* keep existing cache if network is still waking up */
+      return productsCacheRef.current;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +238,16 @@ const Billing = () => {
     };
   }, []);
 
+  // Keep cache fresh while billing stays open (new products / barcode edits)
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refreshProductsCache();
+      }
+    }, 2 * 60 * 1000); // every 2 minutes
+    return () => clearInterval(id);
+  }, [refreshProductsCache]);
+
   useEffect(() => {
     handlePreviewRef.current = handlePreview;
   });
@@ -108,6 +258,51 @@ const Billing = () => {
   useEffect(() => {
     searchInputRef.current?.focus();
   }, []);
+
+  // After PC sleep / unlock / tab return: refocus search + refresh product cache.
+  // Without this, scanner input goes nowhere (focus lost) and lookups can miss.
+  const blockScanFocusRef = useRef(false);
+  useEffect(() => {
+    blockScanFocusRef.current = !!(showPreview || selectedForCart || insufficientStockContext);
+  }, [showPreview, selectedForCart, insufficientStockContext]);
+
+  useEffect(() => {
+    let wasHidden = document.visibilityState === 'hidden';
+
+    const resumeAfterWake = () => {
+      refreshProductsCache();
+      const tryFocus = () => {
+        if (document.visibilityState !== 'visible') return;
+        if (blockScanFocusRef.current) return;
+        searchInputRef.current?.focus();
+      };
+      // Windows unlock focus is flaky — try twice
+      setTimeout(tryFocus, 100);
+      setTimeout(tryFocus, 500);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHidden = true;
+        return;
+      }
+      if (!wasHidden) return;
+      wasHidden = false;
+      resumeAfterWake();
+    };
+
+    const onPageShow = (e) => {
+      // Only when restored from browser bfcache (common after sleep / back-forward)
+      if (e.persisted) resumeAfterWake();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [refreshProductsCache]);
 
   // Shortcut: Ctrl+Enter to open Preview Invoice (works from anywhere, including search box)
   useEffect(() => {
@@ -135,12 +330,9 @@ const Billing = () => {
   }, [showPreview, previewDraft, loading]);
 
   useEffect(() => {
-    if (cart.length > 0) {
-      localStorage.setItem(BILLING_CART_KEY, JSON.stringify(cart));
-    } else {
-      localStorage.removeItem(BILLING_CART_KEY);
-    }
-  }, [cart]);
+    localStorage.setItem(BILLING_CARTS_KEY, JSON.stringify({ sessions, activeId }));
+    localStorage.removeItem(BILLING_CART_KEY);
+  }, [sessions, activeId]);
 
   const handleSearchChange = (val) => {
     const trimmed = (val || '').trim();
@@ -211,7 +403,7 @@ const Billing = () => {
         setTimeout(() => selectedQtyRef.current?.focus(), 50);
         return;
       }
-      // Tiny delay so the last scanner character lands in the input, then parse (local-first).
+      // Tiny delay so the last scanner character lands in the input, then parse (local-first → API).
       e.preventDefault();
       if (searchDebounceRef.current) {
         clearTimeout(searchDebounceRef.current);
@@ -219,7 +411,7 @@ const Billing = () => {
       }
       setTimeout(() => {
         runSearchSubmit();
-      }, 30);
+      }, 50);
       return;
     }
 
@@ -231,39 +423,35 @@ const Billing = () => {
   };
 
   const runSearchSubmit = async () => {
-    // Only treat input as a barcode/search when the search box itself has focus.
-    // This prevents barcode scans from other inputs (qty, payment fields, etc.)
-    // from accidentally triggering product lookup or add-to-cart.
-    if (document.activeElement !== searchInputRef.current) return;
+    // Prefer search-box focus. After sleep/unlock focus is often <body> — still allow
+    // if the barcode landed in the search input value.
+    const active = document.activeElement;
+    const searchEl = searchInputRef.current;
+    const searchFocused = active === searchEl;
+    const focusLostToPage =
+      !active || active === document.body || active === document.documentElement;
+    if (!searchFocused && !focusLostToPage) return;
     // Use input's current DOM value so fast barcode scans are not truncated (React state can lag behind)
-    const rawInput = searchInputRef.current?.value;
+    const rawInput = searchEl?.value;
     const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      if (focusLostToPage) searchEl?.focus();
+      return;
+    }
+    if (focusLostToPage) searchEl?.focus();
 
-    // 1) Instant local parse from cached products (no network)
-    let product = null;
-    let weight = 0;
-    const local = parseBarcodeLocal(productsCacheRef.current, trimmed);
-    if (local?.product) {
-      product = local.product;
-      weight = local.weight || 0;
-    } else {
-      // 2) Fallback: API parse (cache empty / new product not loaded yet)
-      try {
-        const response = await productService.parseBarcode(trimmed);
-        product = response?.data?.product || null;
-        weight = response?.data?.weight != null ? Number(response.data.weight) : 0;
-        if (product) {
-          syncProductsCache(upsertProductInList(productsCacheRef.current, product));
-        }
-      } catch {
-        product = null;
-      }
+    // Hybrid: local cache first → API parse → refresh list + retry
+    const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
+      parseBarcodeApi: (code) => productService.parseBarcode(code),
+      refreshProducts: refreshProductsCache,
+    });
+    if (resolved?.productsCache) {
+      syncProductsCache(resolved.productsCache);
     }
 
-    if (product) {
-      const qty = qtyFromBarcodeWeight(product, weight);
-      addToCart(product, qty);
+    if (resolved?.product) {
+      const qty = qtyFromBarcodeWeight(resolved.product, resolved.weight || 0);
+      addToCart(resolved.product, qty);
       setSearchTerm('');
       setSearchResults([]);
       setHighlightedIndex(-1);
@@ -271,7 +459,7 @@ const Billing = () => {
       return;
     }
 
-    // 3) Fallback: single search hit → qty strip
+    // Name-search fallback: single search hit → qty strip
     const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
     if (filtered.length === 1) {
       setSelectedForCart(filtered[0]);
@@ -763,12 +951,16 @@ const Billing = () => {
       };
       const response = await invoiceService.create(invoiceData);
       setLastInvoice(response.data);
-      // Clear discount fields for next invoice.
-      setDiscountPercent(0);
-      setDiscountAmount(0);
-      setDiscountType('percent');
+      patchActive({
+        cart: [],
+        paymentMethod: 'CASH',
+        amounts: { cash: 0, card: 0, upi: 0 },
+        discountType: 'percent',
+        discountPercent: 0,
+        discountAmount: 0,
+        customerName: '',
+      });
       setPreviewDraft(null);
-      setCart([]);
       if (andPrint) {
         setShowPreview(false);
         handlePrintInvoice(response.data);
@@ -805,6 +997,52 @@ const Billing = () => {
       <div className="billing-content">
         <div className="billing-main-content">
           <div className="cart-section">
+          <div className="billing-cart-tabs" role="tablist" aria-label="Held carts">
+            {sessions.map((session, index) => (
+              <div
+                key={session.id}
+                className={`billing-cart-tab ${session.id === activeSession.id ? 'active' : ''}`}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={session.id === activeSession.id}
+                  className="billing-cart-tab-main"
+                  onClick={() => switchCart(session.id)}
+                >
+                  <span className="billing-cart-tab-label">{cartTabLabel(session, index)}</span>
+                  <span className="billing-cart-tab-count">{(session.cart || []).length}</span>
+                </button>
+                <button
+                  type="button"
+                  className="billing-cart-tab-close"
+                  title="Close cart"
+                  onClick={(e) => closeCart(session.id, e)}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="billing-hold-btn"
+              onClick={holdAndNewCart}
+              title="Hold this customer and start a new cart"
+            >
+              <PauseCircle size={16} />
+              Hold & new cart
+            </button>
+          </div>
+          <div className="billing-cart-customer">
+            <label htmlFor="billing-cart-customer-name">Customer (optional)</label>
+            <input
+              id="billing-cart-customer-name"
+              type="text"
+              value={activeSession.customerName || ''}
+              onChange={(e) => patchActive({ customerName: e.target.value })}
+              placeholder="Name for this held cart"
+            />
+          </div>
           <div className="billing-search-bar cart-search-bar">
             <form onSubmit={handleSearchSubmit} className="billing-search-form">
               <Search size={20} className="billing-search-icon" />
@@ -889,7 +1127,7 @@ const Billing = () => {
 
           <div className="section-header">
             <ShoppingCart size={20} />
-            <h2>Current Cart ({cart.length} items)</h2>
+            <h2>{cartTabLabel(activeSession, sessions.findIndex((s) => s.id === activeSession.id))} ({cart.length} items)</h2>
           </div>
           <div className="cart-table-wrapper">
             <table className="cart-table">
