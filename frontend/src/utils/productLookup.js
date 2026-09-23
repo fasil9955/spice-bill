@@ -130,12 +130,12 @@ export async function resolveBarcodeHybrid(productsCache, fullBarcode, deps) {
   // 1) Instant local
   const local = parseBarcodeLocal(cache, code);
   if (local?.product) {
-    return { product: local.product, weight: local.weight || 0, productsCache: cache };
+    return { product: local.product, weight: local.weight || 0, productsCache: cache, source: 'local-cache' };
   }
 
   // 2) API parse (new product / cache stale)
   const apiHit = await fromApi();
-  if (apiHit) return apiHit;
+  if (apiHit) return { ...apiHit, source: 'api' };
 
   // 3) Refresh full list, then retry local + API once
   if (typeof refreshProducts === 'function') {
@@ -149,11 +149,11 @@ export async function resolveBarcodeHybrid(productsCache, fullBarcode, deps) {
 
   const localRetry = parseBarcodeLocal(cache, code);
   if (localRetry?.product) {
-    return { product: localRetry.product, weight: localRetry.weight || 0, productsCache: cache };
+    return { product: localRetry.product, weight: localRetry.weight || 0, productsCache: cache, source: 'local-after-refresh' };
   }
 
   const apiRetry = await fromApi();
-  if (apiRetry) return apiRetry;
+  if (apiRetry) return { ...apiRetry, source: 'api-after-refresh' };
 
   return null;
 }

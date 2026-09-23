@@ -32,7 +32,6 @@ import {
   normalizeBarcode,
   looksLikeScannedBarcode,
 } from '../utils/productLookup';
-import { useHidBarcodeListener } from '../hooks/useHidBarcodeListener';
 
 const DISCOUNT_PERCENT_MAX = 30;
 const BILLING_CART_KEY = 'spice_billing_cart';
@@ -114,6 +113,9 @@ const Billing = () => {
   const productsCacheRef = useRef([]);
   const searchDebounceRef = useRef(null);
   const lastInputAtRef = useRef(0);
+  const scanTraceRef = useRef({ keys: [], startedAt: 0 });
+  const [showScanTiming, setShowScanTiming] = useState(() => localStorage.getItem('spice_scan_timing') === '1');
+  const [scanReports, setScanReports] = useState([]);
   const navigate = useNavigate();
 
   const [insufficientStockContext, setInsufficientStockContext] = useState(null);
@@ -266,16 +268,6 @@ const Billing = () => {
   // Without this, scanner input goes nowhere (focus lost) and lookups can miss.
   const blockScanFocusRef = useRef(false);
   const applyScannedCodeRef = useRef(null);
-  const hidBlockedRef = useRef(false);
-  hidBlockedRef.current = !!(showPreview || insufficientStockContext);
-  const onHidScan = useCallback((code) => {
-    applyScannedCodeRef.current?.(code);
-  }, []);
-  useHidBarcodeListener({
-    enabled: true,
-    isBlocked: () => hidBlockedRef.current,
-    onScan: onHidScan,
-  });
 
   useEffect(() => {
     blockScanFocusRef.current = !!(showPreview || selectedForCart || insufficientStockContext);
@@ -352,12 +344,23 @@ const Billing = () => {
   const handleSearchChange = (val) => {
     const trimmed = (val || '').trim();
     setSearchTerm(val);
-    // New term typed/scanned – treat as fresh search; dropdown navigation (arrows) not yet used.
     usedSearchArrowsRef.current = false;
 
     const now = Date.now();
-    const gap = now - lastInputAtRef.current;
+    const gap = lastInputAtRef.current ? now - lastInputAtRef.current : 0;
     lastInputAtRef.current = now;
+
+    const trace = scanTraceRef.current;
+    if (!trace.startedAt || gap > 400) {
+      scanTraceRef.current = { keys: [], startedAt: now };
+    }
+    scanTraceRef.current.keys.push({
+      ch: val.slice(-1) || '',
+      len: val.length,
+      gapMs: gap,
+      burst: gap > 0 && gap < 80,
+      at: now,
+    });
 
     if (searchDebounceRef.current) {
       clearTimeout(searchDebounceRef.current);
@@ -424,9 +427,11 @@ const Billing = () => {
         clearTimeout(searchDebounceRef.current);
         searchDebounceRef.current = null;
       }
+      const enterAt = Date.now();
+      const waitMs = 80;
       setTimeout(() => {
-        runSearchSubmit();
-      }, 80);
+        runSearchSubmit({ enterAt, waitMs });
+      }, waitMs);
       return;
     }
 
@@ -437,15 +442,52 @@ const Billing = () => {
     }
   };
 
-  const runSearchSubmit = async () => {
+  const returnFocusToSearch = () => {
+    if (showPreview || selectedForCart || insufficientStockContext) return;
+    searchInputRef.current?.focus();
+  };
+
+  const pushScanReport = (report) => {
+    setScanReports((prev) => [report, ...prev].slice(0, 8));
+  };
+
+  const finishScanReport = (extra) => {
+    const trace = scanTraceRef.current || { keys: [], startedAt: 0 };
+    const keys = trace.keys || [];
+    const gaps = keys.map((k) => k.gapMs).filter((g) => g > 0 && g < 400);
+    const lastKeyAt = keys.length ? keys[keys.length - 1].at : 0;
+    const gunMs = keys.length >= 2 && trace.startedAt ? lastKeyAt - trace.startedAt : 0;
+    const enterAfterLastCharMs =
+      extra.enterAt && lastKeyAt ? extra.enterAt - lastKeyAt : null;
+    pushScanReport({
+      at: new Date().toLocaleTimeString(),
+      code: extra.code || '',
+      keys: keys.length,
+      gunMs,
+      avgGap: gaps.length ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : 0,
+      maxGap: gaps.length ? Math.max(...gaps) : 0,
+      burstKeys: keys.filter((k) => k.burst).length,
+      enterWaitMs: extra.waitMs ?? 80,
+      enterAfterLastCharMs,
+      lookupMs: Math.round(extra.lookupMs || 0),
+      source: extra.source || '',
+      result: extra.result,
+      product: extra.product || '',
+      qty: extra.qty,
+    });
+    scanTraceRef.current = { keys: [], startedAt: 0 };
+  };
+
+  const runSearchSubmit = async (timing = {}) => {
     const searchEl = searchInputRef.current;
     const rawInput = searchEl?.value;
     const trimmed = normalizeBarcode(typeof rawInput === 'string' ? rawInput : searchTerm || '');
+    const lookupStarted = performance.now();
     if (!trimmed) {
       searchEl?.focus();
       return;
     }
-    const applied = await applyScannedCodeRef.current?.(trimmed);
+    const applied = await applyScannedCodeRef.current?.(trimmed, { ...timing, lookupStarted });
     if (applied) return;
 
     // Name-search fallback: single search hit → qty strip
@@ -473,6 +515,14 @@ const Billing = () => {
     } else {
       alert('Product not found. Scan barcode or type name to search.');
     }
+    finishScanReport({
+      ...timing,
+      code: trimmed,
+      lookupMs: performance.now() - lookupStarted,
+      source: 'name-search',
+      result: filtered.length ? `NAME (${filtered.length} matches)` : 'NOT FOUND',
+      product: filtered[0]?.productName || '',
+    });
   };
 
   const handleSearchSubmit = (e) => {
@@ -546,15 +596,17 @@ const Billing = () => {
     setTimeout(() => searchInputRef.current?.focus(), 0);
   };
 
-  applyScannedCodeRef.current = async (rawCode) => {
+  applyScannedCodeRef.current = async (rawCode, timing = {}) => {
     const trimmed = normalizeBarcode(rawCode);
     if (!trimmed) return false;
     setSelectedForCart(null);
     setSelectedQtyInput('');
+    const t0 = timing.lookupStarted || performance.now();
     const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
       parseBarcodeApi: (code) => productService.parseBarcode(code),
       refreshProducts: refreshProductsCache,
     });
+    const lookupMs = performance.now() - t0;
     if (resolved?.productsCache) {
       syncProductsCache(resolved.productsCache);
     }
@@ -566,12 +618,28 @@ const Billing = () => {
       setHighlightedIndex(-1);
       if (searchInputRef.current) searchInputRef.current.value = '';
       setTimeout(() => searchInputRef.current?.focus(), 0);
+      finishScanReport({
+        ...timing,
+        code: trimmed,
+        lookupMs,
+        source: resolved.source || 'local-cache',
+        result: 'ADDED',
+        product: resolved.product.productName,
+        qty,
+      });
       return true;
     }
     if (looksLikeScannedBarcode(trimmed)) {
       setSearchTerm('');
       setSearchResults([]);
       if (searchInputRef.current) searchInputRef.current.value = '';
+      finishScanReport({
+        ...timing,
+        code: trimmed,
+        lookupMs,
+        source: 'barcode',
+        result: 'NOT FOUND',
+      });
       alert('Product not found. Scan barcode or type name to search.');
       setTimeout(() => searchInputRef.current?.focus(), 0);
       return true;
@@ -657,20 +725,24 @@ const Billing = () => {
     if (raw === undefined) return;
     if (raw === '' || raw === '.') {
       setEditingQty(prev => ({ ...prev, [productId]: undefined }));
+      returnFocusToSearch();
       return;
     }
     const num = parseFloat(raw);
     if (isNaN(num) || num < 0) {
       setEditingQty(prev => ({ ...prev, [productId]: undefined }));
+      returnFocusToSearch();
       return;
     }
     if (num === 0) {
       alert('Quantity must be greater than 0. Item removed from cart.');
       removeFromCart(productId);
       setEditingQty(prev => ({ ...prev, [productId]: undefined }));
+      returnFocusToSearch();
       return;
     }
     setQuantityDirect(productId, num);
+    returnFocusToSearch();
   };
   const handleQtyKeyDown = (productId, e) => {
     if (e.key === 'Enter') {
@@ -1003,7 +1075,15 @@ const Billing = () => {
   const cartGst = calculateCartGst();
 
   return (
-    <div className="billing-container">
+    <div
+      className="billing-container"
+      onMouseDown={(e) => {
+        const el = e.target;
+        if (!(el instanceof HTMLElement)) return;
+        if (el.closest('input, select, textarea, button, label, .product-search-dropdown, .modal-overlay, .bill-preview-overlay, .scan-timing-panel')) return;
+        returnFocusToSearch();
+      }}
+    >
       <div className="billing-header">
         <div className="billing-header-actions">
           <button className="back-button" onClick={() => navigate('/dashboard')}>
@@ -1013,8 +1093,83 @@ const Billing = () => {
           <button className="nav-link-button" onClick={() => navigate('/dashboard/bills')}>
             📚 Bills
           </button>
+          <label className="scan-timing-toggle">
+            <input
+              type="checkbox"
+              checked={showScanTiming}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setShowScanTiming(on);
+                localStorage.setItem('spice_scan_timing', on ? '1' : '0');
+              }}
+            />
+            Scan timing
+          </label>
         </div>
       </div>
+
+      {showScanTiming && (
+        <div className="scan-timing-panel">
+          <div className="scan-timing-panel-head">
+            <strong>Scan timing on this PC</strong>
+            <span>Click search box, scan 3–4 labels, then Copy if you want to send the numbers.</span>
+            {scanReports.length > 0 && (
+              <button
+                type="button"
+                className="scan-timing-copy"
+                onClick={() => {
+                  const text = scanReports.map((r) =>
+                    `${r.at} | ${r.result} | code=${r.code} | keys=${r.keys} | gun=${r.gunMs}ms | avgGap=${r.avgGap}ms | maxGap=${r.maxGap}ms | burst=${r.burstKeys} | enterAfterLastChar=${r.enterAfterLastCharMs ?? '-'}ms | appWait=${r.enterWaitMs}ms | lookup=${r.lookupMs}ms | via=${r.source} | ${r.product}${r.qty != null ? ` qty=${r.qty}` : ''}`
+                  ).join('\n');
+                  navigator.clipboard?.writeText(text).catch(() => {});
+                }}
+              >
+                Copy timings
+              </button>
+            )}
+          </div>
+          {scanReports.length === 0 ? (
+            <p className="scan-timing-empty">No scans yet. Focus the search box and scan a barcode.</p>
+          ) : (
+            <table className="scan-timing-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Result</th>
+                  <th>Code</th>
+                  <th>Keys</th>
+                  <th>Gun</th>
+                  <th>Avg gap</th>
+                  <th>Max gap</th>
+                  <th>Enter after last char</th>
+                  <th>App wait</th>
+                  <th>Lookup</th>
+                  <th>Via</th>
+                  <th>Product</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scanReports.map((r, i) => (
+                  <tr key={`${r.at}-${i}`}>
+                    <td>{r.at}</td>
+                    <td>{r.result}</td>
+                    <td>{r.code}</td>
+                    <td>{r.keys}</td>
+                    <td>{r.gunMs} ms</td>
+                    <td>{r.avgGap} ms</td>
+                    <td>{r.maxGap} ms</td>
+                    <td>{r.enterAfterLastCharMs == null ? '—' : `${r.enterAfterLastCharMs} ms`}</td>
+                    <td>{r.enterWaitMs} ms</td>
+                    <td>{r.lookupMs} ms</td>
+                    <td>{r.source}</td>
+                    <td>{r.product}{r.qty != null ? ` × ${r.qty}` : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       <div className="billing-content">
         <div className="billing-main-content">
@@ -1062,6 +1217,7 @@ const Billing = () => {
               type="text"
               value={activeSession.customerName || ''}
               onChange={(e) => patchActive({ customerName: e.target.value })}
+              onBlur={() => setTimeout(returnFocusToSearch, 0)}
               placeholder="Name for this held cart"
             />
           </div>
@@ -1072,7 +1228,6 @@ const Billing = () => {
                 ref={searchInputRef}
                 type="text"
                 className="billing-search-input"
-                data-barcode-target="true"
                 placeholder="Scan barcode or search by product name..."
                 value={searchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}
@@ -1240,6 +1395,7 @@ const Billing = () => {
                 className="payment-select"
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
+                onBlur={() => setTimeout(returnFocusToSearch, 0)}
               >
                 <option value="CASH">Cash</option>
                 <option value="CARD">Card</option>

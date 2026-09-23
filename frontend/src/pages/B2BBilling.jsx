@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { productService, invoiceService, authService, b2bCustomerService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees } from '../utils/invoicePrint';
@@ -19,7 +19,6 @@ import {
   normalizeBarcode,
   looksLikeScannedBarcode,
 } from '../utils/productLookup';
-import { useHidBarcodeListener } from '../hooks/useHidBarcodeListener';
 
 const DISCOUNT_PERCENT_MAX = 30;
 
@@ -142,16 +141,6 @@ const B2BBilling = () => {
   // After PC sleep / unlock / tab return: refocus search + refresh product cache
   const blockScanFocusRef = useRef(false);
   const applyScannedCodeRef = useRef(null);
-  const hidBlockedRef = useRef(false);
-  hidBlockedRef.current = !!(showPreview || insufficientStockContext);
-  const onHidScan = useCallback((code) => {
-    applyScannedCodeRef.current?.(code);
-  }, []);
-  useHidBarcodeListener({
-    enabled: true,
-    isBlocked: () => hidBlockedRef.current,
-    onScan: onHidScan,
-  });
 
   useEffect(() => {
     blockScanFocusRef.current = !!(selectedForCart || showPreview || insufficientStockContext);
@@ -1034,7 +1023,6 @@ const B2BBilling = () => {
                   ref={searchInputRef}
                   type="text"
                   className="billing-search-input"
-                  data-barcode-target="true"
                   placeholder="Scan barcode or search by product name..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}

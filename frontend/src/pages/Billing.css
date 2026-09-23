@@ -147,6 +147,74 @@
   overflow: visible;
 }
 
+.scan-timing-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4b5563;
+  cursor: pointer;
+  user-select: none;
+}
+.scan-timing-panel {
+  margin: 0 0 16px 0;
+  padding: 12px 14px;
+  border: 1px solid #fdba74;
+  background: #fff7ed;
+  border-radius: 10px;
+  overflow-x: auto;
+}
+.scan-timing-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #9a3412;
+}
+.scan-timing-panel-head span {
+  font-weight: 400;
+  color: #7c2d12;
+}
+.scan-timing-copy {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid #c2410c;
+  background: #fff;
+  color: #c2410c;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.scan-timing-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #7c2d12;
+}
+.scan-timing-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  background: #fff;
+}
+.scan-timing-table th,
+.scan-timing-table td {
+  border: 1px solid #fed7aa;
+  padding: 5px 7px;
+  text-align: left;
+  white-space: nowrap;
+}
+.scan-timing-table th {
+  background: #ffedd5;
+}
+.billing-content,
+.billing-main-content {
+  overflow: visible;
+}
+
 /* B2B header – single row: back + title + badge left, nav links right */
 .billing-header {
   display: flex;
