@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { productService, invoiceService, authService, b2bCustomerService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees } from '../utils/invoicePrint';
@@ -16,7 +16,10 @@ import {
   qtyFromBarcodeWeight,
   upsertProductInList,
   resolveBarcodeHybrid,
+  normalizeBarcode,
+  looksLikeScannedBarcode,
 } from '../utils/productLookup';
+import { useHidBarcodeListener } from '../hooks/useHidBarcodeListener';
 
 const DISCOUNT_PERCENT_MAX = 30;
 
@@ -138,6 +141,18 @@ const B2BBilling = () => {
 
   // After PC sleep / unlock / tab return: refocus search + refresh product cache
   const blockScanFocusRef = useRef(false);
+  const applyScannedCodeRef = useRef(null);
+  const hidBlockedRef = useRef(false);
+  hidBlockedRef.current = !!(showPreview || insufficientStockContext);
+  const onHidScan = useCallback((code) => {
+    applyScannedCodeRef.current?.(code);
+  }, []);
+  useHidBarcodeListener({
+    enabled: true,
+    isBlocked: () => hidBlockedRef.current,
+    onScan: onHidScan,
+  });
+
   useEffect(() => {
     blockScanFocusRef.current = !!(selectedForCart || showPreview || insufficientStockContext);
   }, [selectedForCart, showPreview, insufficientStockContext]);
@@ -272,7 +287,7 @@ const B2BBilling = () => {
     }
 
     // Skip dropdown updates during barcode scanner character burst
-    if (gap > 0 && gap < 45) return;
+    if (gap > 0 && gap < 80) return;
 
     searchDebounceRef.current = setTimeout(() => {
       const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
@@ -304,31 +319,11 @@ const B2BBilling = () => {
     e.preventDefault();
     // Use input's current DOM value so fast barcode scans are not truncated (React state can lag behind)
     const rawInput = searchInputRef.current?.value;
-    const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
+    const trimmed = normalizeBarcode(typeof rawInput === 'string' ? rawInput : searchTerm || '');
     if (!trimmed) return;
 
-    // Hybrid barcode first (don't let a highlighted dropdown row steal a full scan)
-    const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
-      parseBarcodeApi: (code) => productService.parseBarcode(code),
-      refreshProducts: async () => {
-        const res = await productService.getAll();
-        const list = Array.isArray(res?.data) ? res.data : [];
-        productsCacheRef.current = list;
-        return list;
-      },
-    });
-    if (resolved?.productsCache) {
-      productsCacheRef.current = resolved.productsCache;
-    }
-
-    if (resolved?.product) {
-      addToCart(resolved.product, qtyFromBarcodeWeight(resolved.product, resolved.weight || 0));
-      setSearchTerm('');
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      setTimeout(() => searchInputRef.current?.focus(), 0);
-      return;
-    }
+    const applied = await applyScannedCodeRef.current?.(trimmed);
+    if (applied) return;
 
     if (highlightedIndex >= 0 && searchResults[highlightedIndex]) {
       const p = searchResults[highlightedIndex];
@@ -430,6 +425,41 @@ const B2BBilling = () => {
     setSearchResults([]);
     setSearchTerm('');
     setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  applyScannedCodeRef.current = async (rawCode) => {
+    const trimmed = normalizeBarcode(rawCode);
+    if (!trimmed) return false;
+    setSelectedForCart(null);
+    const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
+      parseBarcodeApi: (code) => productService.parseBarcode(code),
+      refreshProducts: async () => {
+        const res = await productService.getAll();
+        const list = Array.isArray(res?.data) ? res.data : [];
+        productsCacheRef.current = list;
+        return list;
+      },
+    });
+    if (resolved?.productsCache) {
+      productsCacheRef.current = resolved.productsCache;
+    }
+    if (resolved?.product) {
+      addToCart(resolved.product, qtyFromBarcodeWeight(resolved.product, resolved.weight || 0));
+      setSearchTerm('');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      if (searchInputRef.current) searchInputRef.current.value = '';
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+      return true;
+    }
+    if (looksLikeScannedBarcode(trimmed)) {
+      setSearchTerm('');
+      if (searchInputRef.current) searchInputRef.current.value = '';
+      alert('Product not found. Scan barcode or type name to search.');
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+      return true;
+    }
+    return false;
   };
 
   const handleInsufficientStockResolved = (freshProduct) => {
@@ -1004,6 +1034,7 @@ const B2BBilling = () => {
                   ref={searchInputRef}
                   type="text"
                   className="billing-search-input"
+                  data-barcode-target="true"
                   placeholder="Scan barcode or search by product name..."
                   value={searchTerm}
                   onChange={(e) => handleSearchChange(e.target.value)}

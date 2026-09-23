@@ -24,17 +24,10 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle token expiration
+// Attach token; stay logged in until Logout is pressed
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 export const authService = {

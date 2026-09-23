@@ -49,14 +49,22 @@ public class ProductService {
         if (fullBarcode == null || fullBarcode.trim().isEmpty()) {
             return Optional.empty();
         }
+        String code = fullBarcode.trim();
 
-        Optional<Product> exactMatch = this.productRepository.findByCompanyNameAndBarcode(companyName, fullBarcode);
+        Optional<Product> exactMatch = this.productRepository.findByCompanyNameAndBarcode(companyName, code);
         if (exactMatch.isPresent()) {
-            return Optional.of(new BarcodeParseResult(exactMatch.get(), BigDecimal.ZERO, fullBarcode, fullBarcode));
+            return Optional.of(new BarcodeParseResult(exactMatch.get(), BigDecimal.ZERO, code, code));
+        }
+
+        if (code.matches("^[0-9]+$")) {
+            Optional<Product> withA = this.productRepository.findByCompanyNameAndBarcode(companyName, code + "A");
+            if (withA.isPresent()) {
+                return Optional.of(new BarcodeParseResult(withA.get(), BigDecimal.ZERO, code + "A", code));
+            }
         }
 
         Pattern pattern = Pattern.compile("^(.+?[A-Za-z])(\\d+)$");
-        Matcher matcher = pattern.matcher(fullBarcode);
+        Matcher matcher = pattern.matcher(code);
 
         if (matcher.matches()) {
             String baseBarcode = matcher.group(1);
@@ -65,14 +73,9 @@ public class ProductService {
                 BigDecimal weight = new BigDecimal(weightStr);
                 Optional<Product> product = this.productRepository.findByCompanyNameAndBarcode(companyName, baseBarcode);
                 if (product.isPresent()) {
-                    return Optional.of(new BarcodeParseResult(product.get(), weight, baseBarcode, fullBarcode));
+                    return Optional.of(new BarcodeParseResult(product.get(), weight, baseBarcode, code));
                 }
             } catch (NumberFormatException ignored) {}
-        }
-
-        Optional<Product> baseMatch = this.productRepository.findByCompanyNameAndBarcode(companyName, fullBarcode);
-        if (baseMatch.isPresent()) {
-            return Optional.of(new BarcodeParseResult(baseMatch.get(), BigDecimal.ZERO, fullBarcode, fullBarcode));
         }
 
         return Optional.empty();

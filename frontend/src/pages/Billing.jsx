@@ -29,7 +29,10 @@ import {
   qtyFromBarcodeWeight,
   upsertProductInList,
   resolveBarcodeHybrid,
+  normalizeBarcode,
+  looksLikeScannedBarcode,
 } from '../utils/productLookup';
+import { useHidBarcodeListener } from '../hooks/useHidBarcodeListener';
 
 const DISCOUNT_PERCENT_MAX = 30;
 const BILLING_CART_KEY = 'spice_billing_cart';
@@ -262,6 +265,18 @@ const Billing = () => {
   // After PC sleep / unlock / tab return: refocus search + refresh product cache.
   // Without this, scanner input goes nowhere (focus lost) and lookups can miss.
   const blockScanFocusRef = useRef(false);
+  const applyScannedCodeRef = useRef(null);
+  const hidBlockedRef = useRef(false);
+  hidBlockedRef.current = !!(showPreview || insufficientStockContext);
+  const onHidScan = useCallback((code) => {
+    applyScannedCodeRef.current?.(code);
+  }, []);
+  useHidBarcodeListener({
+    enabled: true,
+    isBlocked: () => hidBlockedRef.current,
+    onScan: onHidScan,
+  });
+
   useEffect(() => {
     blockScanFocusRef.current = !!(showPreview || selectedForCart || insufficientStockContext);
   }, [showPreview, selectedForCart, insufficientStockContext]);
@@ -357,7 +372,7 @@ const Billing = () => {
 
     // Barcode scanners fire keys very fast (< ~40ms). Skip dropdown spam during the burst;
     // Enter will resolve the full code from the cached list.
-    const looksLikeScannerBurst = gap > 0 && gap < 45;
+    const looksLikeScannerBurst = gap > 0 && gap < 80;
     if (looksLikeScannerBurst) {
       return;
     }
@@ -411,7 +426,7 @@ const Billing = () => {
       }
       setTimeout(() => {
         runSearchSubmit();
-      }, 50);
+      }, 80);
       return;
     }
 
@@ -423,41 +438,15 @@ const Billing = () => {
   };
 
   const runSearchSubmit = async () => {
-    // Prefer search-box focus. After sleep/unlock focus is often <body> — still allow
-    // if the barcode landed in the search input value.
-    const active = document.activeElement;
     const searchEl = searchInputRef.current;
-    const searchFocused = active === searchEl;
-    const focusLostToPage =
-      !active || active === document.body || active === document.documentElement;
-    if (!searchFocused && !focusLostToPage) return;
-    // Use input's current DOM value so fast barcode scans are not truncated (React state can lag behind)
     const rawInput = searchEl?.value;
-    const trimmed = (typeof rawInput === 'string' ? rawInput : searchTerm || '').trim();
+    const trimmed = normalizeBarcode(typeof rawInput === 'string' ? rawInput : searchTerm || '');
     if (!trimmed) {
-      if (focusLostToPage) searchEl?.focus();
+      searchEl?.focus();
       return;
     }
-    if (focusLostToPage) searchEl?.focus();
-
-    // Hybrid: local cache first → API parse → refresh list + retry
-    const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
-      parseBarcodeApi: (code) => productService.parseBarcode(code),
-      refreshProducts: refreshProductsCache,
-    });
-    if (resolved?.productsCache) {
-      syncProductsCache(resolved.productsCache);
-    }
-
-    if (resolved?.product) {
-      const qty = qtyFromBarcodeWeight(resolved.product, resolved.weight || 0);
-      addToCart(resolved.product, qty);
-      setSearchTerm('');
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      setTimeout(() => searchInputRef.current?.focus(), 0);
-      return;
-    }
+    const applied = await applyScannedCodeRef.current?.(trimmed);
+    if (applied) return;
 
     // Name-search fallback: single search hit → qty strip
     const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
@@ -555,6 +544,39 @@ const Billing = () => {
     setSearchResults([]);
     setSearchTerm('');
     setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  applyScannedCodeRef.current = async (rawCode) => {
+    const trimmed = normalizeBarcode(rawCode);
+    if (!trimmed) return false;
+    setSelectedForCart(null);
+    setSelectedQtyInput('');
+    const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
+      parseBarcodeApi: (code) => productService.parseBarcode(code),
+      refreshProducts: refreshProductsCache,
+    });
+    if (resolved?.productsCache) {
+      syncProductsCache(resolved.productsCache);
+    }
+    if (resolved?.product) {
+      const qty = qtyFromBarcodeWeight(resolved.product, resolved.weight || 0);
+      addToCart(resolved.product, qty);
+      setSearchTerm('');
+      setSearchResults([]);
+      setHighlightedIndex(-1);
+      if (searchInputRef.current) searchInputRef.current.value = '';
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+      return true;
+    }
+    if (looksLikeScannedBarcode(trimmed)) {
+      setSearchTerm('');
+      setSearchResults([]);
+      if (searchInputRef.current) searchInputRef.current.value = '';
+      alert('Product not found. Scan barcode or type name to search.');
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+      return true;
+    }
+    return false;
   };
 
   const handleInsufficientStockResolved = (freshProduct) => {
@@ -1050,6 +1072,7 @@ const Billing = () => {
                 ref={searchInputRef}
                 type="text"
                 className="billing-search-input"
+                data-barcode-target="true"
                 placeholder="Scan barcode or search by product name..."
                 value={searchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}

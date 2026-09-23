@@ -3,7 +3,25 @@
  * Avoids calling GET /products on every keystroke during scanner input.
  */
 
-const WEIGHT_BARCODE_RE = /^(.+?[A-Za-z])(\d+)$/;
+/** Strip scanner control chars / AIM prefix (e.g. ]C1) and trim. */
+export function normalizeBarcode(raw) {
+  let code = String(raw || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (/^\][A-Za-z0-9]{1,2}/.test(code)) {
+    code = code.replace(/^\][A-Za-z0-9]{1,2}/, '');
+  }
+  return code;
+}
+
+/** True for HID scanner payloads (shop labels 1000A / 1000A250, EAN/UPC, mixed codes). */
+export function looksLikeScannedBarcode(code) {
+  const c = normalizeBarcode(code);
+  if (c.length < 4) return false;
+  if (!/^[A-Za-z0-9]+$/.test(c)) return false;
+  if (/^\d+[A-Za-z]\d*$/.test(c)) return true;
+  if (/^\d{8,14}$/.test(c)) return true;
+  const digits = (c.match(/\d/g) || []).length;
+  return c.length >= 6 && digits >= 3;
+}
 
 /** Filter products by name or barcode substring (case-insensitive). */
 export function filterProductsLocal(products, query) {
@@ -24,27 +42,52 @@ export function filterProductsLocal(products, query) {
  */
 export function parseBarcodeLocal(products, fullBarcode) {
   const list = Array.isArray(products) ? products : [];
-  const code = (fullBarcode || '').trim();
+  const code = normalizeBarcode(fullBarcode);
   if (!code) return null;
+  const codeUpper = code.toUpperCase();
 
   const byBarcode = new Map();
   for (const p of list) {
-    const b = (p.barcode || '').trim();
-    if (b) byBarcode.set(b, p);
+    const b = normalizeBarcode(p.barcode);
+    if (!b) continue;
+    byBarcode.set(b, p);
+    byBarcode.set(b.toUpperCase(), p);
   }
 
-  const exact = byBarcode.get(code);
+  const exact = byBarcode.get(code) || byBarcode.get(codeUpper);
   if (exact) {
     return { product: exact, weight: 0 };
   }
 
-  const m = code.match(WEIGHT_BARCODE_RE);
+  // Numeric-only scan of a shop code stored as 1000A
+  if (/^\d+$/.test(code)) {
+    const withA = byBarcode.get(`${code}A`) || byBarcode.get(`${code}a`);
+    if (withA) return { product: withA, weight: 0 };
+  }
+
+  // Longest stored barcode that is a prefix; remainder is weight (grams/ml)
+  let best = null;
+  for (const [b, p] of byBarcode.entries()) {
+    const base = b.toUpperCase();
+    if (base.length >= codeUpper.length) continue;
+    if (!codeUpper.startsWith(base)) continue;
+    const rest = codeUpper.slice(base.length);
+    if (!/^\d+$/.test(rest)) continue;
+    if (!best || base.length > best.baseLength) {
+      const weight = Number(rest);
+      if (Number.isFinite(weight)) {
+        best = { product: p, weight, baseLength: base.length };
+      }
+    }
+  }
+  if (best) return { product: best.product, weight: best.weight };
+
+  const m = code.match(/^(.+?[A-Za-z])(\d+)$/);
   if (m) {
     const base = m[1];
-    const weightStr = m[2];
-    const product = byBarcode.get(base);
+    const product = byBarcode.get(base) || byBarcode.get(base.toUpperCase());
     if (product) {
-      const weight = Number(weightStr);
+      const weight = Number(m[2]);
       if (Number.isFinite(weight)) {
         return { product, weight };
       }
@@ -64,7 +107,7 @@ export function parseBarcodeLocal(products, fullBarcode) {
  * @returns {Promise<{ product: object, weight: number, productsCache: object[] } | null>}
  */
 export async function resolveBarcodeHybrid(productsCache, fullBarcode, deps) {
-  const code = (fullBarcode || '').trim();
+  const code = normalizeBarcode(fullBarcode);
   if (!code) return null;
 
   const { parseBarcodeApi, refreshProducts } = deps || {};

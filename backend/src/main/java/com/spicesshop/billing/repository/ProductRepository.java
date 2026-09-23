@@ -13,7 +13,7 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
     @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.companyName = :companyName AND p.isActive = true")
     List<Product> findByCompanyNameAndIsActiveTrue(String companyName);
 
-    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.companyName = :companyName AND p.barcode = :barcode")
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.companyName = :companyName AND LOWER(p.barcode) = LOWER(:barcode)")
     Optional<Product> findByCompanyNameAndBarcode(@Param("companyName") String companyName, @Param("barcode") String barcode);
     
     Optional<Product> findByCompanyNameAndProductCode(String companyName, String productCode);

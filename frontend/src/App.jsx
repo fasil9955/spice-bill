@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { getStoredToken } from './utils/authSession';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Dashboard from './pages/Dashboard';
@@ -7,9 +8,8 @@ import B2BBilling from './pages/B2BBilling';
 import './App.css';
 import './pages/Dashboard.css';
 
-// Protected Route Component
 const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
+  const token = getStoredToken();
   if (!token) {
     return <Navigate to="/login" replace />;
   }

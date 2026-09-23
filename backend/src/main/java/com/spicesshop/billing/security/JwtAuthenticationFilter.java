@@ -29,8 +29,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = null;
         String companyName = null;
 
+        String path = request.getRequestURI() != null ? request.getRequestURI() : "";
+        boolean authApi = path.contains("/api/auth/");
+
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
+            if (!authApi && !Boolean.TRUE.equals(this.jwtUtil.validateToken(token))) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"Invalid session. Please login again.\"}");
+                return;
+            }
             try {
                 companyName = this.jwtUtil.extractCompanyName(token);
             } catch (Exception ignored) {}
