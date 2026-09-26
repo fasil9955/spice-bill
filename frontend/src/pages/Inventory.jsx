@@ -440,13 +440,10 @@ const Inventory = () => {
                   <span className="sticker-label">Best Before :</span>
                   <span className="sticker-value">{info.bestBefore || '—'}</span>
                 </div>
-                <div className="sticker-field">
-                  <span className="sticker-label">USP :</span>
-                  <span className="sticker-value">{info.usp || '—'}</span>
-                </div>
               </div>
 
               <div className="sticker-col-right">
+                <div className="sticker-line sticker-usp">USP: {info.usp || '—'}</div>
                 {info.ingredients ? (
                   <div className="sticker-line sticker-ingredients">Ingredients: {info.ingredients}</div>
                 ) : (
@@ -537,7 +534,7 @@ const Inventory = () => {
     // Human-readable text is printed as HTML under the bars so the bars stay tall and unscaled.
     displayValue: false,
     width: 2,
-    height: 72,
+    height: 80,
     margin: 14,
     lineColor: '#000000',
     background: '#ffffff',
@@ -732,13 +729,10 @@ const Inventory = () => {
                   <span class="sticker-label">Best Before :</span>
                   <span class="sticker-value">${bestBefore || '—'}</span>
                 </div>
-                <div class="sticker-field">
-                  <span class="sticker-label">USP :</span>
-                  <span class="sticker-value">${usp || '—'}</span>
-                </div>
               </div>
 
               <div class="sticker-col-right">
+                <div class="sticker-line sticker-usp">USP: ${usp || '—'}</div>
                 ${ingredients ? `<div class="sticker-line sticker-ingredients">Ingredients: ${ingredients}</div>` : `<div class="sticker-line sticker-ingredients">Ingredients: —</div>`}
 
                 <div class="sticker-company-name">${companyName}</div>
@@ -852,7 +846,7 @@ const Inventory = () => {
               word-wrap: break-word;
               overflow: hidden;
               flex-shrink: 0;
-              min-height: 8mm;
+              min-height: 6mm;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -861,17 +855,18 @@ const Inventory = () => {
               flex-shrink: 0;
               display: flex;
               flex-direction: column;
-              align-items: center;
+              align-items: flex-start;
               justify-content: center;
               width: 100%;
               background: #fff;
+              margin-left: -1.5mm;
             }
             .sticker-barcode-img {
-              width: 46mm !important;
+              width: 38mm !important;
               height: 12mm !important;
               object-fit: fill !important;
               display: block !important;
-              margin: 0 auto !important;
+              margin: 0 !important;
               background: #fff !important;
               image-rendering: pixelated;
               image-rendering: crisp-edges;
@@ -885,6 +880,7 @@ const Inventory = () => {
               line-height: 1.1;
               margin-top: 0.5mm;
               text-align: center;
+              width: 38mm;
             }
             .sticker-line {
               font-size: 7pt;
@@ -948,6 +944,15 @@ const Inventory = () => {
               overflow: hidden;
               display: -webkit-box;
               -webkit-line-clamp: 3;
+              -webkit-box-orient: vertical;
+            }
+            .sticker-usp {
+              text-align: left;
+              font-weight: 700;
+              max-height: 8mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
               -webkit-box-orient: vertical;
             }
             .sticker-ingredients {
@@ -1642,7 +1647,7 @@ const Inventory = () => {
                   word-wrap: break-word;
                   overflow: hidden;
                   flex-shrink: 0;
-                  min-height: 8mm;
+                  min-height: 6mm;
                   display: flex;
                   align-items: center;
                   justify-content: center;
@@ -1651,16 +1656,17 @@ const Inventory = () => {
                   flex-shrink: 0;
                   display: flex;
                   flex-direction: column;
-                  align-items: center;
+                  align-items: flex-start;
                   justify-content: center;
                   width: 100%;
                   background: #fff;
+                  margin-left: -1.5mm;
                 }
                 .sticker-barcode-svg {
-                  width: 46mm !important;
+                  width: 38mm !important;
                   height: 12mm !important;
                   display: block;
-                  margin: 0 auto;
+                  margin: 0;
                 }
                 .sticker-barcode-text {
                   font-size: 6.5pt;
@@ -1669,6 +1675,7 @@ const Inventory = () => {
                   line-height: 1.1;
                   margin-top: 0.5mm;
                   text-align: center;
+                  width: 38mm;
                 }
                 .sticker-line {
                   font-size: 7pt;
@@ -1732,6 +1739,15 @@ const Inventory = () => {
                   overflow: hidden;
                   display: -webkit-box;
                   -webkit-line-clamp: 3;
+                  -webkit-box-orient: vertical;
+                }
+                .sticker-usp {
+                  text-align: left;
+                  font-weight: 700;
+                  max-height: 8mm;
+                  overflow: hidden;
+                  display: -webkit-box;
+                  -webkit-line-clamp: 2;
                   -webkit-box-orient: vertical;
                 }
                 .sticker-ingredients {

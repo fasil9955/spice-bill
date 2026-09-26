@@ -364,7 +364,7 @@ Please change the parent <Route path="${x}"> to <Route path="${x==="/"?"*":`${x}
 
 ${O.slice(0,10).join(`
 `)}${O.length>10?`
-...more`:""}`)}catch($e){console.error("Import failed",$e),alert(`Import failed: ${($e==null?void 0:$e.message)||"Unknown error"}`)}finally{je(!1),k.current&&(k.current.value="")}}},wt=ne=>{if(!ne||typeof ne!="string")return"";const ye=ne.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!ye)return ne;const[,Q,xe]=ye;return`${xe}/${Q}`},dt=ne=>{if(!ne||typeof ne!="string")return"";const ye=ne.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!ye)return"";const[,Q,xe]=ye,Fe=Q.slice(-2);return`B-${xe}${Fe}`},_t=ne=>{const ye=((ne==null?void 0:ne.barcode)||"").toString().trim(),Q=((z==null?void 0:z[ne==null?void 0:ne.productId])||"").toString().trim();return ye?((ne==null?void 0:ne.packagingType)||"").toString().trim().toLowerCase()==="pieces"?ye:Q?`${ye}${Q}`:ye:""},he=ne=>{const ye=x||(d==null?void 0:d.companyName)||(ne==null?void 0:ne.companyName)||"",Q=_||(d==null?void 0:d.address)||"",xe=E||(d==null?void 0:d.phoneNumber)||"",Fe=T||"",De=I||"",Ue=((ne==null?void 0:ne.productName)||"").replace(/\s*\([^)]*\)/g,"").trim(),st=wt(L),yt=J||"",M=fe==null?void 0:fe[ne==null?void 0:ne.productId],W=M===""||M==null?NaN:parseInt(M,10),q=`${Number.isNaN(W)?12:W} months`,Y=((j==null?void 0:j[ne==null?void 0:ne.productId])||"").toString().trim(),K=((z==null?void 0:z[ne==null?void 0:ne.productId])||"").toString().trim(),O=((G==null?void 0:G[ne==null?void 0:ne.productId])||"gm").toString().trim(),B=K?`${K}${O}`:"",ee=((ne==null?void 0:ne.packagingType)||"").toString().trim().toLowerCase()==="pieces",re=(ne==null?void 0:ne.sellingPricePerUnit)!=null?Number(ne.sellingPricePerUnit):null;let me="",ve=null;if(re!=null)if(K){const lt=parseFloat(K),Bt=ee||Number.isNaN(lt)||lt<=0?re:re*lt/1e3;ve=Bt,me=`₹${Math.round(Bt*100)/100}`}else ve=re,me=`₹${re}`;let Ee=ve??null;const Ae=((H==null?void 0:H[ne==null?void 0:ne.productId])||"").toString().trim();if(Ae){const lt=parseFloat(Ae);Number.isFinite(lt)&&lt>0&&(Ee=lt)}const Re=Ee!=null?`₹${Math.round(Ee*100)/100}`:"";Ee!=null&&(me=Re);const Ye=((de==null?void 0:de[ne==null?void 0:ne.productId])||"").toString().trim(),Je=((ie==null?void 0:ie[ne==null?void 0:ne.productId])||"").toString().trim();return{companyName:ye,companyAddress:Q,customerCare:xe,customerCareEmail:Fe,packingLicense:De,productName:Ue,packedDate:st,bestBefore:q,batchNo:Y,fssai:yt,price:me,weight:B,unitSalePrice:Re,usp:Ye,ingredients:Je}},Te=async ne=>{var De,$e;const ye=Array.isArray(ne)?ne.filter(Boolean):[];if(ye.length===0){alert("No products selected for barcode preview");return}b(ye),w(""),S(""),N(""),C(""),R(""),ae({}),oe({}),F({}),P({}),le({});const Q={},xe={},Fe={};ye.forEach(Ue=>{Q[Ue.productId]=(Ue.usp||"").toString(),xe[Ue.productId]=(Ue.ingredients||"").toString();const st=(Ue.unit||"").toString().trim().toLowerCase(),yt=st==="l"||st==="ml"?"ml":"gm";Fe[Ue.productId]=yt}),pe(Q),ce(xe),oe(Fe),g(!0);try{const Ue=await ra.getCompanyDetails(),st=(Ue==null?void 0:Ue.data)||{},yt=st.fssaiLicense??"";X(yt);const M=(st.barcodeLabelCompanyName||"").toString().trim(),W=(st.companyName||"").toString().trim(),U=((d==null?void 0:d.companyName)||((De=ye[0])==null?void 0:De.companyName)||"").toString().trim();w(M||W||U),S(st.address??""),N(st.customerCareNumber??st.phoneNumber??""),C(st.customerCareEmail??""),R(st.packingLicenceNo??"")}catch{X(""),w(((d==null?void 0:d.companyName)||(($e=ye[0])==null?void 0:$e.companyName)||"").toString().trim())}},Le=()=>g(!1),ze=()=>{const ne=[],ye=y||[];for(let Q=0;Q<ye.length;Q+=1){const xe=ye[Q],Fe=he(xe),De=`barcode-preview-${xe.productId}-${Q}`;ne.push(c.jsx("div",{className:"label-row",children:c.jsx("div",{className:"label",children:c.jsxs("div",{className:"sticker-grid",children:[c.jsxs("div",{className:"sticker-col-left",children:[c.jsx("div",{className:"sticker-product-name",children:Fe.productName||"—"}),c.jsxs("div",{className:"sticker-barcode-wrap",children:[c.jsx("svg",{id:De,className:"sticker-barcode-svg"}),c.jsx("div",{className:"sticker-barcode-text",children:_t(xe)||""})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Net Quantity :"}),c.jsx("span",{className:"sticker-value",children:Fe.weight||"—"})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"MRP :"}),c.jsxs("span",{className:"sticker-value",children:[Fe.unitSalePrice||"—"," (Incl of all taxes)"]})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Packed On :"}),c.jsx("span",{className:"sticker-value",children:Fe.packedDate||"—"})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Batch No :"}),c.jsx("span",{className:"sticker-value",children:Fe.batchNo||"—"})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Best Before :"}),c.jsx("span",{className:"sticker-value",children:Fe.bestBefore||"—"})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"USP :"}),c.jsx("span",{className:"sticker-value",children:Fe.usp||"—"})]})]}),c.jsxs("div",{className:"sticker-col-right",children:[Fe.ingredients?c.jsxs("div",{className:"sticker-line sticker-ingredients",children:["Ingredients: ",Fe.ingredients]}):c.jsx("div",{className:"sticker-line sticker-ingredients",children:"Ingredients: —"}),c.jsx("div",{className:"sticker-company-name",children:Fe.companyName||"—"}),c.jsx("div",{className:"sticker-company-address",children:Fe.companyAddress||"—"}),c.jsx("div",{className:"sticker-line",children:"Customer Care"}),c.jsxs("div",{className:"sticker-line",children:["Phone : ",Fe.customerCare||"—"]}),c.jsxs("div",{className:"sticker-line",children:["Email: ",Fe.customerCareEmail||"—"]}),c.jsxs("div",{className:"sticker-line",children:["LMPC Reg No: ",Fe.packingLicense||"—"]}),c.jsxs("div",{className:"sticker-fssai-row",children:[c.jsx("img",{className:"fssai-logo-img",src:e,alt:"FSSAI"}),c.jsx("div",{className:"fssai-text",children:Fe.fssai||"—"})]})]})]})},`${xe.productId}-${Q}`)},`row-${Q}`))}return ne};A.useEffect(()=>{if(!m)return;const ye=setTimeout(()=>{for(let Q=0;Q<y.length;Q+=1){const xe=y[Q],Fe=document.getElementById(`barcode-preview-${xe.productId}-${Q}`),De=_t(xe);if(Fe&&De)try{zN(Fe,De,Ce())}catch{}}},0);return()=>clearTimeout(ye)},[m,y,z]),A.useEffect(()=>{if(!m||!Array.isArray(y)||y.length===0)return;const ne=dt(L);ne&&P(ye=>{const Q={...ye||{}};return y.forEach(xe=>{(Q[xe.productId]||"").toString().trim()||(Q[xe.productId]=ne)}),Q})},[m,L,y]),A.useEffect(()=>{m&&(!Array.isArray(y)||y.length===0||F(ne=>{const ye={...ne||{}};return y.forEach(Q=>{(ye[Q.productId]??"").toString().trim()||(ye[Q.productId]=12)}),ye}))},[m,y]);const Ce=()=>({format:"CODE128",displayValue:!1,width:2,height:72,margin:14,lineColor:"#000000",background:"#ffffff"}),Xe=ne=>{const ye=ne.getContext("2d",{willReadFrequently:!0});if(!ye)return;const{width:Q,height:xe}=ne;if(!Q||!xe)return;const Fe=ye.getImageData(0,0,Q,xe),De=Fe.data;for(let $e=0;$e<De.length;$e+=4){const st=.299*De[$e]+.587*De[$e+1]+.114*De[$e+2]<140?0:255;De[$e]=st,De[$e+1]=st,De[$e+2]=st,De[$e+3]=255}ye.putImageData(Fe,0,0)},Ke=ne=>{try{const ye=String(ne||"").trim();if(!ye)return"";const Q=document.createElement("canvas");zN(Q,ye,Ce()),Xe(Q);const xe=3,Fe=document.createElement("canvas");Fe.width=Math.max(1,Q.width*xe),Fe.height=Math.max(1,Q.height*xe);const De=Fe.getContext("2d");return De?(De.imageSmoothingEnabled=!1,De.drawImage(Q,0,0,Fe.width,Fe.height),Xe(Fe),Fe.toDataURL("image/png")):Q.toDataURL("image/png")}catch{return""}},Ze=ne=>{const ye=document.createElement("iframe");ye.style.position="fixed",ye.style.right="0",ye.style.bottom="0",ye.style.width="0",ye.style.height="0",ye.style.border="0",ye.setAttribute("aria-hidden","true"),document.body.appendChild(ye);const Q=ye.contentWindow,xe=ye.contentDocument||(Q==null?void 0:Q.document);if(!Q||!xe){document.body.removeChild(ye),alert("Failed to open print frame");return}Q.onafterprint=()=>{try{document.body.removeChild(ye)}catch{}},xe.open(),xe.write(ne),xe.close(),setTimeout(()=>{try{Q.focus(),Q.print()}catch{try{window.print()}catch{}}setTimeout(()=>{try{document.body.contains(ye)&&document.body.removeChild(ye)}catch{}},4e3)},250)},ot=ne=>ne==null||typeof ne!="string"?"":ne.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"),ur=()=>{const ne=[...y];if(ne.length===0)return;const ye=Ue=>Ue==null||String(Ue).trim()==="",Q=[];if(ye(x)&&Q.push("Company Name"),ye(_)&&Q.push("Company Address"),ye(E)&&Q.push("Customer Care Phone"),ye(T)&&Q.push("Customer Care Email"),ye(I)&&Q.push("Packing Licence No (LMPC Reg No)"),ye(L)&&Q.push("Packed Date"),ne.forEach(Ue=>{const st=((G==null?void 0:G[Ue.productId])||"gm").toString().trim(),yt=(z==null?void 0:z[Ue.productId])??"",M=(fe==null?void 0:fe[Ue.productId])??"",W=(j==null?void 0:j[Ue.productId])??"",U=(de==null?void 0:de[Ue.productId])??"",q=(ie==null?void 0:ie[Ue.productId])??"";ye(yt)&&Q.push(`Net Quantity Value (${Ue.productName})`),ye(st)&&Q.push(`Net Quantity Unit (${Ue.productName})`),ye(M)&&Q.push(`Best Before Months (${Ue.productName})`),ye(W)&&Q.push(`Batch No (${Ue.productName})`),ye(U)&&Q.push(`USP (${Ue.productName})`),ye(q)&&Q.push(`Ingredients (${Ue.productName})`)}),Q.length>0){alert(`Please fill required fields before printing:
+...more`:""}`)}catch($e){console.error("Import failed",$e),alert(`Import failed: ${($e==null?void 0:$e.message)||"Unknown error"}`)}finally{je(!1),k.current&&(k.current.value="")}}},wt=ne=>{if(!ne||typeof ne!="string")return"";const ye=ne.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!ye)return ne;const[,Q,xe]=ye;return`${xe}/${Q}`},dt=ne=>{if(!ne||typeof ne!="string")return"";const ye=ne.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!ye)return"";const[,Q,xe]=ye,Fe=Q.slice(-2);return`B-${xe}${Fe}`},_t=ne=>{const ye=((ne==null?void 0:ne.barcode)||"").toString().trim(),Q=((z==null?void 0:z[ne==null?void 0:ne.productId])||"").toString().trim();return ye?((ne==null?void 0:ne.packagingType)||"").toString().trim().toLowerCase()==="pieces"?ye:Q?`${ye}${Q}`:ye:""},he=ne=>{const ye=x||(d==null?void 0:d.companyName)||(ne==null?void 0:ne.companyName)||"",Q=_||(d==null?void 0:d.address)||"",xe=E||(d==null?void 0:d.phoneNumber)||"",Fe=T||"",De=I||"",Ue=((ne==null?void 0:ne.productName)||"").replace(/\s*\([^)]*\)/g,"").trim(),st=wt(L),yt=J||"",M=fe==null?void 0:fe[ne==null?void 0:ne.productId],W=M===""||M==null?NaN:parseInt(M,10),q=`${Number.isNaN(W)?12:W} months`,Y=((j==null?void 0:j[ne==null?void 0:ne.productId])||"").toString().trim(),K=((z==null?void 0:z[ne==null?void 0:ne.productId])||"").toString().trim(),O=((G==null?void 0:G[ne==null?void 0:ne.productId])||"gm").toString().trim(),B=K?`${K}${O}`:"",ee=((ne==null?void 0:ne.packagingType)||"").toString().trim().toLowerCase()==="pieces",re=(ne==null?void 0:ne.sellingPricePerUnit)!=null?Number(ne.sellingPricePerUnit):null;let me="",ve=null;if(re!=null)if(K){const lt=parseFloat(K),Bt=ee||Number.isNaN(lt)||lt<=0?re:re*lt/1e3;ve=Bt,me=`₹${Math.round(Bt*100)/100}`}else ve=re,me=`₹${re}`;let Ee=ve??null;const Ae=((H==null?void 0:H[ne==null?void 0:ne.productId])||"").toString().trim();if(Ae){const lt=parseFloat(Ae);Number.isFinite(lt)&&lt>0&&(Ee=lt)}const Re=Ee!=null?`₹${Math.round(Ee*100)/100}`:"";Ee!=null&&(me=Re);const Ye=((de==null?void 0:de[ne==null?void 0:ne.productId])||"").toString().trim(),Je=((ie==null?void 0:ie[ne==null?void 0:ne.productId])||"").toString().trim();return{companyName:ye,companyAddress:Q,customerCare:xe,customerCareEmail:Fe,packingLicense:De,productName:Ue,packedDate:st,bestBefore:q,batchNo:Y,fssai:yt,price:me,weight:B,unitSalePrice:Re,usp:Ye,ingredients:Je}},Te=async ne=>{var De,$e;const ye=Array.isArray(ne)?ne.filter(Boolean):[];if(ye.length===0){alert("No products selected for barcode preview");return}b(ye),w(""),S(""),N(""),C(""),R(""),ae({}),oe({}),F({}),P({}),le({});const Q={},xe={},Fe={};ye.forEach(Ue=>{Q[Ue.productId]=(Ue.usp||"").toString(),xe[Ue.productId]=(Ue.ingredients||"").toString();const st=(Ue.unit||"").toString().trim().toLowerCase(),yt=st==="l"||st==="ml"?"ml":"gm";Fe[Ue.productId]=yt}),pe(Q),ce(xe),oe(Fe),g(!0);try{const Ue=await ra.getCompanyDetails(),st=(Ue==null?void 0:Ue.data)||{},yt=st.fssaiLicense??"";X(yt);const M=(st.barcodeLabelCompanyName||"").toString().trim(),W=(st.companyName||"").toString().trim(),U=((d==null?void 0:d.companyName)||((De=ye[0])==null?void 0:De.companyName)||"").toString().trim();w(M||W||U),S(st.address??""),N(st.customerCareNumber??st.phoneNumber??""),C(st.customerCareEmail??""),R(st.packingLicenceNo??"")}catch{X(""),w(((d==null?void 0:d.companyName)||(($e=ye[0])==null?void 0:$e.companyName)||"").toString().trim())}},Le=()=>g(!1),ze=()=>{const ne=[],ye=y||[];for(let Q=0;Q<ye.length;Q+=1){const xe=ye[Q],Fe=he(xe),De=`barcode-preview-${xe.productId}-${Q}`;ne.push(c.jsx("div",{className:"label-row",children:c.jsx("div",{className:"label",children:c.jsxs("div",{className:"sticker-grid",children:[c.jsxs("div",{className:"sticker-col-left",children:[c.jsx("div",{className:"sticker-product-name",children:Fe.productName||"—"}),c.jsxs("div",{className:"sticker-barcode-wrap",children:[c.jsx("svg",{id:De,className:"sticker-barcode-svg"}),c.jsx("div",{className:"sticker-barcode-text",children:_t(xe)||""})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Net Quantity :"}),c.jsx("span",{className:"sticker-value",children:Fe.weight||"—"})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"MRP :"}),c.jsxs("span",{className:"sticker-value",children:[Fe.unitSalePrice||"—"," (Incl of all taxes)"]})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Packed On :"}),c.jsx("span",{className:"sticker-value",children:Fe.packedDate||"—"})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Batch No :"}),c.jsx("span",{className:"sticker-value",children:Fe.batchNo||"—"})]}),c.jsxs("div",{className:"sticker-field",children:[c.jsx("span",{className:"sticker-label",children:"Best Before :"}),c.jsx("span",{className:"sticker-value",children:Fe.bestBefore||"—"})]})]}),c.jsxs("div",{className:"sticker-col-right",children:[c.jsxs("div",{className:"sticker-line sticker-usp",children:["USP: ",Fe.usp||"—"]}),Fe.ingredients?c.jsxs("div",{className:"sticker-line sticker-ingredients",children:["Ingredients: ",Fe.ingredients]}):c.jsx("div",{className:"sticker-line sticker-ingredients",children:"Ingredients: —"}),c.jsx("div",{className:"sticker-company-name",children:Fe.companyName||"—"}),c.jsx("div",{className:"sticker-company-address",children:Fe.companyAddress||"—"}),c.jsx("div",{className:"sticker-line",children:"Customer Care"}),c.jsxs("div",{className:"sticker-line",children:["Phone : ",Fe.customerCare||"—"]}),c.jsxs("div",{className:"sticker-line",children:["Email: ",Fe.customerCareEmail||"—"]}),c.jsxs("div",{className:"sticker-line",children:["LMPC Reg No: ",Fe.packingLicense||"—"]}),c.jsxs("div",{className:"sticker-fssai-row",children:[c.jsx("img",{className:"fssai-logo-img",src:e,alt:"FSSAI"}),c.jsx("div",{className:"fssai-text",children:Fe.fssai||"—"})]})]})]})},`${xe.productId}-${Q}`)},`row-${Q}`))}return ne};A.useEffect(()=>{if(!m)return;const ye=setTimeout(()=>{for(let Q=0;Q<y.length;Q+=1){const xe=y[Q],Fe=document.getElementById(`barcode-preview-${xe.productId}-${Q}`),De=_t(xe);if(Fe&&De)try{zN(Fe,De,Ce())}catch{}}},0);return()=>clearTimeout(ye)},[m,y,z]),A.useEffect(()=>{if(!m||!Array.isArray(y)||y.length===0)return;const ne=dt(L);ne&&P(ye=>{const Q={...ye||{}};return y.forEach(xe=>{(Q[xe.productId]||"").toString().trim()||(Q[xe.productId]=ne)}),Q})},[m,L,y]),A.useEffect(()=>{m&&(!Array.isArray(y)||y.length===0||F(ne=>{const ye={...ne||{}};return y.forEach(Q=>{(ye[Q.productId]??"").toString().trim()||(ye[Q.productId]=12)}),ye}))},[m,y]);const Ce=()=>({format:"CODE128",displayValue:!1,width:2,height:80,margin:14,lineColor:"#000000",background:"#ffffff"}),Xe=ne=>{const ye=ne.getContext("2d",{willReadFrequently:!0});if(!ye)return;const{width:Q,height:xe}=ne;if(!Q||!xe)return;const Fe=ye.getImageData(0,0,Q,xe),De=Fe.data;for(let $e=0;$e<De.length;$e+=4){const st=.299*De[$e]+.587*De[$e+1]+.114*De[$e+2]<140?0:255;De[$e]=st,De[$e+1]=st,De[$e+2]=st,De[$e+3]=255}ye.putImageData(Fe,0,0)},Ke=ne=>{try{const ye=String(ne||"").trim();if(!ye)return"";const Q=document.createElement("canvas");zN(Q,ye,Ce()),Xe(Q);const xe=3,Fe=document.createElement("canvas");Fe.width=Math.max(1,Q.width*xe),Fe.height=Math.max(1,Q.height*xe);const De=Fe.getContext("2d");return De?(De.imageSmoothingEnabled=!1,De.drawImage(Q,0,0,Fe.width,Fe.height),Xe(Fe),Fe.toDataURL("image/png")):Q.toDataURL("image/png")}catch{return""}},Ze=ne=>{const ye=document.createElement("iframe");ye.style.position="fixed",ye.style.right="0",ye.style.bottom="0",ye.style.width="0",ye.style.height="0",ye.style.border="0",ye.setAttribute("aria-hidden","true"),document.body.appendChild(ye);const Q=ye.contentWindow,xe=ye.contentDocument||(Q==null?void 0:Q.document);if(!Q||!xe){document.body.removeChild(ye),alert("Failed to open print frame");return}Q.onafterprint=()=>{try{document.body.removeChild(ye)}catch{}},xe.open(),xe.write(ne),xe.close(),setTimeout(()=>{try{Q.focus(),Q.print()}catch{try{window.print()}catch{}}setTimeout(()=>{try{document.body.contains(ye)&&document.body.removeChild(ye)}catch{}},4e3)},250)},ot=ne=>ne==null||typeof ne!="string"?"":ne.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"),ur=()=>{const ne=[...y];if(ne.length===0)return;const ye=Ue=>Ue==null||String(Ue).trim()==="",Q=[];if(ye(x)&&Q.push("Company Name"),ye(_)&&Q.push("Company Address"),ye(E)&&Q.push("Customer Care Phone"),ye(T)&&Q.push("Customer Care Email"),ye(I)&&Q.push("Packing Licence No (LMPC Reg No)"),ye(L)&&Q.push("Packed Date"),ne.forEach(Ue=>{const st=((G==null?void 0:G[Ue.productId])||"gm").toString().trim(),yt=(z==null?void 0:z[Ue.productId])??"",M=(fe==null?void 0:fe[Ue.productId])??"",W=(j==null?void 0:j[Ue.productId])??"",U=(de==null?void 0:de[Ue.productId])??"",q=(ie==null?void 0:ie[Ue.productId])??"";ye(yt)&&Q.push(`Net Quantity Value (${Ue.productName})`),ye(st)&&Q.push(`Net Quantity Unit (${Ue.productName})`),ye(M)&&Q.push(`Best Before Months (${Ue.productName})`),ye(W)&&Q.push(`Batch No (${Ue.productName})`),ye(U)&&Q.push(`USP (${Ue.productName})`),ye(q)&&Q.push(`Ingredients (${Ue.productName})`)}),Q.length>0){alert(`Please fill required fields before printing:
 - ${Q.slice(0,12).join(`
 - `)}`);return}const xe=Ue=>ot(Ue).replace(/\n/g,"<br/>");let Fe='<div class="print-container">';for(let Ue=0;Ue<ne.length;Ue+=1){const st=ne[Ue],yt=he(st),M=_t(st),W=Ke(M),U=ot(yt.companyName),q=xe(yt.companyAddress||""),Y=ot(yt.customerCare||""),K=ot(yt.customerCareEmail||""),O=ot(yt.packingLicense||""),B=ot(yt.productName),V=ot(yt.packedDate||""),ee=ot(yt.batchNo||""),re=ot(yt.bestBefore||""),me=ot(yt.fssai||""),ve=ot(yt.unitSalePrice||""),Ee=xe(yt.ingredients||""),Ae=ot(yt.usp||""),Re=ot(yt.weight||""),Ye=Ue===ne.length-1;Fe+=`
         <div class="label-row ${Ye?"last-row":"force-break"}">
@@ -398,13 +398,10 @@ ${O.slice(0,10).join(`
                   <span class="sticker-label">Best Before :</span>
                   <span class="sticker-value">${re||"—"}</span>
                 </div>
-                <div class="sticker-field">
-                  <span class="sticker-label">USP :</span>
-                  <span class="sticker-value">${Ae||"—"}</span>
-                </div>
               </div>
 
               <div class="sticker-col-right">
+                <div class="sticker-line sticker-usp">USP: ${Ae||"—"}</div>
                 ${Ee?`<div class="sticker-line sticker-ingredients">Ingredients: ${Ee}</div>`:'<div class="sticker-line sticker-ingredients">Ingredients: —</div>'}
 
                 <div class="sticker-company-name">${U}</div>
@@ -512,7 +509,7 @@ ${O.slice(0,10).join(`
               word-wrap: break-word;
               overflow: hidden;
               flex-shrink: 0;
-              min-height: 8mm;
+              min-height: 6mm;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -521,17 +518,18 @@ ${O.slice(0,10).join(`
               flex-shrink: 0;
               display: flex;
               flex-direction: column;
-              align-items: center;
+              align-items: flex-start;
               justify-content: center;
               width: 100%;
               background: #fff;
+              margin-left: -1.5mm;
             }
             .sticker-barcode-img {
-              width: 46mm !important;
+              width: 38mm !important;
               height: 12mm !important;
               object-fit: fill !important;
               display: block !important;
-              margin: 0 auto !important;
+              margin: 0 !important;
               background: #fff !important;
               image-rendering: pixelated;
               image-rendering: crisp-edges;
@@ -545,6 +543,7 @@ ${O.slice(0,10).join(`
               line-height: 1.1;
               margin-top: 0.5mm;
               text-align: center;
+              width: 38mm;
             }
             .sticker-line {
               font-size: 7pt;
@@ -608,6 +607,15 @@ ${O.slice(0,10).join(`
               overflow: hidden;
               display: -webkit-box;
               -webkit-line-clamp: 3;
+              -webkit-box-orient: vertical;
+            }
+            .sticker-usp {
+              text-align: left;
+              font-weight: 700;
+              max-height: 8mm;
+              overflow: hidden;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
               -webkit-box-orient: vertical;
             }
             .sticker-ingredients {
@@ -914,7 +922,7 @@ ${O.slice(0,10).join(`
                   word-wrap: break-word;
                   overflow: hidden;
                   flex-shrink: 0;
-                  min-height: 8mm;
+                  min-height: 6mm;
                   display: flex;
                   align-items: center;
                   justify-content: center;
@@ -923,16 +931,17 @@ ${O.slice(0,10).join(`
                   flex-shrink: 0;
                   display: flex;
                   flex-direction: column;
-                  align-items: center;
+                  align-items: flex-start;
                   justify-content: center;
                   width: 100%;
                   background: #fff;
+                  margin-left: -1.5mm;
                 }
                 .sticker-barcode-svg {
-                  width: 46mm !important;
+                  width: 38mm !important;
                   height: 12mm !important;
                   display: block;
-                  margin: 0 auto;
+                  margin: 0;
                 }
                 .sticker-barcode-text {
                   font-size: 6.5pt;
@@ -941,6 +950,7 @@ ${O.slice(0,10).join(`
                   line-height: 1.1;
                   margin-top: 0.5mm;
                   text-align: center;
+                  width: 38mm;
                 }
                 .sticker-line {
                   font-size: 7pt;
@@ -1004,6 +1014,15 @@ ${O.slice(0,10).join(`
                   overflow: hidden;
                   display: -webkit-box;
                   -webkit-line-clamp: 3;
+                  -webkit-box-orient: vertical;
+                }
+                .sticker-usp {
+                  text-align: left;
+                  font-weight: 700;
+                  max-height: 8mm;
+                  overflow: hidden;
+                  display: -webkit-box;
+                  -webkit-line-clamp: 2;
                   -webkit-box-orient: vertical;
                 }
                 .sticker-ingredients {
