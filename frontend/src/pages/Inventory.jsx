@@ -415,6 +415,7 @@ const Inventory = () => {
 
                 <div className="sticker-barcode-wrap">
                   <svg id={svgId} className="sticker-barcode-svg" />
+                  <div className="sticker-barcode-text">{getBarcodeValue(product) || ''}</div>
                 </div>
 
                 <div className="sticker-field">
@@ -533,23 +534,51 @@ const Inventory = () => {
 
   const getBarcodeOptions = () => ({
     format: 'CODE128',
-    displayValue: true,
-    width: 3,
-    height: 50,
-    margin: 8,
-    textMargin: 2,
-    fontSize: 14,
-    fontOptions: 'bold',
+    // Human-readable text is printed as HTML under the bars so the bars stay tall and unscaled.
+    displayValue: false,
+    width: 2,
+    height: 72,
+    margin: 14,
     lineColor: '#000000',
     background: '#ffffff',
   });
 
-  /** Generate barcode as PNG data URL for TSC/thermal printers (they often render SVG as solid black). */
+  const makeBarcodePixelsPureBlackWhite = (canvas) => {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    const { width, height } = canvas;
+    if (!width || !height) return;
+    const img = ctx.getImageData(0, 0, width, height);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      const v = gray < 140 ? 0 : 255;
+      d[i] = v;
+      d[i + 1] = v;
+      d[i + 2] = v;
+      d[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  };
+
+  /** High-DPI black/white PNG — thermal printers blur anti-aliased SVG/canvas. */
   const generateBarcodeImageForPrint = (barcodeText) => {
     try {
-      const canvas = document.createElement('canvas');
-      JsBarcode(canvas, barcodeText, getBarcodeOptions());
-      return canvas.toDataURL('image/png');
+      const text = String(barcodeText || '').trim();
+      if (!text) return '';
+      const src = document.createElement('canvas');
+      JsBarcode(src, text, getBarcodeOptions());
+      makeBarcodePixelsPureBlackWhite(src);
+      const scale = 3;
+      const out = document.createElement('canvas');
+      out.width = Math.max(1, src.width * scale);
+      out.height = Math.max(1, src.height * scale);
+      const octx = out.getContext('2d');
+      if (!octx) return src.toDataURL('image/png');
+      octx.imageSmoothingEnabled = false;
+      octx.drawImage(src, 0, 0, out.width, out.height);
+      makeBarcodePixelsPureBlackWhite(out);
+      return out.toDataURL('image/png');
     } catch {
       return '';
     }
@@ -679,7 +708,8 @@ const Inventory = () => {
                 <div class="sticker-product-name">${productName}</div>
 
                 <div class="sticker-barcode-wrap">
-                  ${barcodeImg ? `<img src="${barcodeImg}" alt="${(W || '').replace(/"/g, '&quot;')}" class="sticker-barcode-img" />` : ''}
+                  ${barcodeImg ? `<img src="${barcodeImg}" alt="" class="sticker-barcode-img" />` : ''}
+                  <div class="sticker-barcode-text">${escapeForPrintHtml(W)}</div>
                 </div>
 
                 <div class="sticker-field">
@@ -830,16 +860,31 @@ const Inventory = () => {
             .sticker-barcode-wrap {
               flex-shrink: 0;
               display: flex;
+              flex-direction: column;
               align-items: center;
               justify-content: center;
               width: 100%;
+              background: #fff;
             }
             .sticker-barcode-img {
               width: 46mm !important;
-              height: auto !important;
-              max-height: 14mm !important;
+              height: 12mm !important;
+              object-fit: fill !important;
               display: block !important;
               margin: 0 auto !important;
+              background: #fff !important;
+              image-rendering: pixelated;
+              image-rendering: crisp-edges;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .sticker-barcode-text {
+              font-size: 6.5pt;
+              font-family: Consolas, "Courier New", monospace;
+              letter-spacing: 0.35px;
+              line-height: 1.1;
+              margin-top: 0.5mm;
+              text-align: center;
             }
             .sticker-line {
               font-size: 7pt;
@@ -1605,14 +1650,25 @@ const Inventory = () => {
                 .sticker-barcode-wrap {
                   flex-shrink: 0;
                   display: flex;
+                  flex-direction: column;
                   align-items: center;
                   justify-content: center;
+                  width: 100%;
+                  background: #fff;
                 }
                 .sticker-barcode-svg {
                   width: 46mm !important;
-                  height: auto !important;
+                  height: 12mm !important;
                   display: block;
                   margin: 0 auto;
+                }
+                .sticker-barcode-text {
+                  font-size: 6.5pt;
+                  font-family: Consolas, "Courier New", monospace;
+                  letter-spacing: 0.35px;
+                  line-height: 1.1;
+                  margin-top: 0.5mm;
+                  text-align: center;
                 }
                 .sticker-line {
                   font-size: 7pt;

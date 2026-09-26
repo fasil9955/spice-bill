@@ -1,7 +1,7 @@
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-mvn spring-boot:run -DskipFrontendBuild=true  
+mvn spring-boot:run -DskipFrontendBuild=true -Dspring-boot.run.arguments=--server.port=8081  
 
  mvn clean package -DskipTests
    
