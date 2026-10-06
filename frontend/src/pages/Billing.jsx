@@ -99,6 +99,7 @@ const Billing = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [mixedParts, setMixedParts] = useState({ cash: false, card: false, upi: false });
   const [previewDraft, setPreviewDraft] = useState(null); // draft with invoice number before save
   const [lastInvoice, setLastInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1060,17 +1061,39 @@ const Billing = () => {
 
   const openPaymentModal = () => {
     if (cart.length === 0) return;
+    setMixedParts({ cash: false, card: false, upi: false });
+    setAmounts({ cash: 0, card: 0, upi: 0 });
     setShowPaymentModal(true);
+  };
+
+  const toggleMixedPart = (key) => {
+    setMixedParts((p) => {
+      const next = { ...p, [key]: !p[key] };
+      if (p[key]) {
+        setAmounts((a) => ({ ...a, [key]: 0 }));
+      }
+      return next;
+    });
+    if (paymentMethod !== 'MIXED') setPaymentMethod('MIXED');
   };
 
   const confirmPaymentAndPreview = () => {
     if (paymentMethod === 'MIXED') {
       const total = calculateTotal();
-      const sum = (Number(amounts.cash) || 0) + (Number(amounts.card) || 0) + (Number(amounts.upi) || 0);
+      const cash = mixedParts.cash ? Number(amounts.cash) || 0 : 0;
+      const card = mixedParts.card ? Number(amounts.card) || 0 : 0;
+      const upi = mixedParts.upi ? Number(amounts.upi) || 0 : 0;
+      const used = [mixedParts.cash, mixedParts.card, mixedParts.upi].filter(Boolean).length;
+      if (used < 2) {
+        alert('For Mixed, add at least two of Cash, Card, and UPI.');
+        return;
+      }
+      const sum = cash + card + upi;
       if (Math.abs(sum - total) > 0.05) {
         alert(`Mixed amounts (₹${sum.toFixed(2)}) must add up to the total (₹${total.toFixed(2)}).`);
         return;
       }
+      setAmounts({ cash, card, upi });
     }
     setShowPaymentModal(false);
     handlePreview();
@@ -1586,40 +1609,84 @@ const Billing = () => {
             ))}
           </div>
           {paymentMethod === 'MIXED' && (
-            <div className="mixed-amounts">
-              <div className="mixed-row">
-                <label>Cash ₹</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amounts.cash || ''}
-                  onChange={(e) => setAmounts((a) => ({ ...a, cash: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
-                  placeholder="0"
-                />
+            <div className="payment-mixed-box">
+              <p className="payment-mixed-hint">Add Cash, Card and/or UPI amounts. Use at least two.</p>
+              <div className="payment-mixed-add">
+                <button
+                  type="button"
+                  className={`payment-mixed-add-btn ${mixedParts.cash ? 'on' : ''}`}
+                  onClick={() => toggleMixedPart('cash')}
+                >
+                  {mixedParts.cash ? 'Cash added' : '+ Cash'}
+                </button>
+                <button
+                  type="button"
+                  className={`payment-mixed-add-btn ${mixedParts.card ? 'on' : ''}`}
+                  onClick={() => toggleMixedPart('card')}
+                >
+                  {mixedParts.card ? 'Card added' : '+ Card'}
+                </button>
+                <button
+                  type="button"
+                  className={`payment-mixed-add-btn ${mixedParts.upi ? 'on' : ''}`}
+                  onClick={() => toggleMixedPart('upi')}
+                >
+                  {mixedParts.upi ? 'UPI added' : '+ UPI'}
+                </button>
               </div>
-              <div className="mixed-row">
-                <label>Card ₹</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amounts.card || ''}
-                  onChange={(e) => setAmounts((a) => ({ ...a, card: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
-                  placeholder="0"
-                />
-              </div>
-              <div className="mixed-row">
-                <label>UPI ₹</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amounts.upi || ''}
-                  onChange={(e) => setAmounts((a) => ({ ...a, upi: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
-                  placeholder="0"
-                />
-              </div>
+              {mixedParts.cash && (
+                <div className="mixed-row">
+                  <label>Cash ₹</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amounts.cash || ''}
+                    onChange={(e) => setAmounts((a) => ({ ...a, cash: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
+                    placeholder="0"
+                  />
+                </div>
+              )}
+              {mixedParts.card && (
+                <div className="mixed-row">
+                  <label>Card ₹</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amounts.card || ''}
+                    onChange={(e) => setAmounts((a) => ({ ...a, card: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
+                    placeholder="0"
+                  />
+                </div>
+              )}
+              {mixedParts.upi && (
+                <div className="mixed-row">
+                  <label>UPI ₹</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amounts.upi || ''}
+                    onChange={(e) => setAmounts((a) => ({ ...a, upi: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
+                    placeholder="0"
+                  />
+                </div>
+              )}
+              <p className="payment-mixed-remaining">
+                Entered ₹{(
+                  (mixedParts.cash ? Number(amounts.cash) || 0 : 0)
+                  + (mixedParts.card ? Number(amounts.card) || 0 : 0)
+                  + (mixedParts.upi ? Number(amounts.upi) || 0 : 0)
+                ).toFixed(2)}
+                {' / '}
+                Remaining ₹{(
+                  calculateTotal()
+                  - (mixedParts.cash ? Number(amounts.cash) || 0 : 0)
+                  - (mixedParts.card ? Number(amounts.card) || 0 : 0)
+                  - (mixedParts.upi ? Number(amounts.upi) || 0 : 0)
+                ).toFixed(2)}
+              </p>
             </div>
           )}
           <div className="payment-method-actions">

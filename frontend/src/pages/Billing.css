@@ -971,6 +971,47 @@
   justify-content: flex-end;
   margin-top: 18px;
 }
+.payment-mixed-box {
+  margin: 4px 0 8px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+.payment-mixed-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #475569;
+}
+.payment-mixed-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.payment-mixed-add-btn {
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.payment-mixed-add-btn.on {
+  border-color: #059669;
+  background: #ecfdf5;
+  color: #047857;
+}
+.payment-mixed-box .mixed-row {
+  margin-bottom: 8px;
+}
+.payment-mixed-remaining {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e2937;
+}
 
 /* Invoice preview overlay – larger, readable */
 .bill-preview-overlay {
