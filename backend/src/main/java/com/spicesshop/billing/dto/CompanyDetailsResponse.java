@@ -16,10 +16,11 @@ public class CompanyDetailsResponse {
     private String ifscCode;
     private String branchName;
     private Integer b2bInvoiceStart;
+    private Boolean printGatePass;
 
     public CompanyDetailsResponse() {}
 
-    public CompanyDetailsResponse(String companyName, String barcodeLabelCompanyName, String gstNumber, String fssaiLicense, String address, String phoneNumber, String packingLicenceNo, String customerCareNumber, String customerCareEmail, String bankName, String accountNumber, String ifscCode, String branchName, Integer b2bInvoiceStart) {
+    public CompanyDetailsResponse(String companyName, String barcodeLabelCompanyName, String gstNumber, String fssaiLicense, String address, String phoneNumber, String packingLicenceNo, String customerCareNumber, String customerCareEmail, String bankName, String accountNumber, String ifscCode, String branchName, Integer b2bInvoiceStart, Boolean printGatePass) {
         this.companyName = companyName;
         this.barcodeLabelCompanyName = barcodeLabelCompanyName;
         this.gstNumber = gstNumber;
@@ -34,6 +35,7 @@ public class CompanyDetailsResponse {
         this.ifscCode = ifscCode;
         this.branchName = branchName;
         this.b2bInvoiceStart = b2bInvoiceStart;
+        this.printGatePass = printGatePass == null ? Boolean.TRUE : printGatePass;
     }
 
     public String getCompanyName() {
@@ -146,6 +148,14 @@ public class CompanyDetailsResponse {
 
     public void setB2bInvoiceStart(Integer b2bInvoiceStart) {
         this.b2bInvoiceStart = b2bInvoiceStart;
+    }
+
+    public Boolean getPrintGatePass() {
+        return this.printGatePass == null ? Boolean.TRUE : this.printGatePass;
+    }
+
+    public void setPrintGatePass(Boolean printGatePass) {
+        this.printGatePass = printGatePass;
     }
 
     @Override

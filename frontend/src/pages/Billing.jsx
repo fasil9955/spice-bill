@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productService, invoiceService, authService } from '../services/api';
+import { formatPrintMultiline, companyPrintContact } from '../utils/invoicePrint';
 import './Billing.css';
 import { 
   Search, 
@@ -27,6 +28,7 @@ import InsufficientStockModal from '../components/InsufficientStockModal';
 import {
   filterProductsLocal,
   qtyFromBarcodeWeight,
+  parseBarcodeLocal,
   upsertProductInList,
   resolveBarcodeHybrid,
   normalizeBarcode,
@@ -105,6 +107,7 @@ const Billing = () => {
   // Tracks whether user navigated the search results with arrow keys (so Enter should pick a highlighted item)
   const usedSearchArrowsRef = useRef(false);
   const searchInputRef = useRef(null);
+  const searchDropdownRef = useRef(null);
   const selectedQtyRef = useRef(null);
   const handlePreviewRef = useRef(null);
   const handleSaveAndPrintRef = useRef(null);
@@ -391,18 +394,52 @@ const Billing = () => {
     searchDebounceRef.current = setTimeout(applyFilter, 60);
   };
 
+  const formatQtyForInput = (qty) => {
+    const n = Number(qty);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    return String(parseFloat(n.toFixed(6)));
+  };
+
+  const isLikelyScannerSubmit = () => {
+    const keys = scanTraceRef.current?.keys || [];
+    if (keys.length < 4) return false;
+    const gaps = keys.map((k) => k.gapMs).filter((g) => g > 0 && g < 400);
+    if (!gaps.length) return false;
+    const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    return avg < 55;
+  };
+
+  const openProductQtyStrip = (product, qtyStr = '') => {
+    if (!product) return;
+    setSelectedForCart(product);
+    setSelectedQtyInput(qtyStr || '');
+    setSearchResults([]);
+    setHighlightedIndex(-1);
+    setSearchTerm('');
+    usedSearchArrowsRef.current = false;
+    setTimeout(() => selectedQtyRef.current?.focus(), 50);
+  };
+
+  useEffect(() => {
+    if (highlightedIndex < 0) return;
+    const row = searchDropdownRef.current?.querySelector(`[data-search-idx="${highlightedIndex}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
+  }, [highlightedIndex, searchResults.length]);
+
   const handleSearchKeyDown = (e) => {
-    // Arrow navigation within dropdown
     if (e.key === 'ArrowDown' && searchResults.length > 0) {
       e.preventDefault();
       usedSearchArrowsRef.current = true;
-      setHighlightedIndex(i => (i < searchResults.length - 1 ? i + 1 : 0));
+      setHighlightedIndex((i) => {
+        const start = i < 0 ? -1 : i;
+        return Math.min(start + 1, searchResults.length - 1);
+      });
       return;
     }
     if (e.key === 'ArrowUp' && searchResults.length > 0) {
       e.preventDefault();
       usedSearchArrowsRef.current = true;
-      setHighlightedIndex(i => (i > 0 ? i - 1 : searchResults.length - 1));
+      setHighlightedIndex((i) => Math.max(i < 0 ? 0 : i - 1, 0));
       return;
     }
 
@@ -410,27 +447,21 @@ const Billing = () => {
     // - If user navigated dropdown with arrows and a product is highlighted, Enter selects that product.
     // - Otherwise (typical barcode scan), resolve immediately from local cache (fallback API).
     if (e.key === 'Enter') {
-      if (usedSearchArrowsRef.current && searchResults.length > 0 && highlightedIndex >= 0 && searchResults[highlightedIndex]) {
-        e.preventDefault();
-        const p = searchResults[highlightedIndex];
-        setSelectedForCart(p);
-        setSelectedQtyInput('');
-        setSearchResults([]);
-        setHighlightedIndex(-1);
-        setSearchTerm('');
-        setTimeout(() => selectedQtyRef.current?.focus(), 50);
-        return;
-      }
-      // Tiny delay so the last scanner character lands in the input, then parse (local-first → API).
       e.preventDefault();
       if (searchDebounceRef.current) {
         clearTimeout(searchDebounceRef.current);
         searchDebounceRef.current = null;
       }
       const enterAt = Date.now();
-      const waitMs = 80;
+      const scanner = isLikelyScannerSubmit();
+      const waitMs = scanner ? 80 : 0;
       setTimeout(() => {
-        runSearchSubmit({ enterAt, waitMs });
+        runSearchSubmit({
+          enterAt,
+          waitMs,
+          preferScanner: scanner,
+          usedArrows: usedSearchArrowsRef.current,
+        });
       }, waitMs);
       return;
     }
@@ -487,33 +518,58 @@ const Billing = () => {
       searchEl?.focus();
       return;
     }
-    const applied = await applyScannedCodeRef.current?.(trimmed, { ...timing, lookupStarted });
-    if (applied) return;
+    if (timing.preferScanner) {
+      const applied = await applyScannedCodeRef.current?.(trimmed, { ...timing, lookupStarted });
+      if (applied) return;
+    }
 
-    // Name-search fallback: single search hit → qty strip
+    const parsed = parseBarcodeLocal(productsCacheRef.current, trimmed);
+    if (!timing.usedArrows) {
+      let product = parsed?.product || null;
+      let weight = parsed?.weight || 0;
+      if (!product && looksLikeScannedBarcode(trimmed)) {
+        const resolved = await resolveBarcodeHybrid(productsCacheRef.current, trimmed, {
+          parseBarcodeApi: (code) => productService.parseBarcode(code),
+          refreshProducts: refreshProductsCache,
+        });
+        if (resolved?.productsCache) syncProductsCache(resolved.productsCache);
+        if (resolved?.product) {
+          product = resolved.product;
+          weight = resolved.weight || 0;
+        }
+      }
+      if (product) {
+        const qtyStr = weight > 0
+          ? formatQtyForInput(qtyFromBarcodeWeight(product, weight))
+          : '';
+        openProductQtyStrip(product, qtyStr);
+        finishScanReport({
+          ...timing,
+          code: trimmed,
+          lookupMs: performance.now() - lookupStarted,
+          source: 'typed-barcode',
+          result: weight > 0 ? 'QTY STRIP (WEIGHT)' : 'QTY STRIP',
+          product: product.productName,
+          qty: qtyStr || undefined,
+        });
+        return;
+      }
+    }
+
+    const pickIndex = highlightedIndex >= 0 ? highlightedIndex : 0;
+    const fromDropdown = searchResults.length > 0 ? searchResults[pickIndex] : null;
     const filtered = filterProductsLocal(productsCacheRef.current, trimmed);
-    if (filtered.length === 1) {
-      setSelectedForCart(filtered[0]);
-      setSelectedQtyInput('');
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      setSearchTerm('');
-      setTimeout(() => selectedQtyRef.current?.focus(), 50);
-    } else if (filtered.length > 1) {
-      setSearchResults(filtered.slice(0, 40));
-      setHighlightedIndex(0);
-      searchInputRef.current?.focus();
-    } else if (searchResults.length === 1) {
-      setSelectedForCart(searchResults[0]);
-      setSelectedQtyInput('');
-      setSearchResults([]);
-      setHighlightedIndex(-1);
-      setSearchTerm('');
-      setTimeout(() => selectedQtyRef.current?.focus(), 50);
-    } else if (searchResults.length > 1) {
-      searchInputRef.current?.focus();
+    const chosen = fromDropdown || (filtered.length >= 1 ? filtered[0] : null);
+
+    if (chosen) {
+      let qtyStr = '';
+      if (parsed?.product?.productId === chosen.productId && parsed.weight > 0) {
+        qtyStr = formatQtyForInput(qtyFromBarcodeWeight(chosen, parsed.weight));
+      }
+      openProductQtyStrip(chosen, qtyStr);
     } else {
       alert('Product not found. Scan barcode or type name to search.');
+      searchInputRef.current?.focus();
     }
     finishScanReport({
       ...timing,
@@ -801,9 +857,8 @@ const Billing = () => {
     if (!invoice) return '';
     const { twoCopies = false } = options;
     const companyName = invoice.cashier?.companyName || 'Our Spices Shop';
-    const address = invoice.cashier?.address || '';
+    const { address, phone: phoneNumber } = companyPrintContact(invoice.cashier);
     const gstNumber = invoice.cashier?.gstNumber || '';
-    const phoneNumber = invoice.cashier?.phoneNumber || '';
     const createdAt = formatInvoiceDateTime(invoice.createdAt);
     const discountAmt = Number(invoice.discountAmount) || 0;
     const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
@@ -840,8 +895,8 @@ const Billing = () => {
       <div class="btoc-print-copy">
         <div class="btoc-company">
           <div class="btoc-company-name">${companyName}</div>
-          ${address ? `<div class="btoc-company-line">${address.replace(/</g, '&lt;')}</div>` : ''}
-          ${phoneNumber ? `<div class="btoc-company-line">Ph. no.: ${phoneNumber.replace(/</g, '&lt;')}</div>` : ''}
+          ${address ? `<div class="btoc-company-line">${formatPrintMultiline(address)}</div>` : ''}
+          ${phoneNumber ? `<div class="btoc-company-line">Ph. no.: ${formatPrintMultiline(phoneNumber)}</div>` : ''}
           ${gstNumber ? `<div class="btoc-company-line">GST: ${gstNumber.replace(/</g, '&lt;')}</div>` : ''}
         </div>
         ${copyHeading ? `<div class="btoc-print-heading">${copyHeading}</div>` : ''}
@@ -894,7 +949,17 @@ const Billing = () => {
             .btoc-print-heading { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 4px; }
             .btoc-company { text-align: center; margin-bottom: 8px; }
             .btoc-company-name { font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 4px; }
-            .btoc-company-line { font-size: 11px; color: #374151; margin: 2px 0; }
+            .btoc-company-line {
+              font-family: inherit;
+              font-size: 12px;
+              font-weight: 700;
+              color: #111;
+              margin: 2px 0;
+              line-height: 1.35;
+              white-space: pre-wrap;
+              overflow-wrap: anywhere;
+              word-break: break-word;
+            }
             .btoc-divider-dashed { border: none; border-top: 1px dashed #9ca3af; margin: 8px 0; }
             .btoc-divider-solid { border: none; border-top: 1px solid #374151; margin: 4px 0; }
             .btoc-meta { font-size: 11px; margin: 4px 0; }
@@ -944,24 +1009,25 @@ const Billing = () => {
   const handlePrintInvoice = async (invoice) => {
     if (!invoice) return;
     let toPrint = invoice;
-    if (!invoice.cashier?.address || !invoice.cashier?.gstNumber) {
-      try {
-        const companyRes = await authService.getCompanyDetails();
-        const company = companyRes?.data || {};
-        toPrint = {
-          ...invoice,
-          cashier: {
-            ...invoice.cashier,
-            companyName: invoice.cashier?.companyName || company.companyName || 'Our Spices Shop',
-            address: invoice.cashier?.address || company.address || '',
-            gstNumber: invoice.cashier?.gstNumber || company.gstNumber || '',
-            phoneNumber: invoice.cashier?.phoneNumber ?? company.phoneNumber ?? '',
-            fssaiLicense: invoice.cashier?.fssaiLicense ?? company.fssaiLicense ?? ''
-          }
-        };
-      } catch { /* ignore */ }
-    }
-    const html = buildInvoicePrintHtml(toPrint, { twoCopies: true });
+    let printGatePass = true;
+    try {
+      const companyRes = await authService.getCompanyDetails();
+      const company = companyRes?.data || {};
+      printGatePass = company.printGatePass !== false;
+      toPrint = {
+        ...invoice,
+        cashier: {
+          ...invoice.cashier,
+          companyName: invoice.cashier?.companyName || company.companyName || 'Our Spices Shop',
+          address: invoice.cashier?.address || company.address || '',
+          gstNumber: invoice.cashier?.gstNumber || company.gstNumber || '',
+          phoneNumber: invoice.cashier?.phoneNumber || company.phoneNumber || company.customerCareNumber || '',
+          customerCareNumber: invoice.cashier?.customerCareNumber || company.customerCareNumber || '',
+          fssaiLicense: invoice.cashier?.fssaiLicense ?? company.fssaiLicense ?? ''
+        }
+      };
+    } catch { /* ignore */ }
+    const html = buildInvoicePrintHtml(toPrint, { twoCopies: printGatePass });
     if (!html) return;
     printHtmlViaIframe(html);
   };
@@ -993,7 +1059,7 @@ const Billing = () => {
           companyName: company.companyName || user?.companyName || 'Our Spices Shop',
           address: company.address || '',
           gstNumber: company.gstNumber || '',
-          phoneNumber: company.phoneNumber || '',
+          phoneNumber: company.phoneNumber || company.customerCareNumber || '',
           fssaiLicense: company.fssaiLicense || ''
         },
         items: cart.map(item => ({
@@ -1236,10 +1302,11 @@ const Billing = () => {
               />
             </form>
             {searchResults.length > 0 && (
-              <div className="product-search-dropdown">
+              <div className="product-search-dropdown" ref={searchDropdownRef}>
                 {searchResults.map((p, idx) => (
                   <div
                     key={p.productId}
+                    data-search-idx={idx}
                     className={`product-search-item select-only ${idx === highlightedIndex ? 'highlighted' : ''}`}
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     onClick={() => {
@@ -1268,7 +1335,7 @@ const Billing = () => {
                 <span className="selected-item-price">₹{selectedForCart.sellingPricePerUnit ?? selectedForCart.unitPrice}</span>
               </div>
               <div className="selected-item-actions">
-                <label className="selected-item-qty-label">Qty</label>
+                <label className="selected-item-qty-label">Qty / weight</label>
                 <input
                   ref={selectedQtyRef}
                   type="text"
@@ -1527,10 +1594,12 @@ const Billing = () => {
             <div className="bill-preview-content btoc-preview-content" id="printable-bill">
               <div className="btoc-company">
                 <div className="btoc-company-name">{display.cashier?.companyName || 'Our Spices Shop'}</div>
-                {display.cashier?.address && <div className="btoc-company-line">{display.cashier.address}</div>}
-                {display.cashier?.phoneNumber && (
+                {display.cashier?.address && (
+                  <div className="btoc-company-line">{display.cashier.address}</div>
+                )}
+                {(display.cashier?.phoneNumber || display.cashier?.customerCareNumber) && (
                   <div className="btoc-company-line btoc-company-phone">
-                    <Phone size={14} className="btoc-phone-icon" /> {display.cashier.phoneNumber}
+                    <Phone size={14} className="btoc-phone-icon" /> {display.cashier.phoneNumber || display.cashier.customerCareNumber}
                   </div>
                 )}
                 {display.cashier?.gstNumber && <div className="btoc-company-line">GST: {display.cashier.gstNumber}</div>}

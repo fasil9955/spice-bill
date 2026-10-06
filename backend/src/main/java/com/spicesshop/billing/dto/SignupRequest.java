@@ -8,6 +8,7 @@ public class SignupRequest {
     private String fssaiLicense;
     private String address;
     private String phoneNumber;
+    private String customerCareEmail;
 
     public SignupRequest() {}
 
@@ -75,6 +76,14 @@ public class SignupRequest {
 
     public void setPhoneNumber(String phoneNumber) {
         this.phoneNumber = phoneNumber;
+    }
+
+    public String getCustomerCareEmail() {
+        return this.customerCareEmail;
+    }
+
+    public void setCustomerCareEmail(String customerCareEmail) {
+        this.customerCareEmail = customerCareEmail;
     }
 
     @Override

@@ -73,6 +73,9 @@ const DailyAccountingPage = () => {
   const [cardAmount, setCardAmount] = useState('');
   const [gpayName, setGpayName] = useState('');
   const [gpayAmount, setGpayAmount] = useState('');
+  const [cashDeleteChecked, setCashDeleteChecked] = useState(false);
+  const [cashDeleteBusy, setCashDeleteBusy] = useState(false);
+  const [cashDeleteError, setCashDeleteError] = useState('');
 
   const navigate = useNavigate();
 
@@ -168,6 +171,34 @@ const DailyAccountingPage = () => {
   const handleLoadData = () => {
     setSelectedDate(isoDate);
     loadData();
+  };
+
+  const cashBills = invoices.filter((i) => (i.paymentMethod || 'CASH') === 'CASH');
+
+  const closeCashDeleteModal = () => {
+    setCashDeleteChecked(false);
+    setCashDeleteError('');
+  };
+
+  const handleDeleteCashBills = async () => {
+    setCashDeleteBusy(true);
+    setCashDeleteError('');
+    try {
+      const res = await invoiceService.deleteCashBillsForDate(isoDate);
+      const deleted = res.data?.deleted ?? 0;
+      const nextPreview = res.data?.nextPreview || '';
+      closeCashDeleteModal();
+      await loadData();
+      window.alert(
+        deleted === 0
+          ? `No cash bills found for ${formatDisplayDate(isoDate)}.`
+          : `Deleted ${deleted} cash bill(s). Remaining retail bills were renumbered. Next bill: ${nextPreview}`
+      );
+    } catch (err) {
+      setCashDeleteError(err.response?.data?.error || 'Failed to delete cash bills.');
+    } finally {
+      setCashDeleteBusy(false);
+    }
   };
 
   const systemSales = invoices.reduce((s, i) => s + (parseFloat(i.totalAmount) || 0), 0);
@@ -485,8 +516,60 @@ const DailyAccountingPage = () => {
           <button type="button" className="daily-accounting-back-btn" onClick={() => navigate('/dashboard')}>
             <ArrowLeft size={18} /> Dashboard
           </button>
+          <label className="daily-accounting-cash-delete-check">
+            <input
+              type="checkbox"
+              checked={cashDeleteChecked}
+              onChange={(e) => {
+                setCashDeleteError('');
+                setCashDeleteChecked(e.target.checked);
+              }}
+            />
+            Delete cash bills
+          </label>
         </div>
       </div>
+
+      {cashDeleteChecked && (
+        <div
+          className="daily-accounting-gate-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="daily-accounting-cash-delete-title"
+        >
+          <div className="daily-accounting-gate-modal">
+            <h2 id="daily-accounting-cash-delete-title">Delete cash bills</h2>
+            <p>
+              This will permanently delete all <strong>cash</strong> retail bills for{' '}
+              <strong>{formatDisplayDate(isoDate)}</strong>
+              {dataLoaded ? ` (${cashBills.length} on this page)` : ''}.
+              Card and UPI bills are kept. Stock from those cash bills is added back.
+              Remaining retail bill numbers are then made consecutive again.
+            </p>
+            {cashDeleteError && (
+              <p className="daily-accounting-cash-delete-error">{cashDeleteError}</p>
+            )}
+            <div className="daily-accounting-gate-actions">
+              <button
+                type="button"
+                className="daily-accounting-cash-delete-confirm"
+                onClick={handleDeleteCashBills}
+                disabled={cashDeleteBusy}
+              >
+                {cashDeleteBusy ? 'Deleting…' : 'Delete all cash bills for this day'}
+              </button>
+              <button
+                type="button"
+                className="daily-accounting-gate-secondary"
+                onClick={closeCashDeleteModal}
+                disabled={cashDeleteBusy}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div id="daily-accounting-print-area" className="daily-accounting-print-area" aria-hidden="true" />
 

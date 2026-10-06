@@ -341,4 +341,32 @@ public class InvoiceController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    @PostMapping({"/retail/align-gst-numbers"})
+    public ResponseEntity<?> alignRetailGstNumbers(HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
+            }
+            return ResponseEntity.ok(this.invoiceService.alignRetailInvoiceNumbersToGst(companyName));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping({"/retail/cash-bills/delete"})
+    public ResponseEntity<?> deleteRetailCashBillsForDate(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
+            }
+            return ResponseEntity.ok(this.invoiceService.deleteRetailCashInvoicesForDate(companyName, date));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

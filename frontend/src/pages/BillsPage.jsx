@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService, authService, courierService } from '../services/api';
-import { buildInvoicePrintHtml, printHtmlViaIframe } from '../utils/invoicePrint';
+import { buildInvoicePrintHtml, printHtmlViaIframe, shouldPrintGatePass } from '../utils/invoicePrint';
 import { ArrowLeft, Search, Printer, Trash2, Truck, Pencil, X, Plus } from 'lucide-react';
 
 const getTodayDateString = () => new Date().toISOString().slice(0, 10);
@@ -106,9 +106,11 @@ const BillsPage = () => {
     try {
       const res = await invoiceService.getById(inv.invoiceId);
       let toPrint = res.data;
+      let printGatePass = true;
       try {
         const companyRes = await authService.getCompanyDetails();
         const company = companyRes?.data || {};
+        printGatePass = shouldPrintGatePass(company);
         toPrint = {
           ...toPrint,
           cashier: {
@@ -120,8 +122,8 @@ const BillsPage = () => {
             fssaiLicense: toPrint.cashier?.fssaiLicense ?? company.fssaiLicense ?? ''
           }
         };
-      } catch (e) {}
-      const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
+      } catch (e) { /* print with invoice data only */ }
+      const html = buildInvoicePrintHtml(toPrint, { twoCopies: printGatePass });
       if (html) printHtmlViaIframe(html);
     } catch (err) {
       console.error('Failed to load invoice for print', err);

@@ -15,6 +15,7 @@ public class CompanyDetailsRequest {
     private String ifscCode;
     private String branchName;
     private Integer b2bInvoiceStart;
+    private Boolean printGatePass;
 
     public CompanyDetailsRequest() {}
 
@@ -150,6 +151,14 @@ public class CompanyDetailsRequest {
 
     public void setB2bInvoiceStart(Integer b2bInvoiceStart) {
         this.b2bInvoiceStart = b2bInvoiceStart;
+    }
+
+    public Boolean getPrintGatePass() {
+        return this.printGatePass;
+    }
+
+    public void setPrintGatePass(Boolean printGatePass) {
+        this.printGatePass = printGatePass;
     }
 
     @Override

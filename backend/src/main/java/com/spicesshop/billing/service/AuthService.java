@@ -36,6 +36,9 @@ public class AuthService {
         admin.setFssaiLicense(request.getFssaiLicense());
         admin.setAddress(request.getAddress());
         admin.setPhoneNumber(request.getPhoneNumber());
+        if (request.getCustomerCareEmail() != null && !request.getCustomerCareEmail().isBlank()) {
+            admin.setCustomerCareEmail(request.getCustomerCareEmail().trim());
+        }
         User savedAdmin = this.userRepository.save(admin);
 
         User cashier = new User();
@@ -46,6 +49,9 @@ public class AuthService {
         cashier.setFssaiLicense(request.getFssaiLicense());
         cashier.setAddress(request.getAddress());
         cashier.setPhoneNumber(request.getPhoneNumber());
+        if (request.getCustomerCareEmail() != null && !request.getCustomerCareEmail().isBlank()) {
+            cashier.setCustomerCareEmail(request.getCustomerCareEmail().trim());
+        }
         User savedCashier = this.userRepository.save(cashier);
 
         return new SignupResponse(
@@ -94,7 +100,8 @@ public class AuthService {
             admin.getAccountNumber(),
             admin.getIfscCode(),
             admin.getBranchName(),
-            admin.getB2bInvoiceStart()
+            admin.getB2bInvoiceStart(),
+            admin.getPrintGatePass()
         );
     }
 
@@ -126,6 +133,7 @@ public class AuthService {
         admin.setIfscCode(request.getIfscCode());
         admin.setBranchName(request.getBranchName());
         admin.setB2bInvoiceStart(request.getB2bInvoiceStart());
+        admin.setPrintGatePass(request.getPrintGatePass() == null ? Boolean.TRUE : request.getPrintGatePass());
         this.userRepository.save(admin);
 
         cashier.setBarcodeLabelCompanyName(barcodeLabelName);
@@ -141,6 +149,7 @@ public class AuthService {
         cashier.setIfscCode(request.getIfscCode());
         cashier.setBranchName(request.getBranchName());
         cashier.setB2bInvoiceStart(request.getB2bInvoiceStart());
+        cashier.setPrintGatePass(request.getPrintGatePass() == null ? Boolean.TRUE : request.getPrintGatePass());
         this.userRepository.save(cashier);
 
         return new CompanyDetailsResponse(
@@ -157,7 +166,8 @@ public class AuthService {
             admin.getAccountNumber(),
             admin.getIfscCode(),
             admin.getBranchName(),
-            admin.getB2bInvoiceStart()
+            admin.getB2bInvoiceStart(),
+            admin.getPrintGatePass()
         );
     }
 

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Use relative URL when served from same host (e.g. JAR); dev uses Vite proxy
-const API_BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8080/api';
+// Relative /api: Vite proxy in dev, same-origin when served from the JAR
+const API_BASE_URL = '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -33,6 +33,8 @@ api.interceptors.response.use(
 export const authService = {
   login: (credentials) => api.post('/auth/login', credentials),
   signup: (userData) => api.post('/auth/signup', userData),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
+  resetPassword: (data) => api.post('/auth/reset-password', data),
   changePassword: (data) => api.post('/auth/change-password', data),
   getCompanyDetails: () => api.get('/auth/company-details'),
   updateCompanyDetails: (data) => api.put('/auth/company-details', data),
@@ -86,6 +88,8 @@ export const invoiceService = {
   getCancellationRequests: () => api.get('/invoices/cancellation-requests'),
   requestCancellation: (id, reason) => api.post(`/invoices/${id}/cancel`, { reason }),
   approveCancellation: (id) => api.post(`/invoices/${id}/approve-cancellation`),
+  alignRetailGstNumbers: () => api.post('/invoices/retail/align-gst-numbers'),
+  deleteCashBillsForDate: (date) => api.post(`/invoices/retail/cash-bills/delete?date=${encodeURIComponent(date)}`),
 };
 
 export const attendanceService = {

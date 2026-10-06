@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { productService, invoiceService, authService, b2bCustomerService } from '../services/api';
-import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees } from '../utils/invoicePrint';
+import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees, shouldPrintGatePass } from '../utils/invoicePrint';
 import './Billing.css';
 import { Search, Plus, Minus, ShoppingCart, Printer, ArrowLeft, X, UserPlus, Pencil } from 'lucide-react';
 import {
@@ -664,9 +664,11 @@ const B2BBilling = () => {
   const handlePrintInvoice = async (invoice) => {
     if (!invoice) return;
     let toPrint = invoice;
+    let printGatePass = true;
     try {
       const companyRes = await authService.getCompanyDetails();
       const company = companyRes?.data || {};
+      printGatePass = shouldPrintGatePass(company);
       const cashier = invoice.cashier || {};
       toPrint = {
         ...invoice,
@@ -683,7 +685,7 @@ const B2BBilling = () => {
         }
       };
     } catch {}
-    const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
+    const html = buildInvoicePrintHtml(toPrint, { twoCopies: printGatePass });
     if (html) printHtmlViaIframe(html);
   };
 
@@ -879,7 +881,7 @@ const B2BBilling = () => {
         discountAmount: parseFloat(discountVal.toFixed(2)),
         totalAmount: parseFloat(total.toFixed(2))
       };
-      const html = buildInvoicePrintHtml(draft, { twoCopies: false });
+      const html = buildInvoicePrintHtml(draft, { twoCopies: shouldPrintGatePass(company) });
       if (html) printHtmlViaIframe(html);
     } catch (err) {
       alert(err?.message || 'Failed to print');

@@ -10,7 +10,8 @@ const Signup = () => {
     gstNumber: '',
     fssaiLicense: '',
     address: '',
-    phoneNumber: ''
+    phoneNumber: '',
+    customerCareEmail: 'fasilpvr52@gmail.com'
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -107,17 +108,29 @@ const Signup = () => {
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Phone Number</label>
-            <input
-              type="text"
-              name="phoneNumber"
-              placeholder="Primary contact"
-              value={userData.phoneNumber}
-              onChange={handleChange}
-              required
-            />
-          </div>
+            <div className="form-group">
+              <label>Phone Number</label>
+              <input
+                type="text"
+                name="phoneNumber"
+                placeholder="Primary contact"
+                value={userData.phoneNumber}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Recovery email</label>
+              <input
+                type="email"
+                name="customerCareEmail"
+                placeholder="Used for password reset"
+                value={userData.customerCareEmail}
+                onChange={handleChange}
+                required
+              />
+            </div>
 
           <div className="form-group">
             <label>Address</label>

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../services/api';
-import { ArrowLeft, Building2, Lock, Save } from 'lucide-react';
+import { authService, invoiceService } from '../services/api';
+import { ArrowLeft, Building2, Hash, Lock, Save } from 'lucide-react';
 
 const Settings = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [savingCompany, setSavingCompany] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [aligningRetail, setAligningRetail] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   const [company, setCompany] = useState({
@@ -25,6 +26,7 @@ const Settings = () => {
     ifscCode: '',
     branchName: '',
     b2bInvoiceStart: '',
+    printGatePass: true,
   });
 
   const [passwordForm, setPasswordForm] = useState({
@@ -53,6 +55,7 @@ const Settings = () => {
         ifscCode: d.ifscCode ?? '',
         branchName: d.branchName ?? '',
         b2bInvoiceStart: d.b2bInvoiceStart != null ? String(d.b2bInvoiceStart) : '',
+        printGatePass: d.printGatePass !== false,
       });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to load company details' });
@@ -84,6 +87,7 @@ const Settings = () => {
         ifscCode: company.ifscCode,
         branchName: company.branchName,
         b2bInvoiceStart: company.b2bInvoiceStart ? parseInt(company.b2bInvoiceStart, 10) : null,
+        printGatePass: company.printGatePass !== false,
       });
       setMessage({ type: 'success', text: 'Company details saved successfully.' });
     } catch (err) {
@@ -118,6 +122,30 @@ const Settings = () => {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to change password' });
     } finally {
       setSavingPassword(false);
+    }
+  };
+
+  const handleAlignRetailNumbers = async () => {
+    const ok = window.confirm(
+      'This will change every existing retail (shop) bill number to the GST format R/2627/00001, in the order the bills were made.\n\nDo this only if those bills have not already been filed in GSTR-1 / e-invoice. Printed copies must be reprinted.\n\nB2B invoice numbers are not changed.\n\nContinue?'
+    );
+    if (!ok) return;
+    setAligningRetail(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const res = await invoiceService.alignRetailGstNumbers();
+      const updated = res.data?.updated ?? 0;
+      const nextPreview = res.data?.nextPreview || '';
+      setMessage({
+        type: 'success',
+        text: updated === 0
+          ? `No retail bills to update. Next new bill will be ${nextPreview || 'R/YYYY/00001'}.`
+          : `Updated ${updated} retail bill number(s). Next new bill will be ${nextPreview}. Reprint any bill you already gave to a customer.`,
+      });
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to update existing retail bill numbers' });
+    } finally {
+      setAligningRetail(false);
     }
   };
 
@@ -236,8 +264,9 @@ const Settings = () => {
                 type="email"
                 value={company.customerCareEmail}
                 onChange={(e) => setCompany({ ...company, customerCareEmail: e.target.value })}
-                placeholder="e.g., support@company.com"
+                placeholder="fasilpvr52@gmail.com"
               />
+              <p className="settings-field-hint">Password reset OTP is sent to fasilpvr52@gmail.com from the login page.</p>
             </div>
             <h3 className="settings-subheading">Bank Details</h3>
             <div className="form-row">
@@ -287,12 +316,48 @@ const Settings = () => {
                 placeholder="Starting number for B2B invoices"
               />
             </div>
+            <div className="form-group">
+              <label className="settings-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={company.printGatePass}
+                  onChange={(e) => setCompany({ ...company, printGatePass: e.target.checked })}
+                />
+                Print gate pass along with the invoice
+              </label>
+              <p className="settings-field-hint">
+                When ticked, printing includes the invoice and a gate-pass copy. Untick to print the invoice once.
+              </p>
+            </div>
             <div className="form-actions">
               <button type="submit" className="submit-btn" disabled={savingCompany}>
                 <Save size={18} /> {savingCompany ? 'Saving...' : 'Save Company Details'}
               </button>
             </div>
           </form>
+        </section>
+
+        <section className="settings-section">
+          <h2><Hash size={20} /> Retail bill numbers (GST)</h2>
+          <p className="settings-field-hint">
+            New shop bills use GST Rule 46 serials, for example <strong>R/2627/00001</strong>
+            (series / financial year / consecutive number, 12 characters).
+            The series restarts on 1 April each year. Cancelled bills keep their number.
+          </p>
+          <p className="settings-field-hint" style={{ marginTop: 12 }}>
+            Bills you already saved still have the old <strong>INV-date-…</strong> numbers until you convert them.
+            Use this once, then reprint those bills. Do not convert bills already uploaded in a GST return.
+          </p>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="submit-btn"
+              disabled={aligningRetail}
+              onClick={handleAlignRetailNumbers}
+            >
+              <Hash size={18} /> {aligningRetail ? 'Updating bill numbers…' : 'Convert existing retail bills to GST numbers'}
+            </button>
+          </div>
         </section>
 
         <section className="settings-section">

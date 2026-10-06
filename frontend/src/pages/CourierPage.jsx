@@ -359,7 +359,7 @@ const CourierPage = () => {
                   type="text"
                   value={addForm.invoiceNumber}
                   onChange={e => setAddForm(f => ({ ...f, invoiceNumber: e.target.value }))}
-                  placeholder="e.g. INV-1001"
+                  placeholder="e.g. R/2627/00001"
                 />
               </div>
               <div className="form-group">

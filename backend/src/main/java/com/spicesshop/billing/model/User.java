@@ -65,6 +65,10 @@ public class User {
     @Column(name = "b2b_invoice_start")
     private Integer b2bInvoiceStart;
 
+    /** When true, invoice print includes a second gate-pass copy. */
+    @Column(name = "print_gate_pass")
+    private Boolean printGatePass = Boolean.TRUE;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -177,6 +181,14 @@ public class User {
 
     public void setB2bInvoiceStart(Integer b2bInvoiceStart) {
         this.b2bInvoiceStart = b2bInvoiceStart;
+    }
+
+    public Boolean getPrintGatePass() {
+        return this.printGatePass == null ? Boolean.TRUE : this.printGatePass;
+    }
+
+    public void setPrintGatePass(Boolean printGatePass) {
+        this.printGatePass = printGatePass;
     }
 
     public void setCreatedAt(LocalDateTime createdAt) {

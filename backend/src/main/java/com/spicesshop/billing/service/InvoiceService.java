@@ -2,12 +2,13 @@ package com.spicesshop.billing.service;
 
 import com.spicesshop.billing.model.*;
 import com.spicesshop.billing.repository.*;
+import com.spicesshop.billing.util.GstInvoiceNumbers;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +39,9 @@ public class InvoiceService {
     @Autowired
     private InvoiceSequenceRepository invoiceSequenceRepository;
 
+    @Autowired
+    private CourierRequestRepository courierRequestRepository;
+
     /** Returns the next invoice number for preview only – does NOT increment (peek). */
     public String getNextInvoiceNumber(String companyName, String invoiceType) {
         return peekNextInvoiceNumber(companyName, invoiceType != null ? invoiceType : "RETAIL");
@@ -49,11 +53,12 @@ public class InvoiceService {
             return generateNextB2BInvoiceNumber(companyName);
         }
         LocalDate today = LocalDate.now();
-        String datePart = today.format(DateTimeFormatter.ofPattern("yyyy-MMdd"));
-        int seqNum = this.invoiceSequenceRepository.findByCompanyNameAndSequenceDate(companyName, today)
+        LocalDate fyStart = GstInvoiceNumbers.financialYearStart(today);
+        int seqNum = this.invoiceSequenceRepository.findByCompanyNameAndSequenceDate(companyName, fyStart)
             .map(InvoiceSequence::getNextSequence)
             .orElse(1);
-        return String.format("INV-%s-%04d", datePart, seqNum);
+        seqNum = Math.max(seqNum, nextRetailSequenceFromExisting(companyName, fyStart));
+        return GstInvoiceNumbers.formatRetail(today, seqNum);
     }
 
     /** Generates and reserves the next invoice number (increments sequence). Call only when saving an invoice. */
@@ -64,20 +69,23 @@ public class InvoiceService {
         }
 
         LocalDate today = LocalDate.now();
-        String datePart = today.format(DateTimeFormatter.ofPattern("yyyy-MMdd"));
+        LocalDate fyStart = GstInvoiceNumbers.financialYearStart(today);
 
-        InvoiceSequence sequence = this.invoiceSequenceRepository.findByCompanyNameAndDateForUpdate(companyName, today)
-            .orElseGet(() -> {
-                InvoiceSequence newSeq = new InvoiceSequence(companyName, today);
-                newSeq.setNextSequence(1);
-                return newSeq;
-            });
+        InvoiceSequence sequence = this.invoiceSequenceRepository.findByCompanyNameAndDateForUpdate(companyName, fyStart)
+            .orElseGet(() -> new InvoiceSequence(companyName, fyStart));
 
-        int seqNum = sequence.getNextSequence();
+        int seqNum = Math.max(sequence.getNextSequence() != null ? sequence.getNextSequence() : 1,
+            nextRetailSequenceFromExisting(companyName, fyStart));
         sequence.setNextSequence(seqNum + 1);
         this.invoiceSequenceRepository.save(sequence);
 
-        return String.format("INV-%s-%04d", datePart, seqNum);
+        return GstInvoiceNumbers.formatRetail(today, seqNum);
+    }
+
+    private int nextRetailSequenceFromExisting(String companyName, LocalDate fyStart) {
+        String maxNumber = this.invoiceRepository.findMaxInvoiceNumberByPrefix(
+            companyName, GstInvoiceNumbers.likePrefix(fyStart));
+        return GstInvoiceNumbers.parseSequence(maxNumber) + 1;
     }
 
     public String generateNextB2BInvoiceNumber(String companyName) {
@@ -582,5 +590,152 @@ public class InvoiceService {
         newCustomer.setEmail(email != null ? email.trim() : null);
 
         return this.b2bCustomerRepository.save(newCustomer);
+    }
+
+    /**
+     * Permanently removes retail CASH invoices for one calendar day, restores stock
+     * for bills that were still active, then rewrites remaining retail numbers so the
+     * GST series stays consecutive.
+     */
+    @Transactional
+    public Map<String, Object> deleteRetailCashInvoicesForDate(String companyName, LocalDate date) {
+        if (date == null) {
+            throw new RuntimeException("Date is required");
+        }
+        List<Invoice> cashBills = this.invoiceRepository.findRetailCashInvoicesByCompanyAndDate(companyName, date);
+        if (cashBills.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("deleted", 0);
+            empty.put("stockRestoredBills", 0);
+            empty.put("date", date.toString());
+            empty.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
+            empty.put("renumbered", 0);
+            return empty;
+        }
+        int restoredStock = 0;
+        for (Invoice invoice : cashBills) {
+            if (invoice.getStatus() != Invoice.InvoiceStatus.CANCELLED) {
+                restoreStock(invoice);
+                restoredStock++;
+            }
+            this.courierRequestRepository.deleteByInvoiceId(invoice.getInvoiceId());
+            this.invoiceRepository.delete(invoice);
+        }
+        this.invoiceRepository.flush();
+
+        Map<String, Object> aligned = alignRetailInvoiceNumbersToGst(companyName);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deleted", cashBills.size());
+        result.put("stockRestoredBills", restoredStock);
+        result.put("date", date.toString());
+        result.put("nextPreview", aligned.get("nextPreview"));
+        result.put("renumbered", aligned.get("updated"));
+        return result;
+    }
+
+    private void restoreStock(Invoice invoice) {
+        if (invoice.getItems() == null) {
+            return;
+        }
+        for (InvoiceItem item : invoice.getItems()) {
+            if (item.getProduct() == null || item.getProduct().getProductId() == null) {
+                continue;
+            }
+            Product product = this.productRepository.findById(item.getProduct().getProductId()).orElse(null);
+            if (product == null) {
+                continue;
+            }
+            BigDecimal qty = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ZERO;
+            BigDecimal onHand = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
+            product.setQuantity(onHand.add(qty));
+            this.productRepository.save(product);
+        }
+    }
+
+    /**
+     * Rewrites existing retail invoice numbers to GST Rule 46 serials, in bill-date order,
+     * one consecutive series per financial year. Cancelled bills keep a number (not reused).
+     * B2B invoices are not changed.
+     */
+    @Transactional
+    public Map<String, Object> alignRetailInvoiceNumbersToGst(String companyName) {
+        List<Invoice> retail = this.invoiceRepository.findRetailInvoicesByCompanyOrdered(companyName);
+        List<Map<String, String>> changed = new ArrayList<>();
+        Map<LocalDate, Integer> nextByFy = new HashMap<>();
+
+        for (Invoice invoice : retail) {
+            String oldNumber = invoice.getInvoiceNumber();
+            invoice.setInvoiceNumber("__MIG-" + invoice.getInvoiceId());
+            this.invoiceRepository.save(invoice);
+            if (oldNumber != null && !oldNumber.equals(invoice.getInvoiceNumber())) {
+                Map<String, String> row = new LinkedHashMap<>();
+                row.put("invoiceId", String.valueOf(invoice.getInvoiceId()));
+                row.put("from", oldNumber);
+                row.put("to", "");
+                changed.add(row);
+            }
+        }
+        this.invoiceRepository.flush();
+
+        int changeIndex = 0;
+        for (Invoice invoice : retail) {
+            LocalDate billDate = invoice.getCreatedAt() != null
+                ? invoice.getCreatedAt().toLocalDate()
+                : LocalDate.now();
+            LocalDate fyStart = GstInvoiceNumbers.financialYearStart(billDate);
+            int seq = nextByFy.getOrDefault(fyStart, 1);
+            String newNumber = GstInvoiceNumbers.formatRetail(billDate, seq);
+            nextByFy.put(fyStart, seq + 1);
+
+            String oldNumber = changeIndex < changed.size() ? changed.get(changeIndex).get("from") : invoice.getInvoiceNumber();
+            invoice.setInvoiceNumber(newNumber);
+            this.invoiceRepository.save(invoice);
+            updateCourierInvoiceNumber(companyName, invoice.getInvoiceId(), oldNumber, newNumber);
+
+            if (changeIndex < changed.size()) {
+                changed.get(changeIndex).put("to", newNumber);
+                changeIndex++;
+            }
+        }
+
+        for (Map.Entry<LocalDate, Integer> entry : nextByFy.entrySet()) {
+            InvoiceSequence sequence = this.invoiceSequenceRepository
+                .findByCompanyNameAndDateForUpdate(companyName, entry.getKey())
+                .orElseGet(() -> new InvoiceSequence(companyName, entry.getKey()));
+            sequence.setNextSequence(entry.getValue());
+            this.invoiceSequenceRepository.save(sequence);
+        }
+
+        List<Map<String, String>> sample = changed.stream()
+            .filter(row -> row.get("from") == null || !row.get("from").equals(row.get("to")))
+            .limit(12)
+            .toList();
+        long updated = changed.stream()
+            .filter(row -> row.get("from") == null || !row.get("from").equals(row.get("to")))
+            .count();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("updated", updated);
+        result.put("financialYears", nextByFy.size());
+        result.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
+        result.put("sample", sample);
+        return result;
+    }
+
+    private void updateCourierInvoiceNumber(String companyName, Integer invoiceId, String oldNumber, String newNumber) {
+        List<CourierRequest> byId = this.courierRequestRepository.findByInvoiceId(invoiceId);
+        List<CourierRequest> byNumber = (oldNumber == null || oldNumber.isBlank())
+            ? List.of()
+            : this.courierRequestRepository.findByCompanyNameAndInvoiceNumber(companyName, oldNumber);
+        Map<Integer, CourierRequest> unique = new LinkedHashMap<>();
+        for (CourierRequest request : byId) {
+            unique.put(request.getCourierId(), request);
+        }
+        for (CourierRequest request : byNumber) {
+            unique.put(request.getCourierId(), request);
+        }
+        for (CourierRequest request : unique.values()) {
+            request.setInvoiceNumber(newNumber);
+            this.courierRequestRepository.save(request);
+        }
     }
 }

@@ -796,7 +796,7 @@ const Inventory = () => {
             .label {
               width: 100mm;
               height: 50mm;
-              padding: 0;
+              padding: 0 0 0 0.5cm;
               box-sizing: border-box;
               font-size: 6pt;
               overflow: hidden;
@@ -805,14 +805,14 @@ const Inventory = () => {
 
             .sticker-grid {
               position: relative;
-              width: 100mm;
+              width: 100%;
               height: 50mm;
               display: flex;
             }
             .sticker-grid:before {
               content: '';
               position: absolute;
-              left: 50mm;
+              left: 50%;
               top: 0;
               bottom: 0;
               border-left: 1px solid #000;
@@ -820,7 +820,7 @@ const Inventory = () => {
             }
 
             .sticker-col-left {
-              width: 50mm;
+              width: 50%;
               padding: 2mm 2mm 1mm 2mm;
               box-sizing: border-box;
               display: flex;
@@ -829,7 +829,7 @@ const Inventory = () => {
               overflow: hidden;
             }
             .sticker-col-right {
-              width: 50mm;
+              width: 50%;
               padding: 3.5mm 1mm 1mm 1mm;
               box-sizing: border-box;
               display: flex;
@@ -859,7 +859,7 @@ const Inventory = () => {
               justify-content: center;
               width: 100%;
               background: #fff;
-              margin-left: -1.5mm;
+              margin-left: 0;
             }
             .sticker-barcode-img {
               width: 38mm !important;
@@ -1601,7 +1601,7 @@ const Inventory = () => {
                 .label {
                   width: 100mm;
                   height: 50mm;
-                  padding: 0;
+                  padding: 0 0 0 0.5cm;
                   box-sizing: border-box;
                   font-family: Arial, sans-serif;
                   font-size: 6pt;
@@ -1610,21 +1610,21 @@ const Inventory = () => {
                 }
                 .sticker-grid {
                   position: relative;
-                  width: 100mm;
+                  width: 100%;
                   height: 50mm;
                   display: flex;
                 }
                 .sticker-grid:before {
                   content: '';
                   position: absolute;
-                  left: 50mm;
+                  left: 50%;
                   top: 0;
                   bottom: 0;
                   border-left: 1px solid #000;
                   pointer-events: none;
                 }
                 .sticker-col-left {
-                  width: 50mm;
+                  width: 50%;
                   padding: 2mm 2mm 1mm 2mm;
                   box-sizing: border-box;
                   display: flex;
@@ -1632,7 +1632,7 @@ const Inventory = () => {
                   gap: 0.35mm;
                 }
                 .sticker-col-right {
-                  width: 50mm;
+                  width: 50%;
                   padding: 3.5mm 1mm 1mm 1mm;
                   box-sizing: border-box;
                   display: flex;
@@ -1660,7 +1660,7 @@ const Inventory = () => {
                   justify-content: center;
                   width: 100%;
                   background: #fff;
-                  margin-left: -1.5mm;
+                  margin-left: 0;
                 }
                 .sticker-barcode-svg {
                   width: 38mm !important;

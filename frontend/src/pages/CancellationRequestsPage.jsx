@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService, authService } from '../services/api';
-import { buildInvoicePrintHtml, printHtmlViaIframe } from '../utils/invoicePrint';
+import { buildInvoicePrintHtml, printHtmlViaIframe, shouldPrintGatePass } from '../utils/invoicePrint';
 import { ArrowLeft, Search, Printer, Eye, CheckCircle, X } from 'lucide-react';
 
 const CancellationRequestsPage = () => {
@@ -59,22 +59,22 @@ const CancellationRequestsPage = () => {
     try {
       const res = await invoiceService.getById(inv.invoiceId);
       let toPrint = res.data;
-      if (!toPrint.cashier?.address || !toPrint.cashier?.gstNumber) {
-        try {
-          const companyRes = await authService.getCompanyDetails();
-          const company = companyRes?.data || {};
-          toPrint = {
-            ...toPrint,
-            cashier: {
-              ...toPrint.cashier,
-              companyName: toPrint.cashier?.companyName || company.companyName || 'Our Spices Shop',
-              address: toPrint.cashier?.address || company.address || '',
-              gstNumber: toPrint.cashier?.gstNumber || company.gstNumber || ''
-            }
-          };
-        } catch (e) {}
-      }
-      const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
+      let printGatePass = true;
+      try {
+        const companyRes = await authService.getCompanyDetails();
+        const company = companyRes?.data || {};
+        printGatePass = shouldPrintGatePass(company);
+        toPrint = {
+          ...toPrint,
+          cashier: {
+            ...toPrint.cashier,
+            companyName: toPrint.cashier?.companyName || company.companyName || 'Our Spices Shop',
+            address: toPrint.cashier?.address || company.address || '',
+            gstNumber: toPrint.cashier?.gstNumber || company.gstNumber || ''
+          }
+        };
+      } catch (e) { /* print with invoice data only */ }
+      const html = buildInvoicePrintHtml(toPrint, { twoCopies: printGatePass });
       if (html) printHtmlViaIframe(html);
     } catch (err) {
       console.error('Failed to load invoice for print', err);

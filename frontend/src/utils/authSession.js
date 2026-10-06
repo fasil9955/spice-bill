@@ -35,7 +35,10 @@ export function clearAuthStorage() {
 }
 
 export function isAuthApiUrl(url = '') {
-  return String(url).includes('/auth/login') || String(url).includes('/auth/signup');
+  return String(url).includes('/auth/login')
+    || String(url).includes('/auth/signup')
+    || String(url).includes('/auth/forgot-password')
+    || String(url).includes('/auth/reset-password');
 }
 
 /** Clear storage and send the user to login once. */

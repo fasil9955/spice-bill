@@ -102,6 +102,20 @@
   line-height: 1.35;
 }
 
+.settings-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.settings-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
 .nav-link-button {
   padding: 8px 16px;
   font-size: 14px;
@@ -1351,10 +1365,30 @@
 }
 
 /* Barcode preview – helper under printed company name */
-.barcode-field-hint {
-  display: block;
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
-  line-height: 1.35;
+.forgot-row {
+  text-align: right;
+  margin-top: -8px;
+}
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #667eea;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: underline;
+}
+.link-button:hover {
+  color: #4f46e5;
+}
+.link-button.back-to-login {
+  margin-top: 8px;
+  text-align: center;
+  width: 100%;
+}
+.forgot-hint {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.4;
 }

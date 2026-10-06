@@ -1058,9 +1058,15 @@
 }
 
 .btoc-preview-content .btoc-company-line {
-  font-size: 12px;
-  color: #4b5563;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
   margin: 2px 0;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .btoc-preview-content .btoc-company-phone {

@@ -2,6 +2,26 @@
  * Shared invoice print helpers for Billing and Bills pages.
  */
 
+/** When the company setting is missing, keep printing a gate-pass copy (previous default). */
+export function shouldPrintGatePass(company) {
+  return company?.printGatePass !== false;
+}
+
+export function formatPrintMultiline(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r\n|\r|\n/g, '<br/>');
+}
+
+export function companyPrintContact(cashier = {}) {
+  return {
+    address: (cashier.address || '').trim(),
+    phone: (cashier.phoneNumber || cashier.customerCareNumber || cashier.phone || '').trim(),
+  };
+}
+
 /** Indian state code to name (GST first 2 digits). */
 const STATE_CODES = {
   '01': 'Jammu and Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
@@ -106,9 +126,8 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
   if ((invoice.invoiceType || '').toUpperCase() === 'B2B') {
     const items = invoice.items || [];
     const companyName = invoice.cashier?.companyName || 'Our Spices Shop';
-    const companyAddress = (invoice.cashier?.address || '').trim();
+    const { address: companyAddress, phone: companyPhone } = companyPrintContact(invoice.cashier);
     const companyGst = (invoice.cashier?.gstNumber || '').trim();
-    const companyPhone = (invoice.cashier?.phoneNumber || '').trim();
     const companyState = getStateLabel(companyGst ? companyGst.substring(0, 2) : '');
     const customer = invoice.b2bCustomer || {};
     const placeOfSupply = invoice.placeOfSupply || getStateLabel(customer.stateCode || (customer.gstNumber ? customer.gstNumber.substring(0, 2) : ''));
@@ -205,7 +224,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
     if (accountHolder) bankLines.push(`Account Holder: ${accountHolder.replace(/</g, '&lt;')}`);
     const bankContent = bankLines.length ? bankLines.map(l => `<div>${l}</div>`).join('') : '';
 
-    return `
+    const html = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -238,12 +257,20 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             }
             .b2b-company-address {
               font-size: 12px;
+              font-weight: 700;
+              font-family: inherit;
               color: #111827;
               margin-bottom: 2px;
+              white-space: pre-wrap;
+              overflow-wrap: anywhere;
+              word-break: break-word;
+              line-height: 1.35;
             }
             .b2b-company-meta {
-              font-size: 11px;
-              color: #374151;
+              font-size: 12px;
+              font-weight: 700;
+              font-family: inherit;
+              color: #111827;
               margin: 1px 0;
             }
             .b2b-title {
@@ -357,6 +384,14 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             .b2b-summary-line { display: flex; justify-content: flex-end; gap: 12px; margin: 2px 0; }
             .b2b-summary-line.total { font-weight: 700; text-decoration: underline; margin-top: 4px; padding-top: 4px; }
             .b2b-sign { text-align: right; font-size: 11px; margin-top: 12mm; }
+            .b2b-copy-sep { page-break-after: always; height: 0; }
+            .b2b-gate-pass-heading {
+              text-align: center;
+              font-size: 18px;
+              font-weight: 700;
+              letter-spacing: 0.08em;
+              margin: 0 0 4mm;
+            }
             @page { size: A4; margin: 12mm 15mm; }
             @media print {
               body { margin: 0; }
@@ -368,7 +403,8 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
           <div class="a4-root">
             <div class="b2b-company-block">
               <div class="b2b-company-name">${(companyName || '').replace(/</g, '&lt;')}</div>
-              ${companyAddress ? `<div class="b2b-company-address">${companyAddress.replace(/</g, '&lt;')}</div>` : ''}
+              ${companyAddress ? `<div class="b2b-company-address">${formatPrintMultiline(companyAddress)}</div>` : ''}
+              ${companyPhone ? `<div class="b2b-company-meta">Phone No.: ${formatPrintMultiline(companyPhone)}</div>` : ''}
               ${companyPhone ? `<div class="b2b-company-meta">Phone No.: ${companyPhone.replace(/</g, '&lt;')}</div>` : ''}
               ${companyGst ? `<div class="b2b-company-meta">GSTIN: ${companyGst.replace(/</g, '&lt;')}</div>` : ''}
               ${companyState ? `<div class="b2b-company-meta">State: ${companyState.replace(/</g, '&lt;')}</div>` : ''}
@@ -437,15 +473,27 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         </body>
       </html>
     `;
+    if (twoCopies) {
+      const sheetStart = html.indexOf('<div class="a4-root">');
+      const sheetEnd = html.lastIndexOf('</body>');
+      if (sheetStart >= 0 && sheetEnd > sheetStart) {
+        const sheet = html.slice(sheetStart, sheetEnd);
+        const gate = sheet.replace(
+          '<div class="b2b-title">TAX INVOICE</div>',
+          '<p class="b2b-gate-pass-heading">GATE PASS</p><div class="b2b-title">TAX INVOICE</div>'
+        );
+        return html.replace('</body>', `<div class="b2b-copy-sep"></div>${gate}</body>`);
+      }
+    }
+    return html;
   }
 
   // RETAIL (BTOC) – customer receipt format matching old invoice layout
   const invType = (invoice.invoiceType || 'RETAIL').toUpperCase();
   if (invType === 'RETAIL') {
     const companyName = invoice.cashier?.companyName || 'Our Spices Shop';
-    const address = (invoice.cashier?.address || '').trim();
+    const { address, phone: phoneNumber } = companyPrintContact(invoice.cashier);
     const gstNumber = (invoice.cashier?.gstNumber || '').trim();
-    const phoneNumber = (invoice.cashier?.phoneNumber || '').trim();
     const createdAt = (() => {
       if (!invoice.createdAt) return '';
       try {
@@ -495,8 +543,8 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
       <div class="btoc-print-copy">
         <div class="btoc-company">
           <div class="btoc-company-name">${companyName}</div>
-          ${address ? `<div class="btoc-company-line">${address.replace(/</g, '&lt;')}</div>` : ''}
-          ${phoneNumber ? `<div class="btoc-company-line">Ph. no.: ${phoneNumber.replace(/</g, '&lt;')}</div>` : ''}
+          ${address ? `<div class="btoc-company-line btoc-company-address">${formatPrintMultiline(address)}</div>` : ''}
+          ${phoneNumber ? `<div class="btoc-company-line">Ph. no.: ${formatPrintMultiline(phoneNumber)}</div>` : ''}
           ${gstNumber ? `<div class="btoc-company-line">GST: ${gstNumber.replace(/</g, '&lt;')}</div>` : ''}
         </div>
         <div class="btoc-divider-dashed"></div>
@@ -530,7 +578,12 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         </div>
       </div>
     `;
-    const copiesHtml = options.twoCopies ? oneCopy + '<div class="btoc-copy-sep"></div>' + oneCopy : oneCopy;
+    const copiesHtml = options.twoCopies
+      ? oneCopy + '<div class="btoc-copy-sep"></div>' + oneCopy.replace(
+          '<div class="btoc-company">',
+          '<div class="btoc-print-heading">Gate Pass</div><div class="btoc-company">'
+        )
+      : oneCopy;
     return `
       <!DOCTYPE html>
       <html>
@@ -542,9 +595,20 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; padding: 16px; color: #111; }
             .btoc-print-copy { margin-bottom: 24px; }
             .btoc-copy-sep { break-after: page; margin-bottom: 24px; }
+            .btoc-print-heading { text-align: center; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 4px; }
             .btoc-company { text-align: center; margin-bottom: 8px; }
             .btoc-company-name { font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 4px; }
-            .btoc-company-line { font-size: 11px; color: #374151; margin: 2px 0; }
+            .btoc-company-line {
+              font-family: inherit;
+              font-size: 12px;
+              font-weight: 700;
+              color: #111;
+              margin: 2px 0;
+              line-height: 1.35;
+              white-space: pre-wrap;
+              overflow-wrap: anywhere;
+              word-break: break-word;
+            }
             .btoc-divider-dashed { border: none; border-top: 1px dashed #9ca3af; margin: 8px 0; }
             .btoc-divider-solid { border: none; border-top: 1px solid #374151; margin: 4px 0; }
             .btoc-meta { font-size: 11px; margin: 4px 0; }
@@ -614,9 +678,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
   const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
   const payment = invoice.paymentMethod || 'CASH';
   const companyName = invoice.cashier?.companyName || 'Our Spices Shop';
-  const companyAddress = (invoice.cashier?.address || '').trim();
+  const { address: companyAddress, phone: companyPhone } = companyPrintContact(invoice.cashier);
   const companyGst = (invoice.cashier?.gstNumber || '').trim();
-  const addressLine = companyAddress ? `<p class="invoice-header-address">${companyAddress.replace(/</g, '&lt;')}</p>` : '';
+  const addressLine = companyAddress ? `<p class="invoice-header-address">${formatPrintMultiline(companyAddress)}</p>` : '';
+  const phoneLine = companyPhone ? `<p class="invoice-header-phone">Ph. no.: ${formatPrintMultiline(companyPhone)}</p>` : '';
   const gstLine = companyGst ? `<p class="invoice-header-gst">GST: ${companyGst.replace(/</g, '&lt;')}</p>` : '';
   const discountRow = discountAmt > 0
     ? `<div class="totals-row totals-discount"><span>Discount</span><span>- ₹${discountAmt.toFixed(2)}</span></div>`
@@ -639,6 +704,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             <div class="invoice-header">
               <p class="invoice-header-name">${companyName}</p>
               ${addressLine}
+              ${phoneLine}
               ${gstLine}
             </div>
             <div class="meta-row">
@@ -717,16 +783,21 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               color: #111827;
             }
             .invoice-header p {
+              font-family: inherit;
               font-size: 10px;
               font-weight: 700;
-              color: #4b5563;
-              line-height: 1.4;
+              color: #111827;
+              line-height: 1.35;
             }
-            .invoice-header-address, .invoice-header-gst {
+            .invoice-header-address, .invoice-header-phone, .invoice-header-gst {
+              font-family: inherit;
               font-size: 10px;
               font-weight: 700;
-              color: #4b5563;
+              color: #111827;
               margin: 2px 0 0 0;
+              white-space: pre-wrap;
+              overflow-wrap: anywhere;
+              word-break: break-word;
             }
             .gate-pass-heading {
               font-size: 16px;
@@ -853,6 +924,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
             <div class="invoice-header">
               <p class="invoice-header-name">${companyName}</p>
               ${addressLine}
+              ${phoneLine}
               ${gstLine}
             </div>
             <div class="meta-row">

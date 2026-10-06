@@ -2,6 +2,7 @@ package com.spicesshop.billing.controller;
 
 import com.spicesshop.billing.dto.*;
 import com.spicesshop.billing.service.AuthService;
+import com.spicesshop.billing.service.PasswordResetService;
 import com.spicesshop.billing.util.CompanyExtractor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
@@ -22,6 +23,9 @@ public class AuthController {
 
     @Autowired
     private AuthService authService;
+
+    @Autowired
+    private PasswordResetService passwordResetService;
 
     @Autowired
     private CompanyExtractor companyExtractor;
@@ -70,6 +74,26 @@ public class AuthController {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
             this.authService.changePassword(companyName, passwordRequest);
             return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping({"/forgot-password"})
+    public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        try {
+            String message = this.passwordResetService.requestReset(request);
+            return ResponseEntity.ok(Map.of("message", message));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping({"/reset-password"})
+    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+        try {
+            this.passwordResetService.resetPassword(request);
+            return ResponseEntity.ok(Map.of("message", "Password updated. You can now login with the new password."));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
