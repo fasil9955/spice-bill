@@ -369,4 +369,17 @@ public class InvoiceController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+
+    @PostMapping({"/retail/cash-bills/delete-all"})
+    public ResponseEntity<?> deleteAllRetailCashBills(HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
+            }
+            return ResponseEntity.ok(this.invoiceService.deleteAllRetailCashInvoices(companyName));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

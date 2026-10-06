@@ -647,6 +647,53 @@ public class InvoiceService {
     }
 
     /**
+     * Permanently removes every retail CASH invoice for the company (all dates),
+     * then GST-renumbers remaining retail bills. Stock is not restored.
+     */
+    @Transactional
+    public Map<String, Object> deleteAllRetailCashInvoices(String companyName) {
+        List<Invoice> cashBills = this.invoiceRepository.findRetailCashInvoicesByCompany(companyName);
+        if (cashBills.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("deleted", 0);
+            empty.put("stockRestoredBills", 0);
+            empty.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
+            empty.put("renumbered", 0);
+            return empty;
+        }
+        java.util.Set<LocalDate> days = new java.util.HashSet<>();
+        java.util.Set<String> months = new java.util.HashSet<>();
+        for (Invoice invoice : cashBills) {
+            LocalDate d = invoice.getCreatedAt() != null ? invoice.getCreatedAt().toLocalDate() : LocalDate.now();
+            days.add(d);
+            months.add(d.getYear() + "-" + d.getMonthValue());
+            this.courierRequestRepository.deleteByInvoiceId(invoice.getInvoiceId());
+            List<InvoiceItem> items = this.invoiceItemRepository.findByInvoice_InvoiceId(invoice.getInvoiceId());
+            if (items != null && !items.isEmpty()) {
+                this.invoiceItemRepository.deleteAll(items);
+            }
+            this.invoiceRepository.delete(invoice);
+        }
+        this.invoiceRepository.flush();
+        this.invoiceItemRepository.flush();
+
+        Map<String, Object> aligned = alignRetailInvoiceNumbersToGst(companyName);
+        for (LocalDate d : days) {
+            this.reportService.generateDailyReport(d, companyName);
+        }
+        for (String ym : months) {
+            String[] p = ym.split("-");
+            this.reportService.generateMonthlyReport(Integer.parseInt(p[0]), Integer.parseInt(p[1]), companyName);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("deleted", cashBills.size());
+        result.put("stockRestoredBills", 0);
+        result.put("nextPreview", aligned.get("nextPreview"));
+        result.put("renumbered", aligned.get("updated"));
+        return result;
+    }
+
+    /**
      * Rewrites existing retail invoice numbers to GST Rule 46 serials, in bill-date order,
      * one consecutive series per financial year. Cancelled bills keep a number (not reused).
      * B2B invoices are not changed.
@@ -697,6 +744,14 @@ public class InvoiceService {
                 .findByCompanyNameAndDateForUpdate(companyName, entry.getKey())
                 .orElseGet(() -> new InvoiceSequence(companyName, entry.getKey()));
             sequence.setNextSequence(entry.getValue());
+            this.invoiceSequenceRepository.save(sequence);
+        }
+        if (nextByFy.isEmpty()) {
+            LocalDate fyStart = GstInvoiceNumbers.financialYearStart(LocalDate.now());
+            InvoiceSequence sequence = this.invoiceSequenceRepository
+                .findByCompanyNameAndDateForUpdate(companyName, fyStart)
+                .orElseGet(() -> new InvoiceSequence(companyName, fyStart));
+            sequence.setNextSequence(1);
             this.invoiceSequenceRepository.save(sequence);
         }
 

@@ -192,7 +192,7 @@ const DailyAccountingPage = () => {
       window.alert(
         deleted === 0
           ? `No cash bills found for ${formatDisplayDate(isoDate)}.`
-          : `Deleted ${deleted} cash bill(s). Remaining retail bills were renumbered. Next bill: ${nextPreview}`
+          : `Deleted ${deleted} cash bill(s) for ${formatDisplayDate(isoDate)}. Remaining retail bills were GST-renumbered. Next bill: ${nextPreview}`
       );
       broadcastDataUpdate();
       window.location.reload();
@@ -548,7 +548,7 @@ const DailyAccountingPage = () => {
               <strong>{formatDisplayDate(isoDate)}</strong>
               {dataLoaded ? ` (${cashBills.length} on this page)` : ''}.
               Card and UPI bills are kept. Stock is not added back.
-              Remaining retail bill numbers are then made consecutive again.
+              Remaining retail bills are then GST-renumbered in date order.
             </p>
             {cashDeleteError && (
               <p className="daily-accounting-cash-delete-error">{cashDeleteError}</p>
@@ -560,7 +560,7 @@ const DailyAccountingPage = () => {
                 onClick={handleDeleteCashBills}
                 disabled={cashDeleteBusy}
               >
-                {cashDeleteBusy ? 'Deleting…' : 'Delete all cash bills for this day'}
+                {cashDeleteBusy ? 'Deleting…' : `Delete cash bills for ${formatDisplayDate(isoDate)}`}
               </button>
               <button
                 type="button"

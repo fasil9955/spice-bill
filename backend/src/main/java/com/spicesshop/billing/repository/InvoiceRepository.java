@@ -57,6 +57,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
     @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND (i.invoiceType IS NULL OR i.invoiceType <> 'B2B') ORDER BY i.createdAt ASC, i.invoiceId ASC")
     List<Invoice> findRetailInvoicesByCompanyOrdered(@Param("companyName") String companyName);
 
+    @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.paymentMethod = com.spicesshop.billing.model.Invoice$PaymentMethod.CASH AND (i.invoiceType IS NULL OR i.invoiceType <> 'B2B')")
+    List<Invoice> findRetailCashInvoicesByCompany(@Param("companyName") String companyName);
+
     @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND DATE(i.createdAt) = :date AND i.paymentMethod = com.spicesshop.billing.model.Invoice$PaymentMethod.CASH AND (i.invoiceType IS NULL OR i.invoiceType <> 'B2B')")
     List<Invoice> findRetailCashInvoicesByCompanyAndDate(@Param("companyName") String companyName, @Param("date") LocalDate date);
 }

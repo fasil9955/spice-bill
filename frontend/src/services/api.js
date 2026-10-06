@@ -90,6 +90,7 @@ export const invoiceService = {
   approveCancellation: (id) => api.post(`/invoices/${id}/approve-cancellation`),
   alignRetailGstNumbers: () => api.post('/invoices/retail/align-gst-numbers'),
   deleteCashBillsForDate: (date) => api.post(`/invoices/retail/cash-bills/delete?date=${encodeURIComponent(date)}`),
+  deleteAllCashBills: () => api.post('/invoices/retail/cash-bills/delete-all'),
 };
 
 export const attendanceService = {
