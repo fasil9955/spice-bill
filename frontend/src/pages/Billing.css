@@ -919,6 +919,59 @@
   border-color: #d1d5db;
 }
 
+.payment-method-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 24px;
+}
+.payment-method-modal {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  padding: 24px;
+}
+.payment-method-modal h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+.payment-method-total {
+  margin: 0 0 16px;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.payment-method-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.payment-method-choice {
+  padding: 12px 10px;
+  font-size: 15px;
+  font-weight: 700;
+  border: 2px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.payment-method-choice.active {
+  border-color: #667eea;
+  background: #eef2ff;
+  color: #3730a3;
+}
+.payment-method-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
 /* Invoice preview overlay – larger, readable */
 .bill-preview-overlay {
   position: fixed;

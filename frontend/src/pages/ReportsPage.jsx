@@ -20,19 +20,31 @@ const ReportsPage = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setTaxSummaryLoading(true);
-    reportService
-      .getGSTR1Summary(year, month)
-      .then((res) => {
-        if (!cancelled && res?.data) setTaxSummary(res.data);
-      })
-      .catch(() => {
-        if (!cancelled) setTaxSummary(null);
-      })
-      .finally(() => {
-        if (!cancelled) setTaxSummaryLoading(false);
-      });
-    return () => { cancelled = true; };
+    const loadSummary = () => {
+      setTaxSummaryLoading(true);
+      reportService
+        .getGSTR1Summary(year, month)
+        .then((res) => {
+          if (!cancelled && res?.data) setTaxSummary(res.data);
+        })
+        .catch(() => {
+          if (!cancelled) setTaxSummary(null);
+        })
+        .finally(() => {
+          if (!cancelled) setTaxSummaryLoading(false);
+        });
+    };
+    loadSummary();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadSummary();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', loadSummary);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', loadSummary);
+    };
   }, [year, month]);
 
   const handleGSTR1Download = async () => {

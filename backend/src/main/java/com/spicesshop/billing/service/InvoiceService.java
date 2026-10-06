@@ -42,6 +42,9 @@ public class InvoiceService {
     @Autowired
     private CourierRequestRepository courierRequestRepository;
 
+    @Autowired
+    private ReportService reportService;
+
     /** Returns the next invoice number for preview only – does NOT increment (peek). */
     public String getNextInvoiceNumber(String companyName, String invoiceType) {
         return peekNextInvoiceNumber(companyName, invoiceType != null ? invoiceType : "RETAIL");
@@ -593,16 +596,24 @@ public class InvoiceService {
     }
 
     /**
-     * Permanently removes retail CASH invoices for one calendar day, restores stock
-     * for bills that were still active, then rewrites remaining retail numbers so the
-     * GST series stays consecutive.
+     * Permanently removes retail CASH invoices for one calendar day, then rewrites
+     * remaining retail numbers so the GST series stays consecutive.
+     * Stock is not restored (quantities stay decreased).
      */
     @Transactional
     public Map<String, Object> deleteRetailCashInvoicesForDate(String companyName, LocalDate date) {
         if (date == null) {
             throw new RuntimeException("Date is required");
         }
-        List<Invoice> cashBills = this.invoiceRepository.findRetailCashInvoicesByCompanyAndDate(companyName, date);
+        List<Invoice> dayInvoices = this.invoiceRepository.findByCompanyNameAndDateRange(
+            companyName,
+            date.atStartOfDay(),
+            date.plusDays(1).atStartOfDay().minusNanos(1)
+        );
+        List<Invoice> cashBills = dayInvoices.stream()
+            .filter(i -> i.getPaymentMethod() == Invoice.PaymentMethod.CASH)
+            .filter(i -> i.getInvoiceType() == null || !"B2B".equals(i.getInvoiceType()))
+            .toList();
         if (cashBills.isEmpty()) {
             Map<String, Object> empty = new LinkedHashMap<>();
             empty.put("deleted", 0);
@@ -612,44 +623,27 @@ public class InvoiceService {
             empty.put("renumbered", 0);
             return empty;
         }
-        int restoredStock = 0;
         for (Invoice invoice : cashBills) {
-            if (invoice.getStatus() != Invoice.InvoiceStatus.CANCELLED) {
-                restoreStock(invoice);
-                restoredStock++;
-            }
             this.courierRequestRepository.deleteByInvoiceId(invoice.getInvoiceId());
+            List<InvoiceItem> items = this.invoiceItemRepository.findByInvoice_InvoiceId(invoice.getInvoiceId());
+            if (items != null && !items.isEmpty()) {
+                this.invoiceItemRepository.deleteAll(items);
+            }
             this.invoiceRepository.delete(invoice);
         }
         this.invoiceRepository.flush();
+        this.invoiceItemRepository.flush();
 
         Map<String, Object> aligned = alignRetailInvoiceNumbersToGst(companyName);
+        this.reportService.generateDailyReport(date, companyName);
+        this.reportService.generateMonthlyReport(date.getYear(), date.getMonthValue(), companyName);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("deleted", cashBills.size());
-        result.put("stockRestoredBills", restoredStock);
+        result.put("stockRestoredBills", 0);
         result.put("date", date.toString());
         result.put("nextPreview", aligned.get("nextPreview"));
         result.put("renumbered", aligned.get("updated"));
         return result;
-    }
-
-    private void restoreStock(Invoice invoice) {
-        if (invoice.getItems() == null) {
-            return;
-        }
-        for (InvoiceItem item : invoice.getItems()) {
-            if (item.getProduct() == null || item.getProduct().getProductId() == null) {
-                continue;
-            }
-            Product product = this.productRepository.findById(item.getProduct().getProductId()).orElse(null);
-            if (product == null) {
-                continue;
-            }
-            BigDecimal qty = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ZERO;
-            BigDecimal onHand = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
-            product.setQuantity(onHand.add(qty));
-            this.productRepository.save(product);
-        }
     }
 
     /**

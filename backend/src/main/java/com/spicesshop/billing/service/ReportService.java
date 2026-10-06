@@ -35,9 +35,14 @@ public class ReportService {
 
     @Transactional
     public DailySalesReport generateDailyReport(LocalDate date, String companyName) {
-        List<Invoice> invoices = this.invoiceRepository.findByCompanyNameAndDate(companyName, date);
+        List<Invoice> invoices = this.invoiceRepository.findByCompanyNameAndDateRange(
+            companyName,
+            date.atStartOfDay(),
+            date.plusDays(1).atStartOfDay().minusNanos(1)
+        );
 
-        DailySalesReport report = new DailySalesReport();
+        DailySalesReport report = this.dailySalesReportRepository.findByCompanyNameAndReportDate(companyName, date)
+            .orElseGet(DailySalesReport::new);
         report.setCompanyName(companyName);
         report.setReportDate(date);
         long activeCount = invoices.stream()
@@ -102,7 +107,9 @@ public class ReportService {
 
         List<Invoice> invoices = this.invoiceRepository.findByCompanyNameAndDateRange(companyName, startDateTime, endDateTime);
 
-        MonthlySalesSummary summary = new MonthlySalesSummary();
+        MonthlySalesSummary summary = this.monthlySalesSummaryRepository
+            .findByCompanyNameAndYearAndMonth(companyName, year, month)
+            .orElseGet(MonthlySalesSummary::new);
         summary.setCompanyName(companyName);
         summary.setYear(year);
         summary.setMonth(month);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService, invoiceService } from '../services/api';
+import { broadcastDataUpdate } from '../utils/dataSync';
 import { ArrowLeft, Building2, Hash, Lock, Save } from 'lucide-react';
 
 const Settings = () => {
@@ -90,6 +91,8 @@ const Settings = () => {
         printGatePass: company.printGatePass !== false,
       });
       setMessage({ type: 'success', text: 'Company details saved successfully.' });
+      broadcastDataUpdate();
+      window.location.reload();
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to save company details' });
     } finally {
@@ -142,6 +145,7 @@ const Settings = () => {
           ? `No retail bills to update. Next new bill will be ${nextPreview || 'R/YYYY/00001'}.`
           : `Updated ${updated} retail bill number(s). Next new bill will be ${nextPreview}. Reprint any bill you already gave to a customer.`,
       });
+      broadcastDataUpdate();
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to update existing retail bill numbers' });
     } finally {

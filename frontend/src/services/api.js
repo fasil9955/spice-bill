@@ -163,9 +163,9 @@ export const courierService = {
 
 export const reportService = {
   getGSTR1Export: (year, month) =>
-    api.get(`/reports/gstr1-export?year=${year}&month=${month}`, { responseType: 'blob' }),
+    api.get(`/reports/gstr1-export?year=${year}&month=${month}&_=${Date.now()}`, { responseType: 'blob' }),
   getGSTR1Summary: (year, month) =>
-    api.get(`/reports/gstr1-summary?year=${year}&month=${month}`),
+    api.get(`/reports/gstr1-summary?year=${year}&month=${month}&_=${Date.now()}`),
   getMonthlyByYear: (year) => api.get(`/reports/monthly-by-year?year=${year}`),
   getTopSellingItems: (year, month, limit = 15) =>
     api.get(`/reports/top-selling-items?year=${year}&month=${month}&limit=${limit}`),

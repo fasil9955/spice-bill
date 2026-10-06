@@ -34,8 +34,7 @@ public class ReportController {
             HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
-            return ResponseEntity.ok(this.reportService.getDailyReport(date, companyName)
-                .orElseGet(() -> this.reportService.generateDailyReport(date, companyName)));
+            return ResponseEntity.ok(this.reportService.generateDailyReport(date, companyName));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -48,8 +47,7 @@ public class ReportController {
             HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
-            return ResponseEntity.ok(this.reportService.getMonthlyReport(year, month, companyName)
-                .orElseGet(() -> this.reportService.generateMonthlyReport(year, month, companyName)));
+            return ResponseEntity.ok(this.reportService.generateMonthlyReport(year, month, companyName));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -103,7 +101,10 @@ public class ReportController {
             if (companyName == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
             }
-            return ResponseEntity.ok(this.gstr1ExportService.getMonthlyTaxSummary(companyName, year, month));
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .body(this.gstr1ExportService.getMonthlyTaxSummary(companyName, year, month));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -131,6 +132,8 @@ public class ReportController {
             headers.setContentLength(excel.length);
             return ResponseEntity.ok()
                 .headers(headers)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .header(HttpHeaders.PRAGMA, "no-cache")
                 .body(excel);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

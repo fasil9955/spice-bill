@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { getStoredToken } from './utils/authSession';
+import { subscribeToDataUpdates } from './utils/dataSync';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Dashboard from './pages/Dashboard';
@@ -17,6 +18,8 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function App() {
+  useEffect(() => subscribeToDataUpdates(), []);
+
   return (
     <Router>
       <Routes>

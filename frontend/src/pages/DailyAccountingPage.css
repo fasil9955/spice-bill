@@ -754,26 +754,28 @@
   background: #e5e7eb;
 }
 
-.daily-accounting-cash-delete-check {
-  display: inline-flex;
-  align-items: center;
+.daily-accounting-title-block {
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
-  margin-left: 4px;
-  padding: 8px 12px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #374151;
-  background: #fff;
-  border: 2px solid #d1d5db;
-  border-radius: 8px;
-  cursor: pointer;
-  user-select: none;
 }
 
-.daily-accounting-cash-delete-check input {
+.daily-accounting-cash-delete-hidden {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
-  height: 18px;
-  accent-color: #dc2626;
+  height: 28px;
+  margin: 4px 0 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.daily-accounting-cash-delete-hidden input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  opacity: 0;
   cursor: pointer;
 }
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productService, invoiceService, authService } from '../services/api';
 import { formatPrintMultiline, companyPrintContact } from '../utils/invoicePrint';
+import { broadcastDataUpdate } from '../utils/dataSync';
 import './Billing.css';
 import { 
   Search, 
@@ -97,6 +98,7 @@ const Billing = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [previewDraft, setPreviewDraft] = useState(null); // draft with invoice number before save
   const [lastInvoice, setLastInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -111,6 +113,7 @@ const Billing = () => {
   const selectedQtyRef = useRef(null);
   const handlePreviewRef = useRef(null);
   const handleSaveAndPrintRef = useRef(null);
+  const confirmPaymentAndPreviewRef = useRef(null);
   const insufficientRetryRef = useRef(null);
   /** Cached products for fast local search / barcode parse (loaded once). */
   const productsCacheRef = useRef([]);
@@ -262,6 +265,9 @@ const Billing = () => {
   useEffect(() => {
     handleSaveAndPrintRef.current = handleSaveAndPrint;
   });
+  useEffect(() => {
+    confirmPaymentAndPreviewRef.current = confirmPaymentAndPreview;
+  });
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -314,17 +320,37 @@ const Billing = () => {
     };
   }, [refreshProductsCache]);
 
-  // Shortcut: Ctrl+Enter to open Preview Invoice (works from anywhere, including search box)
+  // Shortcut: Ctrl+Enter opens payment popup, then preview
   useEffect(() => {
     const onKeyDown = (e) => {
-      if (e.key === 'Enter' && e.ctrlKey && cart.length > 0 && !loading) {
+      if (e.key === 'Enter' && e.ctrlKey && cart.length > 0 && !loading && !showPreview) {
         e.preventDefault();
-        handlePreviewRef.current?.();
+        if (showPaymentModal) {
+          confirmPaymentAndPreviewRef.current?.();
+        } else {
+          setShowPaymentModal(true);
+        }
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [cart.length, loading]);
+  }, [cart.length, loading, showPreview, showPaymentModal]);
+
+  // When payment popup is open: Enter continues
+  useEffect(() => {
+    if (!showPaymentModal) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Enter' && !e.ctrlKey && !loading) {
+        e.preventDefault();
+        confirmPaymentAndPreviewRef.current?.();
+      }
+      if (e.key === 'Escape') {
+        setShowPaymentModal(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showPaymentModal, loading]);
 
   // When bill preview modal is open (draft): Enter triggers Save & Print
   useEffect(() => {
@@ -1032,6 +1058,24 @@ const Billing = () => {
     printHtmlViaIframe(html);
   };
 
+  const openPaymentModal = () => {
+    if (cart.length === 0) return;
+    setShowPaymentModal(true);
+  };
+
+  const confirmPaymentAndPreview = () => {
+    if (paymentMethod === 'MIXED') {
+      const total = calculateTotal();
+      const sum = (Number(amounts.cash) || 0) + (Number(amounts.card) || 0) + (Number(amounts.upi) || 0);
+      if (Math.abs(sum - total) > 0.05) {
+        alert(`Mixed amounts (₹${sum.toFixed(2)}) must add up to the total (₹${total.toFixed(2)}).`);
+        return;
+      }
+    }
+    setShowPaymentModal(false);
+    handlePreview();
+  };
+
   const handlePreview = async () => {
     if (cart.length === 0) return;
     setLoading(true);
@@ -1111,6 +1155,7 @@ const Billing = () => {
       };
       const response = await invoiceService.create(invoiceData);
       setLastInvoice(response.data);
+      broadcastDataUpdate();
       patchActive({
         cart: [],
         paymentMethod: 'CASH',
@@ -1146,7 +1191,7 @@ const Billing = () => {
       onMouseDown={(e) => {
         const el = e.target;
         if (!(el instanceof HTMLElement)) return;
-        if (el.closest('input, select, textarea, button, label, .product-search-dropdown, .modal-overlay, .bill-preview-overlay, .scan-timing-panel')) return;
+        if (el.closest('input, select, textarea, button, label, .product-search-dropdown, .modal-overlay, .bill-preview-overlay, .payment-method-overlay, .scan-timing-panel')) return;
         returnFocusToSearch();
       }}
     >
@@ -1456,58 +1501,6 @@ const Billing = () => {
               <span>₹{calculateTotal().toFixed(2)}</span>
             </div>
 
-            <div className="payment-section">
-              <h3>Payment Method</h3>
-              <select
-                className="payment-select"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                onBlur={() => setTimeout(returnFocusToSearch, 0)}
-              >
-                <option value="CASH">Cash</option>
-                <option value="CARD">Card</option>
-                <option value="UPI">UPI</option>
-                <option value="MIXED">Mixed</option>
-              </select>
-              {paymentMethod === 'MIXED' && (
-                <div className="mixed-amounts">
-                  <div className="mixed-row">
-                    <label>Cash ₹</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={amounts.cash || ''}
-                      onChange={(e) => setAmounts(a => ({ ...a, cash: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="mixed-row">
-                    <label>Card ₹</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={amounts.card || ''}
-                      onChange={(e) => setAmounts(a => ({ ...a, card: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div className="mixed-row">
-                    <label>UPI ₹</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={amounts.upi || ''}
-                      onChange={(e) => setAmounts(a => ({ ...a, upi: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div className="discount-section">
               <h3>Discount</h3>
               <div className="discount-toggle">
@@ -1555,17 +1548,91 @@ const Billing = () => {
               )}
             </div>
 
-            <button 
-              className="submit-btn checkout-btn" 
+            <button
+              className="submit-btn checkout-btn"
               disabled={cart.length === 0 || loading}
-              onClick={handlePreview}
+              onClick={openPaymentModal}
             >
-              {loading ? 'Loading...' : 'Preview Invoice'}
+              {loading ? 'Loading...' : 'Create Invoice'}
             </button>
           </div>
         </div>
       </div>
     </div>
+
+    {showPaymentModal && (
+      <div
+        className="payment-method-overlay"
+        onClick={() => setShowPaymentModal(false)}
+      >
+        <div className="payment-method-modal" onClick={(e) => e.stopPropagation()}>
+          <h2>Select payment method</h2>
+          <p className="payment-method-total">Total: ₹{calculateTotal().toFixed(2)}</p>
+          <div className="payment-method-choices">
+            {[
+              { value: 'CASH', label: 'Cash' },
+              { value: 'CARD', label: 'Card' },
+              { value: 'UPI', label: 'UPI' },
+              { value: 'MIXED', label: 'Mixed' },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={`payment-method-choice ${paymentMethod === opt.value ? 'active' : ''}`}
+                onClick={() => setPaymentMethod(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {paymentMethod === 'MIXED' && (
+            <div className="mixed-amounts">
+              <div className="mixed-row">
+                <label>Cash ₹</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amounts.cash || ''}
+                  onChange={(e) => setAmounts((a) => ({ ...a, cash: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="mixed-row">
+                <label>Card ₹</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amounts.card || ''}
+                  onChange={(e) => setAmounts((a) => ({ ...a, card: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
+                  placeholder="0"
+                />
+              </div>
+              <div className="mixed-row">
+                <label>UPI ₹</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amounts.upi || ''}
+                  onChange={(e) => setAmounts((a) => ({ ...a, upi: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          )}
+          <div className="payment-method-actions">
+            <button type="button" className="print-btn" onClick={confirmPaymentAndPreview} disabled={loading}>
+              Continue
+            </button>
+            <button type="button" className="btoc-btn-close" onClick={() => setShowPaymentModal(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {showPreview && (previewDraft || lastInvoice) && (() => {
         const display = previewDraft ?? lastInvoice;

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { productService, invoiceService, authService, b2bCustomerService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees, shouldPrintGatePass } from '../utils/invoicePrint';
+import { broadcastDataUpdate } from '../utils/dataSync';
 import './Billing.css';
 import { Search, Plus, Minus, ShoppingCart, Printer, ArrowLeft, X, UserPlus, Pencil } from 'lucide-react';
 import {
@@ -783,6 +784,7 @@ const B2BBilling = () => {
       };
       const response = await invoiceService.create(invoiceData);
       setLastInvoice(response.data);
+      broadcastDataUpdate();
       setPreviewDraft(null);
       setCart([]);
       setEwayBillNumber('');

@@ -6,6 +6,7 @@ import {
   expenseService,
   employeeService,
 } from '../services/api';
+import { broadcastDataUpdate } from '../utils/dataSync';
 import { ArrowLeft, Printer, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import './DailyAccountingPage.css';
 
@@ -188,12 +189,13 @@ const DailyAccountingPage = () => {
       const deleted = res.data?.deleted ?? 0;
       const nextPreview = res.data?.nextPreview || '';
       closeCashDeleteModal();
-      await loadData();
       window.alert(
         deleted === 0
           ? `No cash bills found for ${formatDisplayDate(isoDate)}.`
           : `Deleted ${deleted} cash bill(s). Remaining retail bills were renumbered. Next bill: ${nextPreview}`
       );
+      broadcastDataUpdate();
+      window.location.reload();
     } catch (err) {
       setCashDeleteError(err.response?.data?.error || 'Failed to delete cash bills.');
     } finally {
@@ -505,9 +507,22 @@ const DailyAccountingPage = () => {
       )}
 
       <div className="daily-accounting-header">
-        <div>
-          <h1>Accounting &amp; Day Close</h1>
-          <p>Manage daily accounting and payment splits.</p>
+        <div className="daily-accounting-title-block">
+          <label className="daily-accounting-cash-delete-hidden">
+            <input
+              type="checkbox"
+              checked={cashDeleteChecked}
+              onChange={(e) => {
+                setCashDeleteError('');
+                setCashDeleteChecked(e.target.checked);
+              }}
+              aria-label="Delete cash bills"
+            />
+          </label>
+          <div>
+            <h1>Accounting &amp; Day Close</h1>
+            <p>Manage daily accounting and payment splits.</p>
+          </div>
         </div>
         <div className="daily-accounting-header-actions">
           <button type="button" className="daily-accounting-print-btn" onClick={handlePrintReport}>
@@ -516,17 +531,6 @@ const DailyAccountingPage = () => {
           <button type="button" className="daily-accounting-back-btn" onClick={() => navigate('/dashboard')}>
             <ArrowLeft size={18} /> Dashboard
           </button>
-          <label className="daily-accounting-cash-delete-check">
-            <input
-              type="checkbox"
-              checked={cashDeleteChecked}
-              onChange={(e) => {
-                setCashDeleteError('');
-                setCashDeleteChecked(e.target.checked);
-              }}
-            />
-            Delete cash bills
-          </label>
         </div>
       </div>
 
@@ -543,7 +547,7 @@ const DailyAccountingPage = () => {
               This will permanently delete all <strong>cash</strong> retail bills for{' '}
               <strong>{formatDisplayDate(isoDate)}</strong>
               {dataLoaded ? ` (${cashBills.length} on this page)` : ''}.
-              Card and UPI bills are kept. Stock from those cash bills is added back.
+              Card and UPI bills are kept. Stock is not added back.
               Remaining retail bill numbers are then made consecutive again.
             </p>
             {cashDeleteError && (
