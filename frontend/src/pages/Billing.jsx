@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { productService, invoiceService, authService } from '../services/api';
 import { formatPrintMultiline, companyPrintContact } from '../utils/invoicePrint';
 import { broadcastDataUpdate } from '../utils/dataSync';
+import { encodeUpiAccountField, formatInvoicePayment, normalizeUpiAccounts } from '../utils/upiAccounts';
 import './Billing.css';
 import { 
   Search, 
@@ -48,7 +49,8 @@ const createEmptySession = (index = 1) => ({
   customerName: '',
   cart: [],
   paymentMethod: 'CASH',
-  amounts: { cash: 0, card: 0, upi: 0 },
+  upiAccount: '',
+  amounts: { cash: 0, card: 0, upi: 0, upiByAccount: {} },
   discountType: 'percent',
   discountPercent: 0,
   discountAmount: 0,
@@ -63,7 +65,8 @@ const loadBillingSessions = () => {
         const sessions = parsed.sessions.map((s, i) => ({
           ...createEmptySession(i + 1),
           ...s,
-          amounts: { cash: 0, card: 0, upi: 0, ...(s.amounts || {}) },
+          amounts: { cash: 0, card: 0, upi: 0, upiByAccount: {}, ...(s.amounts || {}) },
+          upiAccount: s.upiAccount || '',
           cart: Array.isArray(s.cart) ? s.cart : [],
           customerName: s.customerName || '',
         }));
@@ -99,7 +102,8 @@ const Billing = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [mixedParts, setMixedParts] = useState({ cash: false, card: false, upi: false });
+  const [mixedParts, setMixedParts] = useState({ cash: false, card: false, upi: false, upiLabels: {} });
+  const [companyUpiAccounts, setCompanyUpiAccounts] = useState([]);
   const [previewDraft, setPreviewDraft] = useState(null); // draft with invoice number before save
   const [lastInvoice, setLastInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -130,7 +134,9 @@ const Billing = () => {
   const activeSession = sessions.find((s) => s.id === activeId) || sessions[0] || createEmptySession(1);
   const cart = activeSession.cart || [];
   const paymentMethod = activeSession.paymentMethod || 'CASH';
-  const amounts = activeSession.amounts || { cash: 0, card: 0, upi: 0 };
+  const upiAccount = activeSession.upiAccount || '';
+  const amounts = activeSession.amounts || { cash: 0, card: 0, upi: 0, upiByAccount: {} };
+  const namedUpiAccounts = normalizeUpiAccounts(companyUpiAccounts);
   const discountType = activeSession.discountType || 'percent';
   const discountPercent = activeSession.discountPercent || 0;
   const discountAmount = activeSession.discountAmount || 0;
@@ -154,7 +160,7 @@ const Billing = () => {
   const setPaymentMethod = (value) => patchActive({ paymentMethod: value });
   const setAmounts = (updater) => {
     patchActive((s) => ({
-      amounts: typeof updater === 'function' ? updater(s.amounts || { cash: 0, card: 0, upi: 0 }) : updater,
+      amounts: typeof updater === 'function' ? updater(s.amounts || { cash: 0, card: 0, upi: 0, upiByAccount: {} }) : updater,
     }));
   };
   const setDiscountType = (value) => patchActive({ discountType: value });
@@ -244,6 +250,9 @@ const Billing = () => {
         if (!cancelled) syncProductsCache([]);
       }
     })();
+    authService.getCompanyDetails().then((res) => {
+      if (!cancelled) setCompanyUpiAccounts(normalizeUpiAccounts(res?.data?.upiAccounts));
+    }).catch(() => {});
     return () => {
       cancelled = true;
       if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -1059,10 +1068,22 @@ const Billing = () => {
     printHtmlViaIframe(html);
   };
 
+  const mixedUpiParts = () => {
+    if (namedUpiAccounts.length) {
+      return namedUpiAccounts
+        .filter((a) => mixedParts.upiLabels?.[a.label])
+        .map((a) => ({ label: a.label, amount: Number(amounts.upiByAccount?.[a.label]) || 0 }));
+    }
+    return mixedParts.upi ? [{ label: 'UPI', amount: Number(amounts.upi) || 0 }] : [];
+  };
+
+  const mixedUpiTotal = () => mixedUpiParts().reduce((sum, part) => sum + (Number(part.amount) || 0), 0);
+
   const openPaymentModal = () => {
     if (cart.length === 0) return;
-    setMixedParts({ cash: false, card: false, upi: false });
-    setAmounts({ cash: 0, card: 0, upi: 0 });
+    setMixedParts({ cash: false, card: false, upi: false, upiLabels: {} });
+    setAmounts({ cash: 0, card: 0, upi: 0, upiByAccount: {} });
+    patchActive({ upiAccount: '' });
     setShowPaymentModal(true);
   };
 
@@ -1077,13 +1098,25 @@ const Billing = () => {
     if (paymentMethod !== 'MIXED') setPaymentMethod('MIXED');
   };
 
+  const toggleMixedUpiLabel = (label) => {
+    setMixedParts((p) => {
+      const on = !!p.upiLabels?.[label];
+      const upiLabels = { ...(p.upiLabels || {}), [label]: !on };
+      if (on) {
+        setAmounts((a) => ({ ...a, upiByAccount: { ...(a.upiByAccount || {}), [label]: 0 } }));
+      }
+      return { ...p, upiLabels };
+    });
+    if (paymentMethod !== 'MIXED') setPaymentMethod('MIXED');
+  };
+
   const confirmPaymentAndPreview = () => {
     if (paymentMethod === 'MIXED') {
       const total = calculateTotal();
       const cash = mixedParts.cash ? Number(amounts.cash) || 0 : 0;
       const card = mixedParts.card ? Number(amounts.card) || 0 : 0;
-      const upi = mixedParts.upi ? Number(amounts.upi) || 0 : 0;
-      const used = [mixedParts.cash, mixedParts.card, mixedParts.upi].filter(Boolean).length;
+      const upi = mixedUpiTotal();
+      const used = [mixedParts.cash, mixedParts.card].filter(Boolean).length + mixedUpiParts().length;
       if (used < 2) {
         alert('For Mixed, add at least two of Cash, Card, and UPI.');
         return;
@@ -1093,7 +1126,7 @@ const Billing = () => {
         alert(`Mixed amounts (₹${sum.toFixed(2)}) must add up to the total (₹${total.toFixed(2)}).`);
         return;
       }
-      setAmounts({ cash, card, upi });
+      setAmounts((a) => ({ ...a, cash, card, upi }));
     }
     setShowPaymentModal(false);
     handlePreview();
@@ -1122,6 +1155,12 @@ const Billing = () => {
         createdAt: new Date().toISOString(),
         invoiceType: 'RETAIL',
         paymentMethod: paymentMethod,
+        upiAccount: paymentMethod === 'UPI'
+          ? (upiAccount || 'UPI')
+          : encodeUpiAccountField(paymentMethod, upiAccount, mixedUpiParts()),
+        cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
+        cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
+        upiAmount: paymentMethod === 'MIXED' ? mixedUpiTotal() : (paymentMethod === 'UPI' ? total : 0),
         cashier: {
           companyName: company.companyName || user?.companyName || 'Our Spices Shop',
           address: company.address || '',
@@ -1163,9 +1202,12 @@ const Billing = () => {
         invoiceType: 'RETAIL',
         invoiceNumber: previewDraft.invoiceNumber,
         paymentMethod: paymentMethod,
+        upiAccount: paymentMethod === 'UPI'
+          ? (upiAccount || 'UPI')
+          : encodeUpiAccountField(paymentMethod, upiAccount, mixedUpiParts()),
         cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
         cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
-        upiAmount: paymentMethod === 'MIXED' ? Number(amounts.upi) || 0 : (paymentMethod === 'UPI' ? total : 0),
+        upiAmount: paymentMethod === 'MIXED' ? mixedUpiTotal() : (paymentMethod === 'UPI' ? total : 0),
         discountAmount: getDiscountValue(),
         ...(cashierUserId != null && { cashier: { userId: cashierUserId } }),
         items: cart.map(item => ({
@@ -1182,7 +1224,8 @@ const Billing = () => {
       patchActive({
         cart: [],
         paymentMethod: 'CASH',
-        amounts: { cash: 0, card: 0, upi: 0 },
+        upiAccount: '',
+        amounts: { cash: 0, card: 0, upi: 0, upiByAccount: {} },
         discountType: 'percent',
         discountPercent: 0,
         discountAmount: 0,
@@ -1595,18 +1638,31 @@ const Billing = () => {
             {[
               { value: 'CASH', label: 'Cash' },
               { value: 'CARD', label: 'Card' },
-              { value: 'UPI', label: 'UPI' },
+              ...(namedUpiAccounts.length
+                ? namedUpiAccounts.map((a) => ({ value: `UPI:${a.label}`, label: a.label, upiLabel: a.label }))
+                : [{ value: 'UPI', label: 'UPI' }]),
               { value: 'MIXED', label: 'Mixed' },
-            ].map((opt) => (
+            ].map((opt) => {
+              const active = opt.upiLabel
+                ? paymentMethod === 'UPI' && upiAccount === opt.upiLabel
+                : paymentMethod === opt.value;
+              return (
               <button
                 key={opt.value}
                 type="button"
-                className={`payment-method-choice ${paymentMethod === opt.value ? 'active' : ''}`}
-                onClick={() => setPaymentMethod(opt.value)}
+                className={`payment-method-choice ${active ? 'active' : ''}`}
+                onClick={() => {
+                  if (opt.upiLabel) {
+                    patchActive({ paymentMethod: 'UPI', upiAccount: opt.upiLabel });
+                  } else {
+                    patchActive({ paymentMethod: opt.value, upiAccount: '' });
+                  }
+                }}
               >
                 {opt.label}
               </button>
-            ))}
+              );
+            })}
           </div>
           {paymentMethod === 'MIXED' && (
             <div className="payment-mixed-box">
@@ -1626,13 +1682,24 @@ const Billing = () => {
                 >
                   {mixedParts.card ? 'Card added' : '+ Card'}
                 </button>
-                <button
-                  type="button"
-                  className={`payment-mixed-add-btn ${mixedParts.upi ? 'on' : ''}`}
-                  onClick={() => toggleMixedPart('upi')}
-                >
-                  {mixedParts.upi ? 'UPI added' : '+ UPI'}
-                </button>
+                {namedUpiAccounts.length ? namedUpiAccounts.map((a) => (
+                  <button
+                    key={a.label}
+                    type="button"
+                    className={`payment-mixed-add-btn ${mixedParts.upiLabels?.[a.label] ? 'on' : ''}`}
+                    onClick={() => toggleMixedUpiLabel(a.label)}
+                  >
+                    {mixedParts.upiLabels?.[a.label] ? `${a.label} added` : `+ ${a.label}`}
+                  </button>
+                )) : (
+                  <button
+                    type="button"
+                    className={`payment-mixed-add-btn ${mixedParts.upi ? 'on' : ''}`}
+                    onClick={() => toggleMixedPart('upi')}
+                  >
+                    {mixedParts.upi ? 'UPI added' : '+ UPI'}
+                  </button>
+                )}
               </div>
               {mixedParts.cash && (
                 <div className="mixed-row">
@@ -1660,7 +1727,27 @@ const Billing = () => {
                   />
                 </div>
               )}
-              {mixedParts.upi && (
+              {namedUpiAccounts.length
+                ? namedUpiAccounts.filter((a) => mixedParts.upiLabels?.[a.label]).map((a) => (
+                  <div className="mixed-row" key={`amt-${a.label}`}>
+                    <label>{a.label} ₹</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={amounts.upiByAccount?.[a.label] || ''}
+                      onChange={(e) => setAmounts((prev) => ({
+                        ...prev,
+                        upiByAccount: {
+                          ...(prev.upiByAccount || {}),
+                          [a.label]: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0,
+                        },
+                      }))}
+                      placeholder="0"
+                    />
+                  </div>
+                ))
+                : mixedParts.upi && (
                 <div className="mixed-row">
                   <label>UPI ₹</label>
                   <input
@@ -1677,14 +1764,14 @@ const Billing = () => {
                 Entered ₹{(
                   (mixedParts.cash ? Number(amounts.cash) || 0 : 0)
                   + (mixedParts.card ? Number(amounts.card) || 0 : 0)
-                  + (mixedParts.upi ? Number(amounts.upi) || 0 : 0)
+                  + mixedUpiTotal()
                 ).toFixed(2)}
                 {' / '}
                 Remaining ₹{(
                   calculateTotal()
                   - (mixedParts.cash ? Number(amounts.cash) || 0 : 0)
                   - (mixedParts.card ? Number(amounts.card) || 0 : 0)
-                  - (mixedParts.upi ? Number(amounts.upi) || 0 : 0)
+                  - mixedUpiTotal()
                 ).toFixed(2)}
               </p>
             </div>
@@ -1786,7 +1873,7 @@ const Billing = () => {
               </div>
               <div className="btoc-divider-dashed" />
               <div className="btoc-payment">
-                <div className="btoc-totals-row"><span>Payment Method</span><span>{display.paymentMethod || 'CASH'}</span></div>
+                <div className="btoc-totals-row"><span>Payment Method</span><span>{formatInvoicePayment(display)}</span></div>
                 <div className="btoc-totals-row"><span>Amount Paid</span><span>₹{totalAmt.toFixed(2)}</span></div>
               </div>
               <div className="btoc-footer">

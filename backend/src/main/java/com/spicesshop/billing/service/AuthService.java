@@ -1,9 +1,15 @@
 package com.spicesshop.billing.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spicesshop.billing.dto.*;
 import com.spicesshop.billing.model.User;
 import com.spicesshop.billing.repository.UserRepository;
 import com.spicesshop.billing.util.JwtUtil;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,6 +26,9 @@ public class AuthService {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Transactional
     public SignupResponse signup(SignupRequest request) {
@@ -101,7 +110,8 @@ public class AuthService {
             admin.getIfscCode(),
             admin.getBranchName(),
             admin.getB2bInvoiceStart(),
-            admin.getPrintGatePass()
+            admin.getPrintGatePass(),
+            readUpiAccounts(admin.getUpiAccountsJson())
         );
     }
 
@@ -134,6 +144,7 @@ public class AuthService {
         admin.setBranchName(request.getBranchName());
         admin.setB2bInvoiceStart(request.getB2bInvoiceStart());
         admin.setPrintGatePass(request.getPrintGatePass() == null ? Boolean.TRUE : request.getPrintGatePass());
+        admin.setUpiAccountsJson(writeUpiAccounts(request.getUpiAccounts()));
         this.userRepository.save(admin);
 
         cashier.setBarcodeLabelCompanyName(barcodeLabelName);
@@ -150,6 +161,7 @@ public class AuthService {
         cashier.setBranchName(request.getBranchName());
         cashier.setB2bInvoiceStart(request.getB2bInvoiceStart());
         cashier.setPrintGatePass(request.getPrintGatePass() == null ? Boolean.TRUE : request.getPrintGatePass());
+        cashier.setUpiAccountsJson(admin.getUpiAccountsJson());
         this.userRepository.save(cashier);
 
         return new CompanyDetailsResponse(
@@ -167,7 +179,8 @@ public class AuthService {
             admin.getIfscCode(),
             admin.getBranchName(),
             admin.getB2bInvoiceStart(),
-            admin.getPrintGatePass()
+            admin.getPrintGatePass(),
+            readUpiAccounts(admin.getUpiAccountsJson())
         );
     }
 
@@ -197,5 +210,57 @@ public class AuthService {
 
         user.setPassword(this.passwordEncoder.encode(request.getNewPassword()));
         this.userRepository.save(user);
+    }
+
+    private List<UpiAccountDto> readUpiAccounts(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return sanitizeUpiAccounts(this.objectMapper.readValue(json, new TypeReference<List<UpiAccountDto>>() {}));
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private String writeUpiAccounts(List<UpiAccountDto> list) {
+        try {
+            return this.objectMapper.writeValueAsString(sanitizeUpiAccounts(list));
+        } catch (Exception e) {
+            return "[]";
+        }
+    }
+
+    private List<UpiAccountDto> sanitizeUpiAccounts(List<UpiAccountDto> list) {
+        if (list == null || list.isEmpty()) {
+            return List.of();
+        }
+        List<UpiAccountDto> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (UpiAccountDto row : list) {
+            if (row == null || row.getLabel() == null) {
+                continue;
+            }
+            String label = row.getLabel().trim();
+            if (label.isEmpty()) {
+                continue;
+            }
+            String key = label.toLowerCase();
+            if (!seen.add(key)) {
+                continue;
+            }
+            if (label.length() > 40) {
+                label = label.substring(0, 40);
+            }
+            String upiId = row.getUpiId() != null ? row.getUpiId().trim() : "";
+            if (upiId.length() > 80) {
+                upiId = upiId.substring(0, 80);
+            }
+            out.add(new UpiAccountDto(label, upiId));
+            if (out.size() >= 12) {
+                break;
+            }
+        }
+        return out;
     }
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService, invoiceService } from '../services/api';
 import { broadcastDataUpdate } from '../utils/dataSync';
+import { normalizeUpiAccounts } from '../utils/upiAccounts';
 import { ArrowLeft, Building2, Hash, Lock, Save } from 'lucide-react';
 
 const Settings = () => {
@@ -28,6 +29,7 @@ const Settings = () => {
     branchName: '',
     b2bInvoiceStart: '',
     printGatePass: true,
+    upiAccounts: [],
   });
 
   const [passwordForm, setPasswordForm] = useState({
@@ -57,6 +59,7 @@ const Settings = () => {
         branchName: d.branchName ?? '',
         b2bInvoiceStart: d.b2bInvoiceStart != null ? String(d.b2bInvoiceStart) : '',
         printGatePass: d.printGatePass !== false,
+        upiAccounts: normalizeUpiAccounts(d.upiAccounts),
       });
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to load company details' });
@@ -89,6 +92,7 @@ const Settings = () => {
         branchName: company.branchName,
         b2bInvoiceStart: company.b2bInvoiceStart ? parseInt(company.b2bInvoiceStart, 10) : null,
         printGatePass: company.printGatePass !== false,
+        upiAccounts: normalizeUpiAccounts(company.upiAccounts),
       });
       setMessage({ type: 'success', text: 'Company details saved successfully.' });
       broadcastDataUpdate();
@@ -129,12 +133,13 @@ const Settings = () => {
   };
 
   const handleAlignRetailNumbers = async () => {
+    if (aligningRetail) return;
     const ok = window.confirm(
-      'This will change every existing retail (shop) bill number to the GST format R/2627/00001, in the order the bills were made.\n\nDo this only if those bills have not already been filed in GSTR-1 / e-invoice. Printed copies must be reprinted.\n\nB2B invoice numbers are not changed.\n\nContinue?'
+      'This will change every existing retail (shop) bill number to the GST format R/2627/00001, in the order the bills were made.\n\nKeep this window open until it finishes. If the screen turns off, wait 1 minute before clicking again.\n\nDo this only if those bills have not already been filed in GSTR-1 / e-invoice. Printed copies must be reprinted.\n\nB2B invoice numbers are not changed.\n\nContinue?'
     );
     if (!ok) return;
     setAligningRetail(true);
-    setMessage({ type: '', text: '' });
+    setMessage({ type: 'success', text: 'Updating bill numbers… keep this window open. Do not click again.' });
     try {
       const res = await invoiceService.alignRetailGstNumbers();
       const updated = res.data?.updated ?? 0;
@@ -147,7 +152,13 @@ const Settings = () => {
       });
       broadcastDataUpdate();
     } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to update existing retail bill numbers' });
+      setMessage({
+        type: 'error',
+        text: err.response?.data?.error
+          || (err.code === 'ECONNABORTED'
+            ? 'The update is still running on the server. Wait 1 minute, then click once.'
+            : 'Failed to update existing retail bill numbers'),
+      });
     } finally {
       setAligningRetail(false);
     }
@@ -332,6 +343,58 @@ const Settings = () => {
               <p className="settings-field-hint">
                 When ticked, printing includes the invoice and a gate-pass copy. Untick to print the invoice once.
               </p>
+            </div>
+            <div className="form-group">
+              <label>UPI accounts</label>
+              <p className="settings-field-hint">
+                Add names like UPI C, UPI S, UPI H. These buttons appear on the billing payment window.
+              </p>
+              <div className="settings-upi-list">
+                {(company.upiAccounts || []).map((acc, idx) => (
+                  <div className="settings-upi-row" key={`upi-${idx}`}>
+                    <input
+                      type="text"
+                      value={acc.label}
+                      placeholder="UPI C"
+                      onChange={(e) => {
+                        const next = [...company.upiAccounts];
+                        next[idx] = { ...next[idx], label: e.target.value };
+                        setCompany({ ...company, upiAccounts: next });
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={acc.upiId || ''}
+                      placeholder="UPI ID (optional)"
+                      onChange={(e) => {
+                        const next = [...company.upiAccounts];
+                        next[idx] = { ...next[idx], upiId: e.target.value };
+                        setCompany({ ...company, upiAccounts: next });
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="settings-upi-remove"
+                      onClick={() => setCompany({
+                        ...company,
+                        upiAccounts: company.upiAccounts.filter((_, i) => i !== idx),
+                      })}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="settings-upi-remove"
+                onClick={() => setCompany({
+                  ...company,
+                  upiAccounts: [...(company.upiAccounts || []), { label: '', upiId: '' }],
+                })}
+              >
+                + Add UPI account
+              </button>
             </div>
             <div className="form-actions">
               <button type="submit" className="submit-btn" disabled={savingCompany}>

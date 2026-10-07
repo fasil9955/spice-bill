@@ -69,6 +69,10 @@ public class User {
     @Column(name = "print_gate_pass")
     private Boolean printGatePass = Boolean.TRUE;
 
+    /** JSON list of UPI accounts shown on the payment popup, e.g. UPI C / UPI S. */
+    @Column(name = "upi_accounts_json", columnDefinition = "TEXT")
+    private String upiAccountsJson;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -189,6 +193,14 @@ public class User {
 
     public void setPrintGatePass(Boolean printGatePass) {
         this.printGatePass = printGatePass;
+    }
+
+    public String getUpiAccountsJson() {
+        return this.upiAccountsJson;
+    }
+
+    public void setUpiAccountsJson(String upiAccountsJson) {
+        this.upiAccountsJson = upiAccountsJson;
     }
 
     public void setCreatedAt(LocalDateTime createdAt) {

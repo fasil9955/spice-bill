@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { productService, invoiceService, authService, b2bCustomerService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees, shouldPrintGatePass } from '../utils/invoicePrint';
 import { broadcastDataUpdate } from '../utils/dataSync';
+import { encodeUpiAccountField, normalizeUpiAccounts } from '../utils/upiAccounts';
 import './Billing.css';
 import { Search, Plus, Minus, ShoppingCart, Printer, ArrowLeft, X, UserPlus, Pencil } from 'lucide-react';
 import {
@@ -33,6 +34,8 @@ const B2BBilling = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
+  const [upiAccount, setUpiAccount] = useState('');
+  const [upiAccounts, setUpiAccounts] = useState([]);
   const [amounts, setAmounts] = useState({ cash: 0, card: 0, upi: 0 });
   const [discountType, setDiscountType] = useState('percent');
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -112,6 +115,9 @@ const B2BBilling = () => {
   useEffect(() => {
     fetchB2bCustomers();
     if (!editMode) fetchNextBillNumber();
+    authService.getCompanyDetails().then((res) => {
+      setUpiAccounts(normalizeUpiAccounts(res?.data?.upiAccounts));
+    }).catch(() => {});
   }, [editMode]);
 
   useEffect(() => {
@@ -717,6 +723,10 @@ const B2BBilling = () => {
         invoiceType: 'B2B',
         ewayBillNumber: ewayBillNumber.trim() || null,
         paymentMethod,
+        upiAccount,
+        cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
+        cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
+        upiAmount: paymentMethod === 'MIXED' ? Number(amounts.upi) || 0 : (paymentMethod === 'UPI' ? total : 0),
         placeOfSupply: custState,
         totalPackages: (totalPackages !== '' && totalPackages != null) ? parseInt(totalPackages, 10) : null,
         b2bCustomer: selectedCustomer,
@@ -768,6 +778,11 @@ const B2BBilling = () => {
         ...(ewayBillNumber.trim() && { ewayBillNumber: ewayBillNumber.trim() }),
         ...((totalPackages !== '' && totalPackages != null) ? { totalPackages: parseInt(totalPackages, 10) } : {}),
         paymentMethod,
+        upiAccount: encodeUpiAccountField(
+          paymentMethod,
+          upiAccount,
+          paymentMethod === 'MIXED' && Number(amounts.upi) > 0 ? [{ label: upiAccount || 'UPI', amount: Number(amounts.upi) || 0 }] : []
+        ),
         cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
         cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
         upiAmount: paymentMethod === 'MIXED' ? Number(amounts.upi) || 0 : (paymentMethod === 'UPI' ? total : 0),
@@ -806,6 +821,11 @@ const B2BBilling = () => {
     try {
       const payload = {
         paymentMethod,
+        upiAccount: encodeUpiAccountField(
+          paymentMethod,
+          upiAccount,
+          paymentMethod === 'MIXED' && Number(amounts.upi) > 0 ? [{ label: upiAccount || 'UPI', amount: Number(amounts.upi) || 0 }] : []
+        ),
         cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
         cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
         upiAmount: paymentMethod === 'MIXED' ? Number(amounts.upi) || 0 : (paymentMethod === 'UPI' ? total : 0),
@@ -855,6 +875,10 @@ const B2BBilling = () => {
         invoiceType: 'B2B',
         ewayBillNumber: ewayBillNumber.trim() || null,
         paymentMethod,
+        upiAccount,
+        cashAmount: paymentMethod === 'MIXED' ? Number(amounts.cash) || 0 : (paymentMethod === 'CASH' ? total : 0),
+        cardAmount: paymentMethod === 'MIXED' ? Number(amounts.card) || 0 : (paymentMethod === 'CARD' ? total : 0),
+        upiAmount: paymentMethod === 'MIXED' ? Number(amounts.upi) || 0 : (paymentMethod === 'UPI' ? total : 0),
         placeOfSupply: custState,
         totalPackages: (totalPackages !== '' && totalPackages != null) ? parseInt(totalPackages, 10) : null,
         b2bCustomer: selectedCustomer,
@@ -1189,12 +1213,41 @@ const B2BBilling = () => {
 
               <div className="payment-section">
                 <h3>Payment Method</h3>
-                <select className="payment-select" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                <select
+                  className="payment-select"
+                  value={paymentMethod === 'UPI' && upiAccount ? `UPI:${upiAccount}` : paymentMethod}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v.startsWith('UPI:')) {
+                      setPaymentMethod('UPI');
+                      setUpiAccount(v.slice(4));
+                    } else {
+                      setPaymentMethod(v);
+                      setUpiAccount('');
+                    }
+                  }}
+                >
                   <option value="CASH">Cash</option>
                   <option value="CARD">Card</option>
-                  <option value="UPI">UPI</option>
+                  {upiAccounts.length === 0 && <option value="UPI">UPI</option>}
+                  {upiAccounts.map((a) => (
+                    <option key={a.label} value={`UPI:${a.label}`}>{a.label}</option>
+                  ))}
                   <option value="MIXED">Mixed</option>
                 </select>
+                {paymentMethod === 'MIXED' && upiAccounts.length > 0 && (
+                  <select
+                    className="payment-select"
+                    style={{ marginTop: 8 }}
+                    value={upiAccount}
+                    onChange={(e) => setUpiAccount(e.target.value)}
+                  >
+                    <option value="">UPI account for mixed UPI amount</option>
+                    {upiAccounts.map((a) => (
+                      <option key={a.label} value={a.label}>{a.label}</option>
+                    ))}
+                  </select>
+                )}
                 {paymentMethod === 'MIXED' && (
                   <div className="mixed-amounts">
                     <div className="mixed-row"><label>Cash ₹</label><input type="number" min="0" step="0.01" value={amounts.cash || ''} onChange={(e) => setAmounts(a => ({ ...a, cash: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))} placeholder="0" /></div>

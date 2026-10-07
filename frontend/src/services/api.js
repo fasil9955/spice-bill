@@ -88,7 +88,7 @@ export const invoiceService = {
   getCancellationRequests: () => api.get('/invoices/cancellation-requests'),
   requestCancellation: (id, reason) => api.post(`/invoices/${id}/cancel`, { reason }),
   approveCancellation: (id) => api.post(`/invoices/${id}/approve-cancellation`),
-  alignRetailGstNumbers: () => api.post('/invoices/retail/align-gst-numbers'),
+  alignRetailGstNumbers: () => api.post('/invoices/retail/align-gst-numbers', {}, { timeout: 180000 }),
   deleteCashBillsForDate: (date) => api.post(`/invoices/retail/cash-bills/delete?date=${encodeURIComponent(date)}`),
   deleteAllCashBills: () => api.post('/invoices/retail/cash-bills/delete-all'),
 };

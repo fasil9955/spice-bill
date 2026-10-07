@@ -547,7 +547,7 @@ const DailyAccountingPage = () => {
               This will permanently delete all <strong>cash</strong> retail bills for{' '}
               <strong>{formatDisplayDate(isoDate)}</strong>
               {dataLoaded ? ` (${cashBills.length} on this page)` : ''}.
-              Card and UPI bills are kept. Stock is not added back.
+              Card, UPI, and mixed bills (even if they include some cash) are kept. Only bills paid fully as Cash are deleted. Stock is not added back.
               Remaining retail bills are then GST-renumbered in date order.
             </p>
             {cashDeleteError && (

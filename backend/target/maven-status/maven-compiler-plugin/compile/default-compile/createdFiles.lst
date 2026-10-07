@@ -89,11 +89,13 @@ com\spicesshop\billing\controller\InvoiceController.class
 com\spicesshop\billing\dto\ForgotPasswordRequest.class
 com\spicesshop\billing\controller\ProductController.class
 com\spicesshop\billing\model\InvoiceItem.class
+com\spicesshop\billing\dto\UpiAccountDto.class
 com\spicesshop\billing\SpicesBillingApplication.class
 com\spicesshop\billing\controller\AttendanceController.class
 com\spicesshop\billing\controller\FileUploadController.class
 com\spicesshop\billing\service\GSTR1ExportService$B2BRow.class
 com\spicesshop\billing\controller\B2BCustomerController.class
+com\spicesshop\billing\service\AuthService$1.class
 com\spicesshop\billing\repository\EmployeeRepository.class
 com\spicesshop\billing\dto\LoginRequest.class
 com\spicesshop\billing\service\AttendanceService.class

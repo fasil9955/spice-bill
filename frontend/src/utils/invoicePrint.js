@@ -1,6 +1,7 @@
 /**
  * Shared invoice print helpers for Billing and Bills pages.
  */
+import { formatInvoicePayment } from './upiAccounts';
 
 /** When the company setting is missing, keep printing a gate-pass copy (previous default). */
 export function shouldPrintGatePass(company) {
@@ -517,7 +518,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
     const subtotalVal = baseAmount + cgstAmt + sgstAmt;
     const discountAmt = Number(invoice.discountAmount) || 0;
     const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
-    const payment = invoice.paymentMethod || 'CASH';
+    const payment = formatInvoicePayment(invoice);
     const discountRow = discountAmt > 0
       ? `<div class="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹${discountAmt.toFixed(2)}</span></div>`
       : '';
@@ -676,7 +677,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
   })();
   const discountAmt = Number(invoice.discountAmount) || 0;
   const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
-  const payment = invoice.paymentMethod || 'CASH';
+  const payment = formatInvoicePayment(invoice);
   const companyName = invoice.cashier?.companyName || 'Our Spices Shop';
   const { address: companyAddress, phone: companyPhone } = companyPrintContact(invoice.cashier);
   const companyGst = (invoice.cashier?.gstNumber || '').trim();

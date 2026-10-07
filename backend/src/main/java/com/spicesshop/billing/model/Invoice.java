@@ -49,6 +49,10 @@ public class Invoice {
     @Column(name = "upi_amount", precision = 10, scale = 2)
     private BigDecimal upiAmount;
 
+    /** Named UPI account (e.g. UPI C) or JSON splits for MIXED. */
+    @Column(name = "upi_account", length = 500)
+    private String upiAccount;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "cashier_id", nullable = false)
     @JsonIgnoreProperties({"password", "hibernateLazyInitializer", "handler"})
@@ -182,6 +186,10 @@ public class Invoice {
         this.upiAmount = upiAmount;
     }
 
+    public void setUpiAccount(String upiAccount) {
+        this.upiAccount = upiAccount;
+    }
+
     public void setCashier(User cashier) {
         this.cashier = cashier;
     }
@@ -276,6 +284,10 @@ public class Invoice {
 
     public BigDecimal getUpiAmount() {
         return this.upiAmount;
+    }
+
+    public String getUpiAccount() {
+        return this.upiAccount;
     }
 
     public User getCashier() {

@@ -16,6 +16,7 @@ public class CompanyDetailsRequest {
     private String branchName;
     private Integer b2bInvoiceStart;
     private Boolean printGatePass;
+    private java.util.List<UpiAccountDto> upiAccounts;
 
     public CompanyDetailsRequest() {}
 
@@ -159,6 +160,14 @@ public class CompanyDetailsRequest {
 
     public void setPrintGatePass(Boolean printGatePass) {
         this.printGatePass = printGatePass;
+    }
+
+    public java.util.List<UpiAccountDto> getUpiAccounts() {
+        return this.upiAccounts;
+    }
+
+    public void setUpiAccounts(java.util.List<UpiAccountDto> upiAccounts) {
+        this.upiAccounts = upiAccounts;
     }
 
     @Override

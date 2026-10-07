@@ -17,10 +17,15 @@ public class CompanyDetailsResponse {
     private String branchName;
     private Integer b2bInvoiceStart;
     private Boolean printGatePass;
+    private java.util.List<UpiAccountDto> upiAccounts;
 
     public CompanyDetailsResponse() {}
 
     public CompanyDetailsResponse(String companyName, String barcodeLabelCompanyName, String gstNumber, String fssaiLicense, String address, String phoneNumber, String packingLicenceNo, String customerCareNumber, String customerCareEmail, String bankName, String accountNumber, String ifscCode, String branchName, Integer b2bInvoiceStart, Boolean printGatePass) {
+        this(companyName, barcodeLabelCompanyName, gstNumber, fssaiLicense, address, phoneNumber, packingLicenceNo, customerCareNumber, customerCareEmail, bankName, accountNumber, ifscCode, branchName, b2bInvoiceStart, printGatePass, java.util.List.of());
+    }
+
+    public CompanyDetailsResponse(String companyName, String barcodeLabelCompanyName, String gstNumber, String fssaiLicense, String address, String phoneNumber, String packingLicenceNo, String customerCareNumber, String customerCareEmail, String bankName, String accountNumber, String ifscCode, String branchName, Integer b2bInvoiceStart, Boolean printGatePass, java.util.List<UpiAccountDto> upiAccounts) {
         this.companyName = companyName;
         this.barcodeLabelCompanyName = barcodeLabelCompanyName;
         this.gstNumber = gstNumber;
@@ -36,6 +41,7 @@ public class CompanyDetailsResponse {
         this.branchName = branchName;
         this.b2bInvoiceStart = b2bInvoiceStart;
         this.printGatePass = printGatePass == null ? Boolean.TRUE : printGatePass;
+        this.upiAccounts = upiAccounts != null ? upiAccounts : java.util.List.of();
     }
 
     public String getCompanyName() {
@@ -156,6 +162,14 @@ public class CompanyDetailsResponse {
 
     public void setPrintGatePass(Boolean printGatePass) {
         this.printGatePass = printGatePass;
+    }
+
+    public java.util.List<UpiAccountDto> getUpiAccounts() {
+        return this.upiAccounts != null ? this.upiAccounts : java.util.List.of();
+    }
+
+    public void setUpiAccounts(java.util.List<UpiAccountDto> upiAccounts) {
+        this.upiAccounts = upiAccounts;
     }
 
     @Override

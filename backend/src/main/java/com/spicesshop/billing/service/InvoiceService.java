@@ -13,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,8 @@ public class InvoiceService {
 
     @Autowired
     private ReportService reportService;
+
+    private final ReentrantLock retailNumberAlignLock = new ReentrantLock();
 
     /** Returns the next invoice number for preview only – does NOT increment (peek). */
     public String getNextInvoiceNumber(String companyName, String invoiceType) {
@@ -358,6 +361,7 @@ public class InvoiceService {
         existingInvoice.setCashAmount(updatedInvoice.getCashAmount());
         existingInvoice.setCardAmount(updatedInvoice.getCardAmount());
         existingInvoice.setUpiAmount(updatedInvoice.getUpiAmount());
+        existingInvoice.setUpiAccount(updatedInvoice.getUpiAccount());
 
         if (updatedInvoice.getEwayBillNumber() != null) {
             existingInvoice.setEwayBillNumber(updatedInvoice.getEwayBillNumber());
@@ -697,51 +701,52 @@ public class InvoiceService {
      * Rewrites existing retail invoice numbers to GST Rule 46 serials, in bill-date order,
      * one consecutive series per financial year. Cancelled bills keep a number (not reused).
      * B2B invoices are not changed.
+     * Number-only SQL is used so MySQL does not lock full invoice + line-item rows for minutes.
      */
-    @Transactional
+    @Transactional(timeout = 180)
     public Map<String, Object> alignRetailInvoiceNumbersToGst(String companyName) {
-        List<Invoice> retail = this.invoiceRepository.findRetailInvoicesByCompanyOrdered(companyName);
+        if (!this.retailNumberAlignLock.tryLock()) {
+            throw new IllegalStateException(
+                "The first Change bill number is still running in the background (the screen going off does not stop it). Wait about 1 minute, then click once and keep this window open.");
+        }
+        try {
+            return rewriteRetailInvoiceNumbersToGst(companyName);
+        } finally {
+            this.retailNumberAlignLock.unlock();
+        }
+    }
+
+    private Map<String, Object> rewriteRetailInvoiceNumbersToGst(String companyName) {
+        List<Object[]> retail = this.invoiceRepository.findRetailInvoiceNumberRows(companyName);
         List<Map<String, String>> changed = new ArrayList<>();
         Map<LocalDate, Integer> nextByFy = new HashMap<>();
 
-        for (Invoice invoice : retail) {
-            String oldNumber = invoice.getInvoiceNumber();
-            invoice.setInvoiceNumber("__MIG-" + invoice.getInvoiceId());
-            this.invoiceRepository.save(invoice);
-            if (oldNumber != null && !oldNumber.equals(invoice.getInvoiceNumber())) {
-                Map<String, String> row = new LinkedHashMap<>();
-                row.put("invoiceId", String.valueOf(invoice.getInvoiceId()));
-                row.put("from", oldNumber);
-                row.put("to", "");
-                changed.add(row);
-            }
-        }
-        this.invoiceRepository.flush();
+        this.invoiceRepository.migrateRetailNumbersToTemp(companyName);
 
-        int changeIndex = 0;
-        for (Invoice invoice : retail) {
-            LocalDate billDate = invoice.getCreatedAt() != null
-                ? invoice.getCreatedAt().toLocalDate()
-                : LocalDate.now();
+        for (Object[] row : retail) {
+            Integer invoiceId = (Integer) row[0];
+            LocalDateTime createdAt = (LocalDateTime) row[1];
+            String oldNumber = row[2] != null ? String.valueOf(row[2]) : "";
+            LocalDate billDate = createdAt != null ? createdAt.toLocalDate() : LocalDate.now();
             LocalDate fyStart = GstInvoiceNumbers.financialYearStart(billDate);
             int seq = nextByFy.getOrDefault(fyStart, 1);
             String newNumber = GstInvoiceNumbers.formatRetail(billDate, seq);
             nextByFy.put(fyStart, seq + 1);
-
-            String oldNumber = changeIndex < changed.size() ? changed.get(changeIndex).get("from") : invoice.getInvoiceNumber();
-            invoice.setInvoiceNumber(newNumber);
-            this.invoiceRepository.save(invoice);
-            updateCourierInvoiceNumber(companyName, invoice.getInvoiceId(), oldNumber, newNumber);
-
-            if (changeIndex < changed.size()) {
-                changed.get(changeIndex).put("to", newNumber);
-                changeIndex++;
+            this.invoiceRepository.updateInvoiceNumberById(invoiceId, newNumber);
+            if (!oldNumber.equals(newNumber)) {
+                Map<String, String> change = new LinkedHashMap<>();
+                change.put("invoiceId", String.valueOf(invoiceId));
+                change.put("from", oldNumber);
+                change.put("to", newNumber);
+                changed.add(change);
             }
         }
 
+        this.courierRequestRepository.syncRetailCourierInvoiceNumbers(companyName);
+
         for (Map.Entry<LocalDate, Integer> entry : nextByFy.entrySet()) {
             InvoiceSequence sequence = this.invoiceSequenceRepository
-                .findByCompanyNameAndDateForUpdate(companyName, entry.getKey())
+                .findByCompanyNameAndSequenceDate(companyName, entry.getKey())
                 .orElseGet(() -> new InvoiceSequence(companyName, entry.getKey()));
             sequence.setNextSequence(entry.getValue());
             this.invoiceSequenceRepository.save(sequence);
@@ -749,42 +754,18 @@ public class InvoiceService {
         if (nextByFy.isEmpty()) {
             LocalDate fyStart = GstInvoiceNumbers.financialYearStart(LocalDate.now());
             InvoiceSequence sequence = this.invoiceSequenceRepository
-                .findByCompanyNameAndDateForUpdate(companyName, fyStart)
+                .findByCompanyNameAndSequenceDate(companyName, fyStart)
                 .orElseGet(() -> new InvoiceSequence(companyName, fyStart));
             sequence.setNextSequence(1);
             this.invoiceSequenceRepository.save(sequence);
         }
 
-        List<Map<String, String>> sample = changed.stream()
-            .filter(row -> row.get("from") == null || !row.get("from").equals(row.get("to")))
-            .limit(12)
-            .toList();
-        long updated = changed.stream()
-            .filter(row -> row.get("from") == null || !row.get("from").equals(row.get("to")))
-            .count();
+        List<Map<String, String>> sample = changed.stream().limit(12).toList();
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("updated", updated);
+        result.put("updated", changed.size());
         result.put("financialYears", nextByFy.size());
         result.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
         result.put("sample", sample);
         return result;
-    }
-
-    private void updateCourierInvoiceNumber(String companyName, Integer invoiceId, String oldNumber, String newNumber) {
-        List<CourierRequest> byId = this.courierRequestRepository.findByInvoiceId(invoiceId);
-        List<CourierRequest> byNumber = (oldNumber == null || oldNumber.isBlank())
-            ? List.of()
-            : this.courierRequestRepository.findByCompanyNameAndInvoiceNumber(companyName, oldNumber);
-        Map<Integer, CourierRequest> unique = new LinkedHashMap<>();
-        for (CourierRequest request : byId) {
-            unique.put(request.getCourierId(), request);
-        }
-        for (CourierRequest request : byNumber) {
-            unique.put(request.getCourierId(), request);
-        }
-        for (CourierRequest request : unique.values()) {
-            request.setInvoiceNumber(newNumber);
-            this.courierRequestRepository.save(request);
-        }
     }
 }

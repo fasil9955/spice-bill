@@ -75,6 +75,9 @@ public class InvoiceController {
             invoice.setCashAmount(toBigDecimal(payload.get("cashAmount")));
             invoice.setCardAmount(toBigDecimal(payload.get("cardAmount")));
             invoice.setUpiAmount(toBigDecimal(payload.get("upiAmount")));
+            if (payload.get("upiAccount") != null) {
+                invoice.setUpiAccount(String.valueOf(payload.get("upiAccount")));
+            }
             if (payload.get("cashier") != null && payload.get("cashier") instanceof Map) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> cashierMap = (Map<String, Object>) payload.get("cashier");
@@ -222,6 +225,9 @@ public class InvoiceController {
             updatedInvoice.setCashAmount(toBigDecimal(payload.get("cashAmount")));
             updatedInvoice.setCardAmount(toBigDecimal(payload.get("cardAmount")));
             updatedInvoice.setUpiAmount(toBigDecimal(payload.get("upiAmount")));
+            if (payload.get("upiAccount") != null) {
+                updatedInvoice.setUpiAccount(String.valueOf(payload.get("upiAccount")));
+            }
             if (payload.get("ewayBillNumber") != null) {
                 String eway = payload.get("ewayBillNumber").toString().trim();
                 updatedInvoice.setEwayBillNumber(eway.isEmpty() ? null : eway);
@@ -351,7 +357,15 @@ public class InvoiceController {
             }
             return ResponseEntity.ok(this.invoiceService.alignRetailInvoiceNumbersToGst(companyName));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            String combined = exceptionText(e);
+            String msg = e.getMessage() != null ? e.getMessage() : "Failed to update retail bill numbers";
+            if (e instanceof IllegalStateException) {
+                return ResponseEntity.status(409).body(Map.of("error", msg));
+            }
+            if (combined.contains("Lock wait timeout") || combined.contains("Deadlock")) {
+                msg = "The first Change bill number was still locking MySQL (screen off does not stop it). Wait 1 minute with this window open, then click once. Do not create invoices until it finishes.";
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
         }
     }
 
@@ -381,5 +395,15 @@ public class InvoiceController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    private static String exceptionText(Throwable error) {
+        StringBuilder text = new StringBuilder();
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            if (t.getMessage() != null) {
+                text.append(t.getMessage()).append(' ');
+            }
+        }
+        return text.toString();
     }
 }
