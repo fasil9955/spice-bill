@@ -3,6 +3,7 @@ package com.spicesshop.billing.controller;
 import com.spicesshop.billing.dto.AccountingDaySummaryResponse;
 import com.spicesshop.billing.model.AccountingDaySummary;
 import com.spicesshop.billing.service.AccountingDaySummaryService;
+import com.spicesshop.billing.service.DailyCustomerNumbersMailService;
 import com.spicesshop.billing.util.CompanyExtractor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
@@ -27,6 +28,9 @@ public class AccountingController {
 
     @Autowired
     private AccountingDaySummaryService accountingDaySummaryService;
+
+    @Autowired
+    private DailyCustomerNumbersMailService dailyCustomerNumbersMailService;
 
     @Autowired
     private CompanyExtractor companyExtractor;
@@ -89,6 +93,14 @@ public class AccountingController {
             AccountingDaySummary summary = this.accountingDaySummaryService.upsertSummary(
                 companyName, date, billingBookSales, closingCash, closingGpayTotal, paymentDetailsJson);
 
+            String customerNumbersEmail = null;
+            Object sendPhones = payload.get("sendCustomerPhones");
+            boolean shouldSend = Boolean.TRUE.equals(sendPhones)
+                || (sendPhones != null && "true".equalsIgnoreCase(sendPhones.toString()));
+            if (shouldSend) {
+                customerNumbersEmail = this.dailyCustomerNumbersMailService.sendOnDayCloseIfNeeded(companyName, date);
+            }
+
             LocalDate yesterday = date.minusDays(1);
             Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
             BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
@@ -98,6 +110,7 @@ public class AccountingController {
                 date.toString(), summary.getBillingBookSales(), openingCash, openingUpi,
                 summary.getClosingCash(), summary.getClosingGpayTotal());
             body.setPaymentDetailsJson(summary.getPaymentDetailsJson());
+            body.setCustomerNumbersEmail(customerNumbersEmail);
             return ResponseEntity.ok(body);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

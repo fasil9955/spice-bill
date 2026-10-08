@@ -33,6 +33,9 @@ public class AccountingDaySummary {
     @Column(name = "payment_details_json", columnDefinition = "TEXT")
     private String paymentDetailsJson;
 
+    @Column(name = "customer_numbers_emailed_at")
+    private LocalDateTime customerNumbersEmailedAt;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -78,6 +81,10 @@ public class AccountingDaySummary {
         this.paymentDetailsJson = paymentDetailsJson;
     }
 
+    public void setCustomerNumbersEmailedAt(LocalDateTime customerNumbersEmailedAt) {
+        this.customerNumbersEmailedAt = customerNumbersEmailedAt;
+    }
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
@@ -112,6 +119,10 @@ public class AccountingDaySummary {
 
     public String getPaymentDetailsJson() {
         return this.paymentDetailsJson;
+    }
+
+    public LocalDateTime getCustomerNumbersEmailedAt() {
+        return this.customerNumbersEmailedAt;
     }
 
     public LocalDateTime getCreatedAt() {

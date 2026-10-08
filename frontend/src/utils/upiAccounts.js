@@ -1,3 +1,15 @@
+export function buildPaymentChoices(upiAccounts) {
+  const named = normalizeUpiAccounts(upiAccounts);
+  return [
+    { value: 'CASH', label: 'Cash' },
+    { value: 'CARD', label: 'Card' },
+    ...(named.length
+      ? named.map((a) => ({ value: 'UPI', label: a.label, upiLabel: a.label }))
+      : [{ value: 'UPI', label: 'UPI' }]),
+    { value: 'MIXED', label: 'Mixed' },
+  ];
+}
+
 export function normalizeUpiAccounts(list) {
   if (!Array.isArray(list)) return [];
   const seen = new Set();

@@ -102,10 +102,11 @@
 }
 .billing-cart-customer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   width: 100%;
-  max-width: 420px;
+  max-width: 640px;
   margin: 0 0 12px 0;
 }
 .billing-cart-customer label {
@@ -964,6 +965,17 @@
   border-color: #667eea;
   background: #eef2ff;
   color: #3730a3;
+}
+.payment-method-choice.pay-nav-focus,
+.payment-mixed-add-btn.pay-nav-focus,
+.payment-mixed-box .mixed-row input.pay-nav-focus,
+.payment-method-actions .print-btn.pay-nav-focus {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.45);
+}
+.payment-method-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #64748b;
 }
 .payment-method-actions {
   display: flex;

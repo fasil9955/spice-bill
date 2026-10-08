@@ -14,7 +14,7 @@
 
     <groupId>com.spicesshop</groupId>
     <artifactId>spices-billing-system</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <name>Spices Billing System</name>
     <description>Billing system for spices shop with React frontend</description>
 
@@ -129,6 +129,7 @@
     </dependencies>
 
     <build>
+        <finalName>spices-billing</finalName>
         <plugins>
             <!-- Frontend build: use system Node/npm (avoids plugin node.exe path issues in Eclipse/paths with spaces) -->
             <plugin>

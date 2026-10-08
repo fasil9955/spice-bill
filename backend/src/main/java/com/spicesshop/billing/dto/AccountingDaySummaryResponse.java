@@ -17,6 +17,9 @@ public class AccountingDaySummaryResponse {
     /** JSON string: manual card / UPI lines for this day. */
     private String paymentDetailsJson;
 
+    /** sent | already_sent | none_collected | mail_not_configured | failed */
+    private String customerNumbersEmail;
+
     public AccountingDaySummaryResponse() {}
 
     public AccountingDaySummaryResponse(String reportDate, BigDecimal billingBookSales) {
@@ -88,6 +91,14 @@ public class AccountingDaySummaryResponse {
 
     public void setPaymentDetailsJson(String paymentDetailsJson) {
         this.paymentDetailsJson = paymentDetailsJson;
+    }
+
+    public String getCustomerNumbersEmail() {
+        return this.customerNumbersEmail;
+    }
+
+    public void setCustomerNumbersEmail(String customerNumbersEmail) {
+        this.customerNumbersEmail = customerNumbersEmail;
     }
 
     @Override

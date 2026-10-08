@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { invoiceService, productService } from '../services/api';
+import { invoiceService, productService, authService } from '../services/api';
+import { buildPaymentChoices, encodeUpiAccountField, normalizeUpiAccounts } from '../utils/upiAccounts';
 import { Search, Plus, Minus, ShoppingCart, ArrowLeft, X } from 'lucide-react';
 import './Billing.css';
 import {
@@ -47,7 +48,9 @@ const EditInvoicePage = () => {
   const [invoice, setInvoice] = useState(null);
   const [items, setItems] = useState([]);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [amounts, setAmounts] = useState({ cash: 0, card: 0, upi: 0 });
+  const [upiAccount, setUpiAccount] = useState('');
+  const [upiAccounts, setUpiAccounts] = useState([]);
+  const [amounts, setAmounts] = useState({ cash: 0, card: 0, upi: 0, upiByAccount: {} });
   const [discountType, setDiscountType] = useState('amount');
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -72,10 +75,13 @@ const EditInvoicePage = () => {
       if (!invoiceId) return;
       setLoading(true);
       try {
-        const [invRes, prodRes] = await Promise.all([
+        const [invRes, prodRes, companyRes] = await Promise.all([
           invoiceService.getById(Number(invoiceId)),
-          productService.getAll()
+          productService.getAll(),
+          authService.getCompanyDetails().catch(() => ({ data: null })),
         ]);
+        const namedUpis = normalizeUpiAccounts(companyRes?.data?.upiAccounts);
+        setUpiAccounts(namedUpis);
         const inv = invRes?.data;
         if (!inv) {
           alert('Invoice not found.');
@@ -94,10 +100,23 @@ const EditInvoicePage = () => {
         }
         setInvoice(inv);
         setPaymentMethod(inv.paymentMethod || 'CASH');
+        const acc = String(inv.upiAccount || '').trim();
+        let upiByAccount = {};
+        if (acc.startsWith('[')) {
+          try {
+            JSON.parse(acc).forEach((p) => {
+              if (p?.label) upiByAccount[p.label] = Number(p.amount) || 0;
+            });
+          } catch { /* ignore */ }
+          setUpiAccount('');
+        } else {
+          setUpiAccount(acc);
+        }
         setAmounts({
           cash: Number(inv.cashAmount) || 0,
           card: Number(inv.cardAmount) || 0,
-          upi: Number(inv.upiAmount) || 0
+          upi: Number(inv.upiAmount) || 0,
+          upiByAccount,
         });
         const disc = Number(inv.discountAmount) || 0;
         setDiscountAmount(disc);
@@ -370,15 +389,28 @@ const EditInvoicePage = () => {
     setItems(prev => prev.filter(it => it.productId !== productId));
   };
 
+  const paymentChoices = buildPaymentChoices(upiAccounts);
+  const mixedUpiTotal = upiAccounts.length
+    ? upiAccounts.reduce((sum, a) => sum + (Number(amounts.upiByAccount?.[a.label]) || 0), 0)
+    : (Number(amounts.upi) || 0);
+
   const handleSave = async () => {
     if (!invoice || items.length === 0) return;
     setSaving(true);
     try {
+      const mixedParts = upiAccounts.length
+        ? upiAccounts
+          .filter((a) => (Number(amounts.upiByAccount?.[a.label]) || 0) > 0)
+          .map((a) => ({ label: a.label, amount: Number(amounts.upiByAccount?.[a.label]) || 0 }))
+        : ((Number(amounts.upi) || 0) > 0 ? [{ label: upiAccount || 'UPI', amount: Number(amounts.upi) || 0 }] : []);
       const payload = {
         paymentMethod,
+        upiAccount: paymentMethod === 'UPI'
+          ? (upiAccount || 'UPI')
+          : encodeUpiAccountField(paymentMethod, upiAccount, mixedParts),
         cashAmount: paymentMethod === 'MIXED' ? (Number(amounts.cash) || 0) : (paymentMethod === 'CASH' ? total : 0),
         cardAmount: paymentMethod === 'MIXED' ? (Number(amounts.card) || 0) : (paymentMethod === 'CARD' ? total : 0),
-        upiAmount: paymentMethod === 'MIXED' ? (Number(amounts.upi) || 0) : (paymentMethod === 'UPI' ? total : 0),
+        upiAmount: paymentMethod === 'MIXED' ? mixedUpiTotal : (paymentMethod === 'UPI' ? total : 0),
         discountAmount: discount,
         items: items.map(it => ({
           product: { productId: it.productId },
@@ -612,21 +644,56 @@ const EditInvoicePage = () => {
 
               <div className="payment-section">
                 <h3>Payment Method</h3>
-                <select
-                  className="payment-select"
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="CARD">Card</option>
-                  <option value="UPI">UPI</option>
-                  <option value="MIXED">Mixed</option>
-                </select>
+                <div className="payment-method-choices">
+                  {paymentChoices.map((opt) => {
+                    const active = opt.upiLabel
+                      ? paymentMethod === 'UPI' && upiAccount === opt.upiLabel
+                      : paymentMethod === opt.value;
+                    return (
+                      <button
+                        key={opt.upiLabel ? `UPI:${opt.upiLabel}` : opt.value}
+                        type="button"
+                        className={`payment-method-choice ${active ? 'active' : ''}`}
+                        onClick={() => {
+                          if (opt.upiLabel) {
+                            setPaymentMethod('UPI');
+                            setUpiAccount(opt.upiLabel);
+                          } else {
+                            setPaymentMethod(opt.value);
+                            setUpiAccount('');
+                          }
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
                 {paymentMethod === 'MIXED' && (
                   <div className="mixed-amounts">
                     <div className="mixed-row"><label>Cash ₹</label><input type="number" min="0" step="0.01" value={amounts.cash || ''} onChange={(e) => setAmounts(a => ({ ...a, cash: parseFloat(e.target.value) || 0 }))} placeholder="0" /></div>
                     <div className="mixed-row"><label>Card ₹</label><input type="number" min="0" step="0.01" value={amounts.card || ''} onChange={(e) => setAmounts(a => ({ ...a, card: parseFloat(e.target.value) || 0 }))} placeholder="0" /></div>
-                    <div className="mixed-row"><label>UPI ₹</label><input type="number" min="0" step="0.01" value={amounts.upi || ''} onChange={(e) => setAmounts(a => ({ ...a, upi: parseFloat(e.target.value) || 0 }))} placeholder="0" /></div>
+                    {upiAccounts.length ? upiAccounts.map((a) => (
+                      <div className="mixed-row" key={a.label}>
+                        <label>{a.label} ₹</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={amounts.upiByAccount?.[a.label] || ''}
+                          onChange={(e) => setAmounts((prev) => ({
+                            ...prev,
+                            upiByAccount: {
+                              ...(prev.upiByAccount || {}),
+                              [a.label]: parseFloat(e.target.value) || 0,
+                            },
+                          }))}
+                          placeholder="0"
+                        />
+                      </div>
+                    )) : (
+                      <div className="mixed-row"><label>UPI ₹</label><input type="number" min="0" step="0.01" value={amounts.upi || ''} onChange={(e) => setAmounts(a => ({ ...a, upi: parseFloat(e.target.value) || 0 }))} placeholder="0" /></div>
+                    )}
                   </div>
                 )}
               </div>

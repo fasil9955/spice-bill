@@ -24,6 +24,18 @@ import {
 
 const DISCOUNT_PERCENT_MAX = 30;
 
+const b2bDocTitle = (type) => {
+  if (type === 'CREDIT_NOTE') return 'CREDIT NOTE';
+  if (type === 'DEBIT_NOTE') return 'DEBIT NOTE';
+  return 'TAX INVOICE';
+};
+
+const b2bDocNoLabel = (type) => {
+  if (type === 'CREDIT_NOTE') return 'Credit Note No.';
+  if (type === 'DEBIT_NOTE') return 'Debit Note No.';
+  return 'Invoice No.';
+};
+
 const B2BBilling = () => {
   const [b2bCustomers, setB2bCustomers] = useState([]);
   const [b2bCustomerError, setB2bCustomerError] = useState(null);
@@ -79,15 +91,28 @@ const B2BBilling = () => {
   const lastInputAtRef = useRef(0);
   const navigate = useNavigate();
   const [insufficientStockContext, setInsufficientStockContext] = useState(null);
-  const { invoiceId: editInvoiceId } = useParams();
+  const { invoiceId: routeInvoiceId, kind } = useParams();
+  const noteKind = kind === 'debit' ? 'DEBIT_NOTE' : kind === 'credit' ? 'CREDIT_NOTE' : null;
+  const noteMode = !!noteKind;
+  const documentType = noteKind || 'B2B';
+  const editInvoiceId = noteMode ? undefined : routeInvoiceId;
   const editMode = !!editInvoiceId;
-  const [editLoading, setEditLoading] = useState(!!editInvoiceId);
+  const [editLoading, setEditLoading] = useState(!!routeInvoiceId && routeInvoiceId !== 'new');
   const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
+  const [originalInvoiceNumber, setOriginalInvoiceNumber] = useState('');
+  const [originalInvoiceDate, setOriginalInvoiceDate] = useState('');
+  const [noteReason, setNoteReason] = useState('');
+  const isNewNote = noteMode && (!routeInvoiceId || routeInvoiceId === 'new');
+  const linkedInvoiceId = noteMode && routeInvoiceId && routeInvoiceId !== 'new' && /^\d+$/.test(routeInvoiceId)
+    ? parseInt(routeInvoiceId, 10)
+    : undefined;
   const [printDraftLoading, setPrintDraftLoading] = useState(false);
 
   const fetchNextBillNumber = async () => {
     try {
-      const res = await invoiceService.getNextB2BInvoiceNumber();
+      const res = noteKind
+        ? await invoiceService.getNextInvoiceNumber(noteKind)
+        : await invoiceService.getNextB2BInvoiceNumber();
       setNextBillNumber((res.data?.invoiceNumber || '').toString().trim());
     } catch {
       setNextBillNumber('');
@@ -118,7 +143,7 @@ const B2BBilling = () => {
     authService.getCompanyDetails().then((res) => {
       setUpiAccounts(normalizeUpiAccounts(res?.data?.upiAccounts));
     }).catch(() => {});
-  }, [editMode]);
+  }, [editMode, noteKind]);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,17 +231,35 @@ const B2BBilling = () => {
   }, [customerSearch]);
 
   useEffect(() => {
-    if (!editMode || !editInvoiceId) return;
+    if (!editMode && !noteMode) return;
+    if (isNewNote) {
+      setEditLoading(false);
+      setNoteReason((r) => r || 'Sales Return');
+      return;
+    }
+    if (!routeInvoiceId) return;
     let cancelled = false;
     setEditLoading(true);
-    invoiceService.getById(editInvoiceId)
+    invoiceService.getById(routeInvoiceId)
       .then((res) => {
         if (cancelled) return;
         const inv = res.data;
         if (!inv) return;
-        setEditInvoiceNumber(inv.invoiceNumber || '');
+        if (noteMode) {
+          setOriginalInvoiceNumber(inv.invoiceNumber || '');
+          if (inv.createdAt) {
+            const d = new Date(inv.createdAt);
+            if (!Number.isNaN(d.getTime())) {
+              setOriginalInvoiceDate(d.toISOString().slice(0, 10));
+            }
+          }
+          setNoteReason((r) => r || (noteKind === 'DEBIT_NOTE' ? 'Sales Return' : ''));
+          setEwayBillNumber('');
+        } else {
+          setEditInvoiceNumber(inv.invoiceNumber || '');
+          setEwayBillNumber(inv.ewayBillNumber || '');
+        }
         if (inv.b2bCustomer) setSelectedCustomer(inv.b2bCustomer);
-        setEwayBillNumber(inv.ewayBillNumber || '');
         setTotalPackages(inv.totalPackages != null ? String(inv.totalPackages) : '');
         setPaymentMethod(inv.paymentMethod || 'CASH');
         setAmounts({
@@ -251,7 +294,7 @@ const B2BBilling = () => {
         if (!cancelled) setEditLoading(false);
       });
     return () => { cancelled = true; };
-  }, [editMode, editInvoiceId]);
+  }, [editMode, noteMode, routeInvoiceId]);
 
   useEffect(() => {
     searchInputRef.current?.focus();
@@ -384,7 +427,7 @@ const B2BBilling = () => {
       const existing = prev.find(item => item.productId === product.productId);
       const currentInCart = existing ? Number(existing.quantity) || 0 : 0;
       const ceiling = getStockCeilingForAdd(product, existing);
-      if (wouldExceedStock(ceiling, currentInCart, roundedQty)) {
+      if (noteKind !== 'CREDIT_NOTE' && wouldExceedStock(ceiling, currentInCart, roundedQty)) {
         insufficientRetryRef.current = { type: 'ADD_CART', qty: roundedQty };
         setInsufficientStockContext({
           product,
@@ -485,7 +528,7 @@ const B2BBilling = () => {
       if (item.productId === productId) {
         const newQty = Math.max(0.001, parseFloat((Number(item.quantity) + delta).toFixed(6)));
         const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
-        if (wouldExceedStockDirect(ceiling, newQty)) {
+        if (noteKind !== 'CREDIT_NOTE' && wouldExceedStockDirect(ceiling, newQty)) {
           insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty };
           setInsufficientStockContext({
             product: item,
@@ -507,7 +550,7 @@ const B2BBilling = () => {
       if (item.productId !== productId) return item;
       const qty = num <= 0 ? 0 : parseFloat(Number(num).toFixed(3));
       const ceiling = item.stockOnHand != null ? Number(item.stockOnHand) : null;
-      if (wouldExceedStockDirect(ceiling, qty)) {
+      if (noteKind !== 'CREDIT_NOTE' && wouldExceedStockDirect(ceiling, qty)) {
         insufficientRetryRef.current = { type: 'SET_QTY', productId, newQty: qty };
         setInsufficientStockContext({
           product: item,
@@ -692,7 +735,9 @@ const B2BBilling = () => {
         }
       };
     } catch {}
-    const html = buildInvoicePrintHtml(toPrint, { twoCopies: printGatePass });
+    const html = buildInvoicePrintHtml(toPrint, {
+      twoCopies: printGatePass && (toPrint.invoiceType || 'B2B') === 'B2B'
+    });
     if (html) printHtmlViaIframe(html);
   };
 
@@ -701,11 +746,15 @@ const B2BBilling = () => {
       alert('Please select a B2B customer.');
       return;
     }
+    if (noteMode && !originalInvoiceNumber.trim()) {
+      alert('Enter the original tax invoice number (e.g. BVT/54/25-26).');
+      return;
+    }
     if (cart.length === 0) return;
     setLoading(true);
     try {
       const [numRes, companyRes] = await Promise.all([
-        invoiceService.getNextB2BInvoiceNumber(),
+        noteKind ? invoiceService.getNextInvoiceNumber(noteKind) : invoiceService.getNextB2BInvoiceNumber(),
         authService.getCompanyDetails().catch(() => ({ data: null }))
       ]);
       const invoiceNumber = (numRes.data?.invoiceNumber || '').toString().trim();
@@ -720,7 +769,11 @@ const B2BBilling = () => {
       const draft = {
         invoiceNumber,
         createdAt: new Date().toISOString(),
-        invoiceType: 'B2B',
+        invoiceType: documentType,
+        originalInvoiceId: linkedInvoiceId,
+        originalInvoiceNumber: noteMode ? originalInvoiceNumber.trim() : undefined,
+        originalInvoiceDate: noteMode && originalInvoiceDate ? originalInvoiceDate : undefined,
+        noteReason: noteMode ? (noteReason.trim() || 'Sales Return') : undefined,
         ewayBillNumber: ewayBillNumber.trim() || null,
         paymentMethod,
         upiAccount,
@@ -772,9 +825,13 @@ const B2BBilling = () => {
       const userJson = localStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
       const invoiceData = {
-        invoiceType: 'B2B',
+        invoiceType: documentType,
         b2bCustomerId: selectedCustomer.customerId,
         invoiceNumber: previewDraft.invoiceNumber,
+        ...(linkedInvoiceId ? { originalInvoiceId: linkedInvoiceId } : {}),
+        ...(noteMode && originalInvoiceNumber.trim() ? { originalInvoiceNumber: originalInvoiceNumber.trim() } : {}),
+        ...(noteMode && originalInvoiceDate ? { originalInvoiceDate } : {}),
+        ...(noteMode ? { noteReason: noteReason.trim() || 'Sales Return' } : {}),
         ...(ewayBillNumber.trim() && { ewayBillNumber: ewayBillNumber.trim() }),
         ...((totalPackages !== '' && totalPackages != null) ? { totalPackages: parseInt(totalPackages, 10) } : {}),
         paymentMethod,
@@ -873,6 +930,7 @@ const B2BBilling = () => {
         invoiceNumber: editInvoiceNumber || '',
         createdAt: new Date().toISOString(),
         invoiceType: 'B2B',
+        originalInvoiceNumber: originalInvoiceNumber || undefined,
         ewayBillNumber: ewayBillNumber.trim() || null,
         paymentMethod,
         upiAccount,
@@ -919,12 +977,12 @@ const B2BBilling = () => {
   const cartGstB2B = calculateCartGstB2B();
   const isDraft = !!previewDraft;
 
-  if (editMode && editLoading) {
+  if ((editMode || noteMode) && editLoading) {
     return (
       <div className="billing-container">
         <div className="billing-header">
           <button className="back-button" onClick={() => navigate('/dashboard/b2b-bills')}><ArrowLeft size={18} /> Back</button>
-          <h1>🏢 B2B Billing</h1>
+          <h1>🏢 {noteMode ? b2bDocTitle(documentType) : 'B2B Billing'}</h1>
         </div>
         <p className="loading">Loading invoice...</p>
       </div>
@@ -936,14 +994,19 @@ const B2BBilling = () => {
       <div className="billing-header">
         <div className="billing-header-main">
           <div className="billing-header-actions">
-            <button className="back-button" onClick={() => navigate(editMode ? '/dashboard/b2b-bills' : '/dashboard')}>
+            <button className="back-button" onClick={() => navigate(editMode || noteMode ? '/dashboard/b2b-bills' : '/dashboard')}>
               <ArrowLeft size={18} /> Back
             </button>
-            <h1>🏢 B2B Billing</h1>
+            <h1>🏢 {noteMode ? b2bDocTitle(documentType) : 'B2B Billing'}</h1>
             {editMode ? (
               editInvoiceNumber && <span className="b2b-bill-number-badge">Editing: Inv # {editInvoiceNumber}</span>
             ) : (
-              nextBillNumber && <span className="b2b-bill-number-badge">Bill #: {nextBillNumber}</span>
+              <>
+                {noteMode && originalInvoiceNumber && (
+                  <span className="b2b-bill-number-badge">Against Inv # {originalInvoiceNumber}</span>
+                )}
+                {nextBillNumber && <span className="b2b-bill-number-badge">{noteMode ? 'Note #' : 'Bill #'}: {nextBillNumber}</span>}
+              </>
             )}
           </div>
           <div className="billing-header-actions">
@@ -960,6 +1023,38 @@ const B2BBilling = () => {
       {/* B2B Customer selection */}
       <div className="b2b-customer-section">
         <h3>B2B Customer</h3>
+        {noteMode && (
+          <div className="form-group" style={{ marginBottom: 12 }}>
+            <p style={{ margin: '0 0 8px', fontSize: 14 }}>
+              {noteKind === 'DEBIT_NOTE'
+                ? 'You are sending goods back to this party. Enter their original tax invoice. Stock will be reduced. Generate e-way bill as Outward / Sales Return on ewaybillgst.gov.in if value is above ₹50,000 (mandatory for inter-state).'
+                : 'Customer is returning goods to you. Stock will be added back. Issue this credit note against the original tax invoice.'}
+            </p>
+            <label htmlFor="orig-inv-no">Original invoice no.</label>
+            <input
+              id="orig-inv-no"
+              type="text"
+              value={originalInvoiceNumber}
+              onChange={(e) => setOriginalInvoiceNumber(e.target.value)}
+              placeholder="e.g. BVT/54/25-26"
+            />
+            <label htmlFor="orig-inv-date" style={{ marginTop: 8, display: 'block' }}>Original invoice date</label>
+            <input
+              id="orig-inv-date"
+              type="date"
+              value={originalInvoiceDate}
+              onChange={(e) => setOriginalInvoiceDate(e.target.value)}
+            />
+            <label htmlFor="note-reason" style={{ marginTop: 8, display: 'block' }}>Reason</label>
+            <input
+              id="note-reason"
+              type="text"
+              value={noteReason}
+              onChange={(e) => setNoteReason(e.target.value)}
+              placeholder="Sales Return"
+            />
+          </div>
+        )}
         {b2bCustomerError && (
           <div className="b2b-customer-error">
             <span>{b2bCustomerError}</span>
@@ -992,14 +1087,14 @@ const B2BBilling = () => {
             {selectedCustomer.shippingAddress && <p className="b2b-address"><strong>Shipping:</strong> {selectedCustomer.shippingAddress}</p>}
             <div className="b2b-selected-card-fields">
               <div className="b2b-eway-on-card">
-                <label htmlFor="b2b-eway-bill">E-way Bill No.</label>
+                <label htmlFor="b2b-eway-bill">E-way Bill No.{noteKind === 'DEBIT_NOTE' ? ' (paste after generating on GST portal)' : ''}</label>
                 <input
                   id="b2b-eway-bill"
                   type="text"
                   className="eway-bill-input"
                   value={ewayBillNumber}
                   onChange={(e) => setEwayBillNumber(e.target.value)}
-                  placeholder="Optional – e.g. EWB123456789012"
+                  placeholder={noteKind === 'DEBIT_NOTE' ? 'Generate on ewaybillgst.gov.in – Sales Return' : 'Optional – e.g. EWB123456789012'}
                 />
               </div>
               <div className="b2b-total-packages-on-card">
@@ -1291,7 +1386,7 @@ const B2BBilling = () => {
                 </>
               ) : (
                 <button className="preview-invoice-btn" onClick={handlePreview} disabled={!selectedCustomer || cart.length === 0 || loading}>
-                  {loading ? 'Loading...' : 'Preview Invoice'}
+                  {loading ? 'Loading...' : (noteKind === 'CREDIT_NOTE' ? 'Preview Credit Note' : noteKind === 'DEBIT_NOTE' ? 'Preview Debit Note' : 'Preview Invoice')}
                 </button>
               )}
             </div>
@@ -1418,6 +1513,13 @@ const B2BBilling = () => {
         const discountAmt = Number(draft.discountAmount) || 0;
         const totalAmt = Math.round((subtotal + gstTotal - discountAmt) * 100) / 100;
         const taxPct = subtotal > 0 && gstTotal > 0 ? Math.round((gstTotal * 100) / subtotal) : 0;
+        const sellerCode = (draft.cashier?.gstNumber || '').substring(0, 2);
+        const buyerCode = (cust?.stateCode || (cust?.gstNumber || '').substring(0, 2) || '').toString();
+        const useIgst = sellerCode.length === 2 && buyerCode.length >= 2 && sellerCode !== buyerCode.substring(0, 2);
+        const origDateRaw = draft.originalInvoiceDate ? String(draft.originalInvoiceDate) : '';
+        const origDateDisp = /^\d{4}-\d{2}-\d{2}/.test(origDateRaw)
+          ? origDateRaw.slice(0, 10).split('-').reverse().join('/')
+          : origDateRaw;
         const totalQty = (draft.items || []).reduce((s, it) => s + (Number(it.quantity) || 0), 0);
         const totalItemsAmt = calcItemsTotal;
         const amountWords = numberToWordsRupees(totalAmt);
@@ -1426,7 +1528,7 @@ const B2BBilling = () => {
           <div className="modal-overlay b2b-preview-overlay" onClick={() => { if (!isDraft) setShowPreview(false); }}>
             <div className="bill-preview-modal b2b-bill-preview-modal" onClick={e => e.stopPropagation()}>
               <div className="bill-preview-header b2b-preview-header">
-                <h2>B2B Tax Invoice Preview</h2>
+                <h2>{b2bDocTitle(draft.invoiceType)} Preview</h2>
                 <div className="b2b-preview-header-actions">
                   {isDraft && (
                     <>
@@ -1455,7 +1557,7 @@ const B2BBilling = () => {
                     {draft.cashier?.gstNumber && <div className="b2b-old-company-meta">GSTIN: {draft.cashier.gstNumber}</div>}
                     {companyState && <div className="b2b-old-company-meta">State: {companyState}</div>}
                   </div>
-                  <div className="b2b-old-title">TAX INVOICE</div>
+                  <div className="b2b-old-title">{b2bDocTitle(draft.invoiceType)}</div>
 
                   <div className="b2b-old-top-row">
                     <div className="b2b-old-billto-box">
@@ -1480,7 +1582,10 @@ const B2BBilling = () => {
                       )}
                     </div>
                     <div className="b2b-old-inv-box">
-                      <div>Invoice No.: {draft.invoiceNumber}</div>
+                      <div>{b2bDocNoLabel(draft.invoiceType)}: {draft.invoiceNumber}</div>
+                      {draft.originalInvoiceNumber && <div>Against Invoice: {draft.originalInvoiceNumber}</div>}
+                      {origDateDisp && <div>Original Invoice Date: {origDateDisp}</div>}
+                      {draft.noteReason && <div>Reason: {draft.noteReason}</div>}
                       <div>Date: {createdDate}</div>
                       <div>Time: {createdTime}</div>
                       {placeSupply && <div>Place of supply: {placeSupply}</div>}
@@ -1541,7 +1646,7 @@ const B2BBilling = () => {
                     <div className="b2b-old-summary-box">
                       <div className="b2b-old-summary-line"><span>Sub Total (taxable):</span><span>₹{subtotal.toFixed(2)}</span></div>
                       {gstTotal > 0 && (
-                        <div className="b2b-old-summary-line"><span>GST ({taxPct}%):</span><span>₹{gstTotal.toFixed(2)}</span></div>
+                        <div className="b2b-old-summary-line"><span>{useIgst ? `IGST (${taxPct}%)` : `GST (${taxPct}%)`}:</span><span>₹{gstTotal.toFixed(2)}</span></div>
                       )}
                       {discountAmt > 0 && (
                         <div className="b2b-old-summary-line"><span>Discount:</span><span>- ₹{discountAmt.toFixed(2)}</span></div>

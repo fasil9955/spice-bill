@@ -70,9 +70,9 @@ export const b2bCustomerService = {
 };
 
 export const invoiceService = {
-  create: (data) => api.post('/invoices', data),
+  create: (data) => api.post('/invoices', data, { timeout: 25000 }),
   update: (id, data) => api.put(`/invoices/${id}`, data),
-  getNextInvoiceNumber: (invoiceType = 'RETAIL') => api.get(`/invoices/next-invoice-number?invoiceType=${encodeURIComponent(invoiceType)}`),
+  getNextInvoiceNumber: (invoiceType = 'RETAIL') => api.get(`/invoices/next-invoice-number?invoiceType=${encodeURIComponent(invoiceType)}`, { timeout: 12000 }),
   getNextB2BInvoiceNumber: () => api.get('/invoices/b2b/next-invoice-number'),
   getAll: () => api.get('/invoices'),
   /** @param {{ activeSalesOnly?: boolean }} [options] — exclude cancelled / pending-cancellation from totals */
@@ -160,6 +160,12 @@ export const courierService = {
   create: (data) => api.post('/couriers', data),
   update: (id, data) => api.put(`/couriers/${id}`, data),
   delete: (id) => api.delete(`/couriers/${id}`),
+};
+
+export const appUpdateService = {
+  status: () => api.get('/app/update-status'),
+  download: () => api.post('/app/update-download', {}, { timeout: 600000 }),
+  restart: () => api.post('/app/update-restart'),
 };
 
 export const reportService = {

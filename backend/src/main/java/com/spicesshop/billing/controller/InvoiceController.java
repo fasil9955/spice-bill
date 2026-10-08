@@ -78,6 +78,14 @@ public class InvoiceController {
             if (payload.get("upiAccount") != null) {
                 invoice.setUpiAccount(String.valueOf(payload.get("upiAccount")));
             }
+            if (payload.get("customerName") != null) {
+                String cn = payload.get("customerName").toString().trim();
+                invoice.setCustomerName(cn.isEmpty() ? null : cn);
+            }
+            if (payload.get("customerPhone") != null) {
+                String cp = payload.get("customerPhone").toString().trim();
+                invoice.setCustomerPhone(cp.isEmpty() ? null : cp);
+            }
             if (payload.get("cashier") != null && payload.get("cashier") instanceof Map) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> cashierMap = (Map<String, Object>) payload.get("cashier");
@@ -105,8 +113,34 @@ public class InvoiceController {
                 }
             }
             // RETAIL: invoice number is generated only on save (do not use preview number from payload)
-            if ("B2B".equals(invoice.getInvoiceType()) && payload.get("invoiceNumber") != null && !payload.get("invoiceNumber").toString().trim().isEmpty()) {
+            if (Invoice.isB2bFamily(invoice.getInvoiceType()) && payload.get("invoiceNumber") != null && !payload.get("invoiceNumber").toString().trim().isEmpty()) {
                 invoice.setInvoiceNumber(payload.get("invoiceNumber").toString().trim());
+            }
+            if (payload.get("originalInvoiceId") != null) {
+                Object origId = payload.get("originalInvoiceId");
+                invoice.setOriginalInvoiceId(origId instanceof Number
+                    ? ((Number) origId).intValue()
+                    : Integer.parseInt(origId.toString()));
+            }
+            if (payload.get("originalInvoiceNumber") != null) {
+                String origNo = payload.get("originalInvoiceNumber").toString().trim();
+                invoice.setOriginalInvoiceNumber(origNo.isEmpty() ? null : origNo);
+            }
+            if (payload.get("originalInvoiceDate") != null) {
+                String origDate = payload.get("originalInvoiceDate").toString().trim();
+                if (!origDate.isEmpty()) {
+                    try {
+                        invoice.setOriginalInvoiceDate(LocalDate.parse(origDate));
+                    } catch (Exception ignored) {
+                        try {
+                            invoice.setOriginalInvoiceDate(LocalDate.parse(origDate, java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy")));
+                        } catch (Exception ignored2) {}
+                    }
+                }
+            }
+            if (payload.get("noteReason") != null) {
+                String reason = payload.get("noteReason").toString().trim();
+                invoice.setNoteReason(reason.isEmpty() ? null : reason);
             }
             if (payload.get("ewayBillNumber") != null) {
                 String eway = payload.get("ewayBillNumber").toString().trim();
@@ -117,7 +151,7 @@ public class InvoiceController {
                 invoice.setTotalPackages(tp instanceof Number ? ((Number) tp).intValue() : Integer.parseInt(tp.toString()));
             }
             Object b2bCustomerIdObj = payload.get("b2bCustomerId");
-            if (b2bCustomerIdObj != null && "B2B".equals(invoice.getInvoiceType())) {
+            if (b2bCustomerIdObj != null && Invoice.isB2bFamily(invoice.getInvoiceType())) {
                 Integer b2bCustomerId = b2bCustomerIdObj instanceof Number
                     ? ((Number) b2bCustomerIdObj).intValue()
                     : Integer.parseInt(b2bCustomerIdObj.toString());

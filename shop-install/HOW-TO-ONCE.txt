@@ -1,0 +1,15 @@
+One-time setup at each shop (host PC only). After this, updates download when internet is on.
+
+1. Stop billing (close the Java window).
+2. Copy this start-billing.bat into C:\SpicesBilling (same folder as the JAR, logs, application.properties).
+   Replace the old .bat that ran spices-billing-system-1.0.0.jar.
+3. First run of the new .bat copies spices-billing-system-1.0.0.jar to spices-billing.jar if needed.
+   You can also rename it yourself: spices-billing-system-1.0.0.jar -> spices-billing.jar
+4. When you have a new build, put spices-billing.jar in this folder (keep that exact name).
+5. Keep application.properties, logs, and uploads in this folder. Do not delete them.
+6. Shortcut / Windows startup must run start-billing.bat (not the old jar name).
+7. If GitHub repo is PRIVATE, add this line to application.properties in THIS folder:
+   app.update.github-token=YOUR_GITHUB_TOKEN
+
+Next releases: raise version in pom + application.properties + update-manifest.json,
+upload spices-billing.jar to GitHub Release vX.Y.Z, shops will download and ask to restart.

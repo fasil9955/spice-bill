@@ -39,13 +39,13 @@ public class GSTR1ExportService {
 
         List<Invoice> allInvoices = invoiceService.getMonthlyInvoices(companyName, year, month);
         List<Invoice> b2bActive = allInvoices.stream()
-            .filter(i -> "B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .filter(i -> includeInGstr1B2b(i) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
             .toList();
         List<Invoice> b2bCancelled = allInvoices.stream()
-            .filter(i -> "B2B".equals(i.getInvoiceType()) && (i.getStatus() == Invoice.InvoiceStatus.CANCELLED || i.getStatus() == Invoice.InvoiceStatus.CANCELLATION_REQUESTED))
+            .filter(i -> includeInGstr1B2b(i) && (i.getStatus() == Invoice.InvoiceStatus.CANCELLED || i.getStatus() == Invoice.InvoiceStatus.CANCELLATION_REQUESTED))
             .toList();
         List<Invoice> b2cInvoices = allInvoices.stream()
-            .filter(i -> !"B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .filter(i -> !Invoice.isB2bFamily(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
             .toList();
 
         // B2B rows: active (invoice-wise by GST rate) + cancelled (invoice number + blank fields + remarks "Cancelled")
@@ -84,13 +84,13 @@ public class GSTR1ExportService {
 
         List<Invoice> allInvoices = invoiceService.getMonthlyInvoices(companyName, year, month);
         List<Invoice> b2bActive = allInvoices.stream()
-            .filter(i -> "B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .filter(i -> includeInGstr1B2b(i) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
             .toList();
         List<Invoice> b2bCancelled = allInvoices.stream()
-            .filter(i -> "B2B".equals(i.getInvoiceType()) && (i.getStatus() == Invoice.InvoiceStatus.CANCELLED || i.getStatus() == Invoice.InvoiceStatus.CANCELLATION_REQUESTED))
+            .filter(i -> includeInGstr1B2b(i) && (i.getStatus() == Invoice.InvoiceStatus.CANCELLED || i.getStatus() == Invoice.InvoiceStatus.CANCELLATION_REQUESTED))
             .toList();
         List<Invoice> b2cInvoices = allInvoices.stream()
-            .filter(i -> !"B2B".equals(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .filter(i -> !Invoice.isB2bFamily(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
             .toList();
 
         List<B2BRow> b2bRows = buildB2BRows(b2bActive, sellerStateCode);
@@ -138,10 +138,45 @@ public class GSTR1ExportService {
         return total.subtract(cgst).subtract(sgst).setScale(2, RoundingMode.HALF_UP);
     }
 
+    /** Seller tax invoices / credit notes / debit notes against our own B2B bills. Goods-return debit notes to a party (typed supplier invoice) are not GSTR-1 sales. */
+    private static boolean includeInGstr1B2b(Invoice i) {
+        if (!Invoice.isB2bFamily(i.getInvoiceType())) {
+            return false;
+        }
+        return !("DEBIT_NOTE".equals(i.getInvoiceType()) && i.getOriginalInvoiceId() == null);
+    }
+
     private static BigDecimal itemTax(InvoiceItem item) {
         BigDecimal cgst = item.getCgstAmount() != null ? item.getCgstAmount() : BigDecimal.ZERO;
         BigDecimal sgst = item.getSgstAmount() != null ? item.getSgstAmount() : BigDecimal.ZERO;
         return cgst.add(sgst).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String appendNoteRemarks(Invoice inv, String remarks) {
+        String against = inv.getOriginalInvoiceNumber() != null ? inv.getOriginalInvoiceNumber() : "";
+        String extra = "";
+        if ("CREDIT_NOTE".equals(inv.getInvoiceType())) {
+            extra = "Credit Note against " + against;
+        } else if ("DEBIT_NOTE".equals(inv.getInvoiceType())) {
+            extra = "Debit Note against " + against;
+        }
+        if (extra.isEmpty()) {
+            return remarks;
+        }
+        if (remarks == null || remarks.isEmpty()) {
+            return extra;
+        }
+        return remarks + "; " + extra;
+    }
+
+    private static BigDecimal signedForNote(Invoice inv, BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        if ("CREDIT_NOTE".equals(inv.getInvoiceType())) {
+            return value.negate();
+        }
+        return value;
     }
 
     private List<B2BRow> buildB2BRows(List<Invoice> b2bInvoices, String sellerStateCode) {
@@ -173,6 +208,7 @@ public class GSTR1ExportService {
             } else {
                 remarks = "Buyer details missing";
             }
+            remarks = appendNoteRemarks(inv, remarks);
 
             String invoiceNo = inv.getInvoiceNumber() != null ? inv.getInvoiceNumber() : "";
             String invoiceDate = inv.getCreatedAt() != null
@@ -207,6 +243,11 @@ public class GSTR1ExportService {
                 }
 
                 BigDecimal invoiceTotal = taxableValue.add(totalTax).setScale(2, RoundingMode.HALF_UP);
+                taxableValue = signedForNote(inv, taxableValue);
+                cgstAmount = signedForNote(inv, cgstAmount);
+                sgstAmount = signedForNote(inv, sgstAmount);
+                igstAmount = signedForNote(inv, igstAmount);
+                invoiceTotal = signedForNote(inv, invoiceTotal);
                 String rowKey = invoiceNo + "|" + gstRate;
                 if (seenInvoiceNos.contains(rowKey)) continue; // invoice number + rate uniqueness
                 seenInvoiceNos.add(rowKey);
@@ -230,6 +271,11 @@ public class GSTR1ExportService {
                 BigDecimal sgst0 = sameState ? totalTaxAll.subtract(cgst0) : BigDecimal.ZERO;
                 BigDecimal igst0 = sameState ? BigDecimal.ZERO : totalTaxAll;
                 BigDecimal total0 = taxableAll.add(totalTaxAll).setScale(2, RoundingMode.HALF_UP);
+                taxableAll = signedForNote(inv, taxableAll);
+                cgst0 = signedForNote(inv, cgst0);
+                sgst0 = signedForNote(inv, sgst0);
+                igst0 = signedForNote(inv, igst0);
+                total0 = signedForNote(inv, total0);
                 rows.add(remarks.isEmpty()
                     ? new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, 0, taxableAll, cgst0, sgst0, igst0, total0, sameState)
                     : new B2BRow(buyerGstin, buyerStateCode, invoiceNo, invoiceDate, 0, taxableAll, cgst0, sgst0, igst0, total0, sameState, remarks));

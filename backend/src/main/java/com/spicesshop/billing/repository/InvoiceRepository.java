@@ -19,6 +19,11 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
     
     @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND DATE(i.createdAt) = :date")
     List<Invoice> findByCompanyNameAndDate(@Param("companyName") String companyName, @Param("date") LocalDate date);
+
+    @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND DATE(i.createdAt) = :date "
+        + "AND i.invoiceType = 'RETAIL' AND i.status = com.spicesshop.billing.model.Invoice$InvoiceStatus.ACTIVE "
+        + "AND i.customerPhone IS NOT NULL AND i.customerPhone <> ''")
+    List<Invoice> findRetailWithCustomerPhoneByCompanyAndDate(@Param("companyName") String companyName, @Param("date") LocalDate date);
     
     @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.createdAt BETWEEN :startDate AND :endDate")
     List<Invoice> findByCompanyNameAndDateRange(@Param("companyName") String companyName, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
@@ -29,10 +34,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
     @Query("SELECT MAX(i.invoiceNumber) FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.invoiceType <> 'B2B' AND i.invoiceNumber LIKE :prefix")
     String findMaxInvoiceNumberByPrefix(@Param("companyName") String companyName, @Param("prefix") String prefix);
     
-    @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.invoiceType = 'B2B' AND i.createdAt BETWEEN :startDate AND :endDate")
+    @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.invoiceType IN ('B2B', 'CREDIT_NOTE', 'DEBIT_NOTE') AND i.createdAt BETWEEN :startDate AND :endDate")
     List<Invoice> findB2BInvoicesByCompanyAndDateRange(@Param("companyName") String companyName, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
     
-    @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.invoiceType = 'B2B'")
+    @Query("SELECT i FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.invoiceType IN ('B2B', 'CREDIT_NOTE', 'DEBIT_NOTE')")
     List<Invoice> findB2BInvoicesByCompany(@Param("companyName") String companyName);
     
     @Query("SELECT i.invoiceNumber FROM Invoice i WHERE i.cashier.companyName = :companyName AND i.invoiceType = 'B2B' ORDER BY i.invoiceId DESC LIMIT 1")

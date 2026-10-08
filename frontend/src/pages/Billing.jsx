@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { productService, invoiceService, authService } from '../services/api';
 import { formatPrintMultiline, companyPrintContact } from '../utils/invoicePrint';
 import { broadcastDataUpdate } from '../utils/dataSync';
-import { encodeUpiAccountField, formatInvoicePayment, normalizeUpiAccounts } from '../utils/upiAccounts';
+import { buildPaymentChoices, encodeUpiAccountField, formatInvoicePayment, normalizeUpiAccounts } from '../utils/upiAccounts';
 import './Billing.css';
 import { 
   Search, 
@@ -47,6 +47,7 @@ const createEmptySession = (index = 1) => ({
   id: newCartId(),
   label: `Cart ${index}`,
   customerName: '',
+  customerPhone: '',
   cart: [],
   paymentMethod: 'CASH',
   upiAccount: '',
@@ -69,6 +70,7 @@ const loadBillingSessions = () => {
           upiAccount: s.upiAccount || '',
           cart: Array.isArray(s.cart) ? s.cart : [],
           customerName: s.customerName || '',
+          customerPhone: s.customerPhone || '',
         }));
         const activeId = sessions.some((s) => s.id === parsed.activeId)
           ? parsed.activeId
@@ -104,6 +106,11 @@ const Billing = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [mixedParts, setMixedParts] = useState({ cash: false, card: false, upi: false, upiLabels: {} });
   const [companyUpiAccounts, setCompanyUpiAccounts] = useState([]);
+  const companyDetailsRef = useRef({});
+  const paymentModalOpenedAtRef = useRef(0);
+  const paymentNavIndexRef = useRef(0);
+  const paymentNavApiRef = useRef({ ids: [], applyMethod: () => {}, confirm: () => {}, toggleAdd: () => {} });
+  const [paymentNavIndex, setPaymentNavIndex] = useState(0);
   const [previewDraft, setPreviewDraft] = useState(null); // draft with invoice number before save
   const [lastInvoice, setLastInvoice] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -137,6 +144,7 @@ const Billing = () => {
   const upiAccount = activeSession.upiAccount || '';
   const amounts = activeSession.amounts || { cash: 0, card: 0, upi: 0, upiByAccount: {} };
   const namedUpiAccounts = normalizeUpiAccounts(companyUpiAccounts);
+  const paymentChoices = buildPaymentChoices(namedUpiAccounts);
   const discountType = activeSession.discountType || 'percent';
   const discountPercent = activeSession.discountPercent || 0;
   const discountAmount = activeSession.discountAmount || 0;
@@ -158,6 +166,14 @@ const Billing = () => {
   };
 
   const setPaymentMethod = (value) => patchActive({ paymentMethod: value });
+  const applyPaymentChoice = (opt) => {
+    if (!opt) return;
+    if (opt.upiLabel) {
+      patchActive({ paymentMethod: 'UPI', upiAccount: opt.upiLabel });
+    } else {
+      patchActive({ paymentMethod: opt.value, upiAccount: '' });
+    }
+  };
   const setAmounts = (updater) => {
     patchActive((s) => ({
       amounts: typeof updater === 'function' ? updater(s.amounts || { cash: 0, card: 0, upi: 0, upiByAccount: {} }) : updater,
@@ -251,7 +267,9 @@ const Billing = () => {
       }
     })();
     authService.getCompanyDetails().then((res) => {
-      if (!cancelled) setCompanyUpiAccounts(normalizeUpiAccounts(res?.data?.upiAccounts));
+      if (cancelled) return;
+      companyDetailsRef.current = res?.data || {};
+      setCompanyUpiAccounts(normalizeUpiAccounts(res?.data?.upiAccounts));
     }).catch(() => {});
     return () => {
       cancelled = true;
@@ -338,6 +356,9 @@ const Billing = () => {
         if (showPaymentModal) {
           confirmPaymentAndPreviewRef.current?.();
         } else {
+          paymentModalOpenedAtRef.current = Date.now();
+          paymentNavIndexRef.current = 0;
+          setPaymentNavIndex(0);
           setShowPaymentModal(true);
         }
       }
@@ -346,16 +367,69 @@ const Billing = () => {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [cart.length, loading, showPreview, showPaymentModal]);
 
-  // When payment popup is open: Enter continues
+  // When payment popup is open: arrows move, Enter goes to next / Continue
   useEffect(() => {
     if (!showPaymentModal) return;
     const onKeyDown = (e) => {
-      if (e.key === 'Enter' && !e.ctrlKey && !loading) {
-        e.preventDefault();
-        confirmPaymentAndPreviewRef.current?.();
-      }
       if (e.key === 'Escape') {
         setShowPaymentModal(false);
+        return;
+      }
+      if (loading) return;
+      const api = paymentNavApiRef.current;
+      const ids = api.ids || [];
+      if (ids.length === 0) return;
+      const inField = e.target instanceof HTMLElement && e.target.closest('input, textarea');
+      const move = (delta) => {
+        e.preventDefault();
+        const next = (paymentNavIndexRef.current + delta + ids.length) % ids.length;
+        paymentNavIndexRef.current = next;
+        setPaymentNavIndex(next);
+        const id = ids[next];
+        if (id.startsWith('method-')) {
+          api.applyMethod(Number(id.slice('method-'.length)));
+        }
+        const el = document.querySelector(`[data-pay-nav="${CSS.escape(id)}"]`);
+        if (el && typeof el.focus === 'function') el.focus();
+      };
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        if (inField && e.key === 'ArrowRight') return;
+        move(1);
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (inField && e.key === 'ArrowLeft') return;
+        move(-1);
+        return;
+      }
+      if (e.key === 'Enter' && !e.ctrlKey) {
+        if (Date.now() - paymentModalOpenedAtRef.current < 600) return;
+        e.preventDefault();
+        const id = ids[paymentNavIndexRef.current] || ids[0];
+        if (id.startsWith('method-')) {
+          const methodIndex = Number(id.slice('method-'.length));
+          api.applyMethod(methodIndex);
+          const choice = api.choices?.[methodIndex];
+          if (choice?.value === 'MIXED') {
+            move(1);
+            return;
+          }
+          api.confirm();
+          return;
+        }
+        if (id.startsWith('mixed-add-')) {
+          api.toggleAdd(id);
+          move(1);
+          return;
+        }
+        if (id.startsWith('mixed-input-') || id === 'continue') {
+          const atLast = paymentNavIndexRef.current >= ids.length - 1;
+          if (atLast || id === 'continue') {
+            api.confirm();
+          } else {
+            move(1);
+          }
+        }
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -1084,6 +1158,9 @@ const Billing = () => {
     setMixedParts({ cash: false, card: false, upi: false, upiLabels: {} });
     setAmounts({ cash: 0, card: 0, upi: 0, upiByAccount: {} });
     patchActive({ upiAccount: '' });
+    paymentModalOpenedAtRef.current = Date.now();
+    paymentNavIndexRef.current = 0;
+    setPaymentNavIndex(0);
     setShowPaymentModal(true);
   };
 
@@ -1132,18 +1209,50 @@ const Billing = () => {
     handlePreview();
   };
 
+  const paymentNavIds = (() => {
+    const ids = paymentChoices.map((_, i) => `method-${i}`);
+    if (paymentMethod === 'MIXED') {
+      ids.push('mixed-add-cash', 'mixed-add-card');
+      if (namedUpiAccounts.length) {
+        namedUpiAccounts.forEach((a) => ids.push(`mixed-add-upi-${a.label}`));
+      } else {
+        ids.push('mixed-add-upi');
+      }
+      if (mixedParts.cash) ids.push('mixed-input-cash');
+      if (mixedParts.card) ids.push('mixed-input-card');
+      if (namedUpiAccounts.length) {
+        namedUpiAccounts.forEach((a) => {
+          if (mixedParts.upiLabels?.[a.label]) ids.push(`mixed-input-upi-${a.label}`);
+        });
+      } else if (mixedParts.upi) {
+        ids.push('mixed-input-upi');
+      }
+    }
+    ids.push('continue');
+    return ids;
+  })();
+  paymentNavApiRef.current = {
+    ids: paymentNavIds,
+    choices: paymentChoices,
+    applyMethod: (i) => applyPaymentChoice(paymentChoices[i]),
+    confirm: () => confirmPaymentAndPreviewRef.current?.(),
+    toggleAdd: (id) => {
+      if (id === 'mixed-add-cash') toggleMixedPart('cash');
+      else if (id === 'mixed-add-card') toggleMixedPart('card');
+      else if (id === 'mixed-add-upi') toggleMixedPart('upi');
+      else if (id.startsWith('mixed-add-upi-')) toggleMixedUpiLabel(id.slice('mixed-add-upi-'.length));
+    },
+  };
+
   const handlePreview = async () => {
     if (cart.length === 0) return;
     setLoading(true);
     try {
-      const [numRes, companyRes] = await Promise.all([
-        invoiceService.getNextInvoiceNumber('RETAIL'),
-        authService.getCompanyDetails().catch(() => ({ data: null }))
-      ]);
+      const numRes = await invoiceService.getNextInvoiceNumber('RETAIL');
       const invoiceNumber = numRes.data?.invoiceNumber || '';
       const userJson = localStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
-      const company = companyRes?.data || {};
+      const company = companyDetailsRef.current || {};
       const itemsTotal = calculateSubtotal();
       const { cgst, sgst } = calculateCartGst();
       const discountVal = getDiscountValue();
@@ -1154,6 +1263,8 @@ const Billing = () => {
         invoiceNumber,
         createdAt: new Date().toISOString(),
         invoiceType: 'RETAIL',
+        customerName: (activeSession.customerName || '').trim() || undefined,
+        customerPhone: (activeSession.customerPhone || '').trim() || undefined,
         paymentMethod: paymentMethod,
         upiAccount: paymentMethod === 'UPI'
           ? (upiAccount || 'UPI')
@@ -1184,7 +1295,11 @@ const Billing = () => {
       setPreviewDraft(draft);
       setShowPreview(true);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to get invoice number');
+      alert(
+        err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+          ? 'The other computer may be saving a bill, or the network is slow. Wait a moment and click Create Invoice again.'
+          : (err.response?.data?.message || err.response?.data?.error || 'Failed to get invoice number')
+      );
     } finally {
       setLoading(false);
     }
@@ -1201,6 +1316,8 @@ const Billing = () => {
       const invoiceData = {
         invoiceType: 'RETAIL',
         invoiceNumber: previewDraft.invoiceNumber,
+        customerName: (activeSession.customerName || '').trim() || undefined,
+        customerPhone: (activeSession.customerPhone || '').trim() || undefined,
         paymentMethod: paymentMethod,
         upiAccount: paymentMethod === 'UPI'
           ? (upiAccount || 'UPI')
@@ -1230,6 +1347,7 @@ const Billing = () => {
         discountPercent: 0,
         discountAmount: 0,
         customerName: '',
+        customerPhone: '',
       });
       setPreviewDraft(null);
       if (andPrint) {
@@ -1240,7 +1358,11 @@ const Billing = () => {
         setShowPreview(true);
       }
     } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.message || 'Failed to save invoice');
+      alert(
+        err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+          ? 'Could not save because the shop computer is busy or the network is slow. Try again in a few seconds.'
+          : (err.response?.data?.error || err.response?.data?.message || 'Failed to save invoice')
+      );
     } finally {
       setLoading(false);
     }
@@ -1388,14 +1510,24 @@ const Billing = () => {
             </button>
           </div>
           <div className="billing-cart-customer">
-            <label htmlFor="billing-cart-customer-name">Customer (optional)</label>
+            <label htmlFor="billing-cart-customer-name">Customer</label>
             <input
               id="billing-cart-customer-name"
               type="text"
               value={activeSession.customerName || ''}
               onChange={(e) => patchActive({ customerName: e.target.value })}
               onBlur={() => setTimeout(returnFocusToSearch, 0)}
-              placeholder="Name for this held cart"
+              placeholder="Name (optional)"
+            />
+            <label htmlFor="billing-cart-customer-phone">Mobile</label>
+            <input
+              id="billing-cart-customer-phone"
+              type="tel"
+              inputMode="numeric"
+              value={activeSession.customerPhone || ''}
+              onChange={(e) => patchActive({ customerPhone: e.target.value.replace(/[^\d+\s-]/g, '') })}
+              onBlur={() => setTimeout(returnFocusToSearch, 0)}
+              placeholder="Customer number"
             />
           </div>
           <div className="billing-search-bar cart-search-bar">
@@ -1616,10 +1748,10 @@ const Billing = () => {
 
             <button
               className="submit-btn checkout-btn"
-              disabled={cart.length === 0 || loading}
+              disabled={cart.length === 0}
               onClick={openPaymentModal}
             >
-              {loading ? 'Loading...' : 'Create Invoice'}
+              Create Invoice
             </button>
           </div>
         </div>
@@ -1634,29 +1766,23 @@ const Billing = () => {
         <div className="payment-method-modal" onClick={(e) => e.stopPropagation()}>
           <h2>Select payment method</h2>
           <p className="payment-method-total">Total: ₹{calculateTotal().toFixed(2)}</p>
+          <p className="payment-method-hint">Arrow keys to move · Enter next · Esc cancel</p>
           <div className="payment-method-choices">
-            {[
-              { value: 'CASH', label: 'Cash' },
-              { value: 'CARD', label: 'Card' },
-              ...(namedUpiAccounts.length
-                ? namedUpiAccounts.map((a) => ({ value: `UPI:${a.label}`, label: a.label, upiLabel: a.label }))
-                : [{ value: 'UPI', label: 'UPI' }]),
-              { value: 'MIXED', label: 'Mixed' },
-            ].map((opt) => {
+            {paymentChoices.map((opt, idx) => {
               const active = opt.upiLabel
                 ? paymentMethod === 'UPI' && upiAccount === opt.upiLabel
                 : paymentMethod === opt.value;
+              const navId = `method-${idx}`;
               return (
               <button
-                key={opt.value}
+                key={opt.upiLabel ? `UPI:${opt.upiLabel}` : opt.value}
                 type="button"
-                className={`payment-method-choice ${active ? 'active' : ''}`}
+                data-pay-nav={navId}
+                className={`payment-method-choice ${active ? 'active' : ''} ${paymentNavIds[paymentNavIndex] === navId ? 'pay-nav-focus' : ''}`}
                 onClick={() => {
-                  if (opt.upiLabel) {
-                    patchActive({ paymentMethod: 'UPI', upiAccount: opt.upiLabel });
-                  } else {
-                    patchActive({ paymentMethod: opt.value, upiAccount: '' });
-                  }
+                  paymentNavIndexRef.current = idx;
+                  setPaymentNavIndex(idx);
+                  applyPaymentChoice(opt);
                 }}
               >
                 {opt.label}
@@ -1670,14 +1796,16 @@ const Billing = () => {
               <div className="payment-mixed-add">
                 <button
                   type="button"
-                  className={`payment-mixed-add-btn ${mixedParts.cash ? 'on' : ''}`}
+                  data-pay-nav="mixed-add-cash"
+                  className={`payment-mixed-add-btn ${mixedParts.cash ? 'on' : ''} ${paymentNavIds[paymentNavIndex] === 'mixed-add-cash' ? 'pay-nav-focus' : ''}`}
                   onClick={() => toggleMixedPart('cash')}
                 >
                   {mixedParts.cash ? 'Cash added' : '+ Cash'}
                 </button>
                 <button
                   type="button"
-                  className={`payment-mixed-add-btn ${mixedParts.card ? 'on' : ''}`}
+                  data-pay-nav="mixed-add-card"
+                  className={`payment-mixed-add-btn ${mixedParts.card ? 'on' : ''} ${paymentNavIds[paymentNavIndex] === 'mixed-add-card' ? 'pay-nav-focus' : ''}`}
                   onClick={() => toggleMixedPart('card')}
                 >
                   {mixedParts.card ? 'Card added' : '+ Card'}
@@ -1686,7 +1814,8 @@ const Billing = () => {
                   <button
                     key={a.label}
                     type="button"
-                    className={`payment-mixed-add-btn ${mixedParts.upiLabels?.[a.label] ? 'on' : ''}`}
+                    data-pay-nav={`mixed-add-upi-${a.label}`}
+                    className={`payment-mixed-add-btn ${mixedParts.upiLabels?.[a.label] ? 'on' : ''} ${paymentNavIds[paymentNavIndex] === `mixed-add-upi-${a.label}` ? 'pay-nav-focus' : ''}`}
                     onClick={() => toggleMixedUpiLabel(a.label)}
                   >
                     {mixedParts.upiLabels?.[a.label] ? `${a.label} added` : `+ ${a.label}`}
@@ -1694,7 +1823,8 @@ const Billing = () => {
                 )) : (
                   <button
                     type="button"
-                    className={`payment-mixed-add-btn ${mixedParts.upi ? 'on' : ''}`}
+                    data-pay-nav="mixed-add-upi"
+                    className={`payment-mixed-add-btn ${mixedParts.upi ? 'on' : ''} ${paymentNavIds[paymentNavIndex] === 'mixed-add-upi' ? 'pay-nav-focus' : ''}`}
                     onClick={() => toggleMixedPart('upi')}
                   >
                     {mixedParts.upi ? 'UPI added' : '+ UPI'}
@@ -1708,6 +1838,8 @@ const Billing = () => {
                     type="number"
                     min="0"
                     step="0.01"
+                    data-pay-nav="mixed-input-cash"
+                    className={paymentNavIds[paymentNavIndex] === 'mixed-input-cash' ? 'pay-nav-focus' : ''}
                     value={amounts.cash || ''}
                     onChange={(e) => setAmounts((a) => ({ ...a, cash: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
                     placeholder="0"
@@ -1721,6 +1853,8 @@ const Billing = () => {
                     type="number"
                     min="0"
                     step="0.01"
+                    data-pay-nav="mixed-input-card"
+                    className={paymentNavIds[paymentNavIndex] === 'mixed-input-card' ? 'pay-nav-focus' : ''}
                     value={amounts.card || ''}
                     onChange={(e) => setAmounts((a) => ({ ...a, card: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
                     placeholder="0"
@@ -1735,6 +1869,8 @@ const Billing = () => {
                       type="number"
                       min="0"
                       step="0.01"
+                      data-pay-nav={`mixed-input-upi-${a.label}`}
+                      className={paymentNavIds[paymentNavIndex] === `mixed-input-upi-${a.label}` ? 'pay-nav-focus' : ''}
                       value={amounts.upiByAccount?.[a.label] || ''}
                       onChange={(e) => setAmounts((prev) => ({
                         ...prev,
@@ -1754,6 +1890,8 @@ const Billing = () => {
                     type="number"
                     min="0"
                     step="0.01"
+                    data-pay-nav="mixed-input-upi"
+                    className={paymentNavIds[paymentNavIndex] === 'mixed-input-upi' ? 'pay-nav-focus' : ''}
                     value={amounts.upi || ''}
                     onChange={(e) => setAmounts((a) => ({ ...a, upi: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 }))}
                     placeholder="0"
@@ -1777,7 +1915,13 @@ const Billing = () => {
             </div>
           )}
           <div className="payment-method-actions">
-            <button type="button" className="print-btn" onClick={confirmPaymentAndPreview} disabled={loading}>
+            <button
+              type="button"
+              data-pay-nav="continue"
+              className={`print-btn ${paymentNavIds[paymentNavIndex] === 'continue' ? 'pay-nav-focus' : ''}`}
+              onClick={confirmPaymentAndPreview}
+              disabled={loading}
+            >
               Continue
             </button>
             <button type="button" className="btoc-btn-close" onClick={() => setShowPaymentModal(false)}>

@@ -77,8 +77,20 @@ public class Invoice {
     @Column(name = "cancellation_reason")
     private String cancellationReason;
 
-    @Column(name = "invoice_type", length = 10)
+    @Column(name = "invoice_type", length = 20)
     private String invoiceType;
+
+    @Column(name = "original_invoice_id")
+    private Integer originalInvoiceId;
+
+    @Column(name = "original_invoice_number", length = 50)
+    private String originalInvoiceNumber;
+
+    @Column(name = "original_invoice_date")
+    private java.time.LocalDate originalInvoiceDate;
+
+    @Column(name = "note_reason", length = 500)
+    private String noteReason;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "b2b_customer_id")
@@ -91,12 +103,22 @@ public class Invoice {
     @Column(name = "total_packages")
     private Integer totalPackages;
 
+    @Column(name = "customer_name", length = 120)
+    private String customerName;
+
+    @Column(name = "customer_phone", length = 20)
+    private String customerPhone;
+
     public enum InvoiceStatus {
         ACTIVE, CANCELLATION_REQUESTED, CANCELLED;
     }
 
     public enum PaymentMethod {
         CASH, CARD, UPI, MIXED;
+    }
+
+    public static boolean isB2bFamily(String type) {
+        return "B2B".equals(type) || "CREDIT_NOTE".equals(type) || "DEBIT_NOTE".equals(type);
     }
 
     public Invoice() {
@@ -222,12 +244,36 @@ public class Invoice {
         this.invoiceType = invoiceType;
     }
 
+    public void setOriginalInvoiceId(Integer originalInvoiceId) {
+        this.originalInvoiceId = originalInvoiceId;
+    }
+
+    public void setOriginalInvoiceNumber(String originalInvoiceNumber) {
+        this.originalInvoiceNumber = originalInvoiceNumber;
+    }
+
+    public void setOriginalInvoiceDate(java.time.LocalDate originalInvoiceDate) {
+        this.originalInvoiceDate = originalInvoiceDate;
+    }
+
+    public void setNoteReason(String noteReason) {
+        this.noteReason = noteReason;
+    }
+
     public void setB2bCustomer(B2BCustomer b2bCustomer) {
         this.b2bCustomer = b2bCustomer;
     }
 
     public void setEwayBillNumber(String ewayBillNumber) {
         this.ewayBillNumber = ewayBillNumber;
+    }
+
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
+    }
+
+    public void setCustomerPhone(String customerPhone) {
+        this.customerPhone = customerPhone;
     }
 
     public void setTotalPackages(Integer totalPackages) {
@@ -276,6 +322,22 @@ public class Invoice {
 
     public String getInvoiceType() {
         return this.invoiceType;
+    }
+
+    public Integer getOriginalInvoiceId() {
+        return this.originalInvoiceId;
+    }
+
+    public String getOriginalInvoiceNumber() {
+        return this.originalInvoiceNumber;
+    }
+
+    public java.time.LocalDate getOriginalInvoiceDate() {
+        return this.originalInvoiceDate;
+    }
+
+    public String getNoteReason() {
+        return this.noteReason;
     }
 
     public BigDecimal getCardAmount() {
@@ -328,6 +390,14 @@ public class Invoice {
 
     public Integer getTotalPackages() {
         return this.totalPackages;
+    }
+
+    public String getCustomerName() {
+        return this.customerName;
+    }
+
+    public String getCustomerPhone() {
+        return this.customerPhone;
     }
 
     @PrePersist

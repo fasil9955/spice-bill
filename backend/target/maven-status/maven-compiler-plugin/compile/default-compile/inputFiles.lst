@@ -87,11 +87,15 @@ D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\config\WebConfig.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\repository\ExpenseCategoryRepository.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\controller\AuthController.java
+D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\dto\UpdateManifest.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\SpicesBillingApplication.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\repository\ExpenseRepository.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\security\CustomUserDetailsService.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\AttendanceService.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\repository\AttendanceRepository.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\User.java
+D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\AppUpdateService.java
+D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\controller\AppUpdateController.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\Employee.java
 D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\model\ExpenseRecord.java
+D:\billing shop\spice-bill\backend\src\main\java\com\spicesshop\billing\service\DailyCustomerNumbersMailService.java

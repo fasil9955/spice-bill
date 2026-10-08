@@ -58,12 +58,18 @@ public class InvoiceService {
         if ("B2B".equals(invoiceType)) {
             return generateNextB2BInvoiceNumber(companyName);
         }
+        if ("CREDIT_NOTE".equals(invoiceType) || "DEBIT_NOTE".equals(invoiceType)) {
+            return peekNoteNumber(companyName, invoiceType);
+        }
         LocalDate today = LocalDate.now();
         LocalDate fyStart = GstInvoiceNumbers.financialYearStart(today);
+        // Preview must not scan invoices: that query waits when the other PC is saving a bill.
         int seqNum = this.invoiceSequenceRepository.findByCompanyNameAndSequenceDate(companyName, fyStart)
             .map(InvoiceSequence::getNextSequence)
             .orElse(1);
-        seqNum = Math.max(seqNum, nextRetailSequenceFromExisting(companyName, fyStart));
+        if (seqNum < 1) {
+            seqNum = 1;
+        }
         return GstInvoiceNumbers.formatRetail(today, seqNum);
     }
 
@@ -72,6 +78,9 @@ public class InvoiceService {
     public String generateInvoiceNumber(String companyName, String invoiceType) {
         if ("B2B".equals(invoiceType)) {
             return generateNextB2BInvoiceNumber(companyName);
+        }
+        if ("CREDIT_NOTE".equals(invoiceType) || "DEBIT_NOTE".equals(invoiceType)) {
+            return peekNoteNumber(companyName, invoiceType);
         }
 
         LocalDate today = LocalDate.now();
@@ -92,6 +101,18 @@ public class InvoiceService {
         String maxNumber = this.invoiceRepository.findMaxInvoiceNumberByPrefix(
             companyName, GstInvoiceNumbers.likePrefix(fyStart));
         return GstInvoiceNumbers.parseSequence(maxNumber) + 1;
+    }
+
+    private String peekNoteNumber(String companyName, String invoiceType) {
+        LocalDate today = LocalDate.now();
+        String series = "CREDIT_NOTE".equals(invoiceType) ? "CN" : "DN";
+        String maxNumber = this.invoiceRepository.findMaxInvoiceNumberByPrefix(
+            companyName, GstInvoiceNumbers.likePrefixNote(series, today));
+        int seq = GstInvoiceNumbers.parseSequence(maxNumber) + 1;
+        if (seq < 1) {
+            seq = 1;
+        }
+        return GstInvoiceNumbers.formatNote(series, today, seq);
     }
 
     public String generateNextB2BInvoiceNumber(String companyName) {
@@ -160,6 +181,42 @@ public class InvoiceService {
 
         String companyName = cashier.getCompanyName();
         String type = invoice.getInvoiceType() != null ? invoice.getInvoiceType() : "RETAIL";
+        invoice.setInvoiceType(type);
+
+        if ("CREDIT_NOTE".equals(type) || "DEBIT_NOTE".equals(type)) {
+            if (invoice.getOriginalInvoiceId() != null) {
+                Invoice original = this.invoiceRepository.findById(invoice.getOriginalInvoiceId())
+                    .orElseThrow(() -> new RuntimeException("Original invoice not found"));
+                String originalCompany = original.getCashier() != null ? original.getCashier().getCompanyName() : null;
+                if (!companyName.equals(originalCompany)) {
+                    throw new RuntimeException("Original invoice not found");
+                }
+                if (!"B2B".equals(original.getInvoiceType())) {
+                    throw new RuntimeException("Credit/debit notes can only be issued against a B2B tax invoice");
+                }
+                if (invoice.getOriginalInvoiceNumber() == null || invoice.getOriginalInvoiceNumber().isBlank()) {
+                    invoice.setOriginalInvoiceNumber(original.getInvoiceNumber());
+                }
+                if (invoice.getOriginalInvoiceDate() == null && original.getCreatedAt() != null) {
+                    invoice.setOriginalInvoiceDate(original.getCreatedAt().toLocalDate());
+                }
+                if (invoice.getB2bCustomer() == null) {
+                    invoice.setB2bCustomer(original.getB2bCustomer());
+                }
+            } else {
+                String origNo = invoice.getOriginalInvoiceNumber() != null ? invoice.getOriginalInvoiceNumber().trim() : "";
+                if (origNo.isEmpty()) {
+                    throw new RuntimeException("Enter the original tax invoice number (e.g. BVT/54/25-26)");
+                }
+                invoice.setOriginalInvoiceNumber(origNo);
+                if (invoice.getB2bCustomer() == null) {
+                    throw new RuntimeException("Select the party you are returning goods to");
+                }
+            }
+            if (invoice.getNoteReason() == null || invoice.getNoteReason().isBlank()) {
+                invoice.setNoteReason("Sales Return");
+            }
+        }
 
         // RETAIL: always generate and increment on save (never use number from preview)
         if ("RETAIL".equals(type)) {
@@ -205,8 +262,8 @@ public class InvoiceService {
             if (gstPct.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal gstAmount;
                 BigDecimal totalPrice;
-                if ("B2B".equals(invoice.getInvoiceType())) {
-                    // B2B: tax is added AFTER price (tax-exclusive). itemTotal = taxable base.
+                if (Invoice.isB2bFamily(invoice.getInvoiceType())) {
+                    // B2B / credit / debit notes: tax is added AFTER price (tax-exclusive). itemTotal = taxable base.
                     gstAmount = itemTotal.multiply(gstPct).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
                     totalPrice = itemTotal.add(gstAmount);
                 } else {
@@ -226,11 +283,15 @@ public class InvoiceService {
                 item.setSgstAmount(BigDecimal.ZERO);
             }
 
-            BigDecimal newQuantity = product.getQuantity().subtract(item.getQuantity());
-            if (newQuantity.compareTo(BigDecimal.ZERO) < 0) {
-                throw new RuntimeException("Insufficient stock for product: " + product.getProductName());
+            if ("CREDIT_NOTE".equals(invoice.getInvoiceType())) {
+                product.setQuantity(product.getQuantity().add(item.getQuantity()));
+            } else {
+                BigDecimal newQuantity = product.getQuantity().subtract(item.getQuantity());
+                if (newQuantity.compareTo(BigDecimal.ZERO) < 0) {
+                    throw new RuntimeException("Insufficient stock for product: " + product.getProductName());
+                }
+                product.setQuantity(newQuantity);
             }
-            product.setQuantity(newQuantity);
             this.productRepository.save(product);
 
             item.setInvoice(invoice);
@@ -257,7 +318,7 @@ public class InvoiceService {
         BigDecimal sumItemTotals = normalizedItems.stream()
             .map(i -> i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if ("B2B".equals(invoice.getInvoiceType())) {
+        if (Invoice.isB2bFamily(invoice.getInvoiceType())) {
             invoice.setTotalAmount(subtotalBeforeTax.add(invoice.getTaxAmount()).subtract(invoice.getDiscountAmount() != null ? invoice.getDiscountAmount() : BigDecimal.ZERO));
         } else {
             invoice.setTotalAmount(sumItemTotals.subtract(invoice.getDiscountAmount() != null ? invoice.getDiscountAmount() : BigDecimal.ZERO));
@@ -471,7 +532,7 @@ public class InvoiceService {
         Invoice invoice = getInvoiceById(invoiceId, companyName)
             .orElseThrow(() -> new RuntimeException("Invoice not found"));
 
-        if (!"B2B".equals(invoice.getInvoiceType())) {
+        if (!Invoice.isB2bFamily(invoice.getInvoiceType())) {
             throw new RuntimeException("Only B2B invoices can be deleted from this report");
         }
 

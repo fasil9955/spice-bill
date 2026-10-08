@@ -29,6 +29,14 @@ public final class GstInvoiceNumbers {
         return RETAIL_SERIES + "/" + financialYearCode(date) + "/" + String.format("%05d", sequence);
     }
 
+    public static String formatNote(String series, LocalDate date, int sequence) {
+        return series + "/" + financialYearCode(date) + "/" + String.format("%05d", sequence);
+    }
+
+    public static String likePrefixNote(String series, LocalDate date) {
+        return series + "/" + financialYearCode(date) + "/%";
+    }
+
     public static String likePrefix(LocalDate date) {
         return RETAIL_SERIES + "/" + financialYearCode(date) + "/%";
     }

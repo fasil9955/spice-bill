@@ -242,6 +242,7 @@ const DailyAccountingPage = () => {
     upis,
     closingCashOverride,
     closingGpayOverride,
+    sendCustomerPhones,
   } = {}) => {
     const c = cards ?? cardEntries;
     const u = upis ?? gpayEntries;
@@ -255,12 +256,19 @@ const DailyAccountingPage = () => {
       upis: u.map((e) => ({ name: e.name || 'GPay/UPI', amount: String(e.amount ?? '') })),
     });
     try {
-      await accountingService.updateDaySummary(isoDate, {
+      const res = await accountingService.updateDaySummary(isoDate, {
         billingBookSales: billingVal,
         closingCash: closingCashVal,
         closingGpayTotal: closingGpayVal,
         paymentDetailsJson,
+        sendCustomerPhones: sendCustomerPhones === true,
       });
+      if (sendCustomerPhones === true) {
+        const mail = res?.data?.customerNumbersEmail;
+        if (mail === 'failed' || mail === 'mail_not_configured') {
+          alert('Day close saved, but customer numbers could not be emailed. Check mail settings.');
+        }
+      }
     } catch (err) {
       console.error('Save accounting summary failed', err);
     }
@@ -270,6 +278,7 @@ const DailyAccountingPage = () => {
     await persistAccountingSummary({
       closingCashOverride,
       closingGpayOverride,
+      sendCustomerPhones: true,
     });
   };
 

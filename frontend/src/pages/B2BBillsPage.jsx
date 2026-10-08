@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService, authService, courierService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe, shouldPrintGatePass } from '../utils/invoicePrint';
-import { ArrowLeft, Search, Printer, Trash2, Pencil, X, Truck } from 'lucide-react';
+import { ArrowLeft, Search, Printer, Trash2, Pencil, X, Truck, FileMinus, FilePlus } from 'lucide-react';
 
 const formatBillDateTime = (value) => {
   if (!value) return { date: '—', time: '' };
@@ -79,7 +79,9 @@ const B2BBillsPage = () => {
           }
         };
       } catch (e) { /* print with invoice data only */ }
-      const html = buildInvoicePrintHtml(toPrint, { twoCopies: printGatePass });
+      const html = buildInvoicePrintHtml(toPrint, {
+        twoCopies: printGatePass && (toPrint.invoiceType || 'B2B') === 'B2B'
+      });
       if (html) printHtmlViaIframe(html);
     } catch (err) {
       console.error('Failed to load invoice for print', err);
@@ -166,6 +168,9 @@ const B2BBillsPage = () => {
           <button className="nav-link-button" onClick={() => navigate('/dashboard/b2b')}>
             🏢 B2B Billing
           </button>
+          <button className="nav-link-button" onClick={() => navigate('/dashboard/b2b/note/new/debit')}>
+            Return goods (Debit Note)
+          </button>
           <button className="nav-link-button" onClick={() => navigate('/dashboard/bills')}>
             📚 All Bills
           </button>
@@ -190,6 +195,7 @@ const B2BBillsPage = () => {
             <tr>
               <th>Date & Time</th>
               <th>Inv #</th>
+              <th>Type</th>
               <th>Customer</th>
               <th>GST</th>
               <th>Total</th>
@@ -199,9 +205,9 @@ const B2BBillsPage = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="loading">Loading B2B bills...</td></tr>
+              <tr><td colSpan="8" className="loading">Loading B2B bills...</td></tr>
             ) : filteredInvoices.length === 0 ? (
-              <tr><td colSpan="7" className="no-data">No B2B invoices found</td></tr>
+              <tr><td colSpan="8" className="no-data">No B2B invoices found</td></tr>
             ) : filteredInvoices.map(inv => {
               const when = formatBillDateTime(inv.createdAt);
               return (
@@ -212,13 +218,31 @@ const B2BBillsPage = () => {
                     {when.time ? <span className="bill-time">{when.time}</span> : null}
                   </div>
                 </td>
-                <td>{inv.invoiceNumber}</td>
+                <td>
+                  {inv.invoiceNumber}
+                  {inv.originalInvoiceNumber ? (
+                    <div className="bill-time">vs {inv.originalInvoiceNumber}</div>
+                  ) : null}
+                </td>
+                <td>
+                  <span className="type-badge">
+                    {inv.invoiceType === 'CREDIT_NOTE' ? 'Credit Note' : inv.invoiceType === 'DEBIT_NOTE' ? 'Debit Note' : 'Invoice'}
+                  </span>
+                </td>
                 <td>{inv.b2bCustomer?.customerName || '–'}</td>
                 <td>{inv.b2bCustomer?.gstNumber || '–'}</td>
                 <td>₹{totalWithGST(inv).toFixed(2)}</td>
                 <td><span className={`status-badge status-${(inv.status || 'ACTIVE').toLowerCase()}`}>{inv.status || 'ACTIVE'}</span></td>
                 <td className="action-buttons">
-                  <button className="edit-btn" title="Edit" onClick={() => navigate(`/dashboard/b2b/edit/${inv.invoiceId}`)}><Pencil size={16}/></button>
+                  {inv.invoiceType === 'B2B' && isActive(inv) && (
+                    <>
+                      <button className="edit-btn" title="Credit Note" onClick={() => navigate(`/dashboard/b2b/note/${inv.invoiceId}/credit`)}><FileMinus size={16}/></button>
+                      <button className="edit-btn" title="Debit Note" onClick={() => navigate(`/dashboard/b2b/note/${inv.invoiceId}/debit`)}><FilePlus size={16}/></button>
+                    </>
+                  )}
+                  {inv.invoiceType === 'B2B' && (
+                    <button className="edit-btn" title="Edit" onClick={() => navigate(`/dashboard/b2b/edit/${inv.invoiceId}`)}><Pencil size={16}/></button>
+                  )}
                   <button className="print-btn" title="Print" onClick={() => handlePrint(inv)} disabled={printLoading}><Printer size={16}/></button>
                   <button className="courier-btn" title="Add tracking / Courier" onClick={() => openTrackingModal(inv)}><Truck size={16}/></button>
                     {isActive(inv) && (

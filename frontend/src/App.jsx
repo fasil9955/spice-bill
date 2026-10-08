@@ -6,6 +6,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import Dashboard from './pages/Dashboard';
 import B2BBilling from './pages/B2BBilling';
+import AppUpdateBanner from './components/AppUpdateBanner';
 import './App.css';
 import './pages/Dashboard.css';
 
@@ -22,12 +23,25 @@ function App() {
 
   return (
     <Router>
+      <AppUpdateBanner />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         {/* B2B edit: match at App level so it always renders (avoids Dashboard route ambiguity) */}
         <Route
           path="/dashboard/b2b/edit/:invoiceId"
+          element={
+            <ProtectedRoute>
+              <div className="dashboard-container">
+                <main className="main-content">
+                  <B2BBilling />
+                </main>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/b2b/note/:invoiceId/:kind"
           element={
             <ProtectedRoute>
               <div className="dashboard-container">

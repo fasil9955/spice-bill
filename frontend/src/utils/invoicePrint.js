@@ -8,6 +8,38 @@ export function shouldPrintGatePass(company) {
   return company?.printGatePass !== false;
 }
 
+function b2bDocumentTitle(invoiceType) {
+  const t = (invoiceType || '').toUpperCase();
+  if (t === 'CREDIT_NOTE') return 'CREDIT NOTE';
+  if (t === 'DEBIT_NOTE') return 'DEBIT NOTE';
+  return 'TAX INVOICE';
+}
+
+function b2bDocumentNumberLabel(invoiceType) {
+  const t = (invoiceType || '').toUpperCase();
+  if (t === 'CREDIT_NOTE') return 'Credit Note No.';
+  if (t === 'DEBIT_NOTE') return 'Debit Note No.';
+  return 'Invoice No.';
+}
+
+function isB2bPrintLayout(invoiceType) {
+  const t = (invoiceType || '').toUpperCase();
+  return t === 'B2B' || t === 'CREDIT_NOTE' || t === 'DEBIT_NOTE';
+}
+
+function formatOriginalInvoiceDate(value) {
+  if (!value) return '';
+  if (Array.isArray(value) && value.length >= 3) {
+    return `${String(value[2]).padStart(2, '0')}/${String(value[1]).padStart(2, '0')}/${value[0]}`;
+  }
+  const s = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const [y, m, d] = s.slice(0, 10).split('-');
+    return `${d}/${m}/${y}`;
+  }
+  return s;
+}
+
 export function formatPrintMultiline(text) {
   return String(text || '')
     .replace(/&/g, '&amp;')
@@ -123,8 +155,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
   if (!invoice) return '';
   const { twoCopies = false } = options;
 
-  // For B2B invoices, use A4-style official tax invoice layout (old frontend style).
-  if ((invoice.invoiceType || '').toUpperCase() === 'B2B') {
+  // For B2B invoices / credit / debit notes, use A4-style official tax invoice layout.
+  if (isB2bPrintLayout(invoice.invoiceType)) {
+    const docTitle = b2bDocumentTitle(invoice.invoiceType);
+    const docNoLabel = b2bDocumentNumberLabel(invoice.invoiceType);
     const items = invoice.items || [];
     const companyName = invoice.cashier?.companyName || 'Our Spices Shop';
     const { address: companyAddress, phone: companyPhone } = companyPrintContact(invoice.cashier);
@@ -209,6 +243,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
     const gstPercentLabel = taxPercent > 0 ? `${taxPercent}%` : (items.length === 1 && items[0].gstPercentage != null
       ? `${Math.round(Number(items[0].gstPercentage))}%`
       : 'GST');
+    const sellerCode = (companyGst || '').substring(0, 2);
+    const buyerCode = (customer.stateCode || (customer.gstNumber || '').substring(0, 2) || '').toString();
+    const useIgst = sellerCode.length === 2 && buyerCode.length >= 2 && sellerCode !== buyerCode.substring(0, 2);
+    const taxSummaryLabel = useIgst ? `IGST (${gstPercentLabel})` : `GST (${gstPercentLabel})`;
 
     const amountInWords = numberToWordsRupees(totalAmount);
 
@@ -410,7 +448,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               ${companyGst ? `<div class="b2b-company-meta">GSTIN: ${companyGst.replace(/</g, '&lt;')}</div>` : ''}
               ${companyState ? `<div class="b2b-company-meta">State: ${companyState.replace(/</g, '&lt;')}</div>` : ''}
             </div>
-            <div class="b2b-title">TAX INVOICE</div>
+            <div class="b2b-title">${docTitle}</div>
 
             <div class="b2b-top-row">
               <div class="b2b-billto-box">
@@ -423,7 +461,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
                 ${customer.stateCode || (customer.gstNumber && customer.gstNumber.length >= 2) ? `<div>State: ${getStateLabel(customer.stateCode || customer.gstNumber?.substring(0, 2)).replace(/</g, '&lt;')}</div>` : ''}
               </div>
               <div class="b2b-inv-box">
-                <div class="b2b-inv-line">Invoice No.: ${(invoice.invoiceNumber || '').replace(/</g, '&lt;')}</div>
+                <div class="b2b-inv-line">${docNoLabel}: ${(invoice.invoiceNumber || '').replace(/</g, '&lt;')}</div>
+                ${invoice.originalInvoiceNumber ? `<div class="b2b-inv-line">Against Invoice: ${String(invoice.originalInvoiceNumber).replace(/</g, '&lt;')}</div>` : ''}
+                ${invoice.originalInvoiceDate ? `<div class="b2b-inv-line">Original Invoice Date: ${formatOriginalInvoiceDate(invoice.originalInvoiceDate)}</div>` : ''}
+                ${invoice.noteReason ? `<div class="b2b-inv-line">Reason: ${String(invoice.noteReason).replace(/</g, '&lt;')}</div>` : ''}
                 <div class="b2b-inv-line">Date: ${created.date}</div>
                 <div class="b2b-inv-line">Time: ${created.time}</div>
                 ${placeOfSupply ? `<div class="b2b-inv-line">Place of supply: ${placeOfSupply.replace(/</g, '&lt;')}</div>` : ''}
@@ -460,7 +501,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               </div>
               <div class="b2b-summary-box">
                 <div class="b2b-summary-line"><span>Sub Total (taxable):</span><span>₹${subtotal.toFixed(2)}</span></div>
-                ${gstTotal > 0 ? `<div class="b2b-summary-line"><span>GST (${gstPercentLabel}):</span><span>₹${gstTotal.toFixed(2)}</span></div>` : ''}
+                ${gstTotal > 0 ? `<div class="b2b-summary-line"><span>${taxSummaryLabel}:</span><span>₹${gstTotal.toFixed(2)}</span></div>` : ''}
                 ${discountAmt > 0 ? `<div class="b2b-summary-line"><span>Discount:</span><span>- ₹${discountAmt.toFixed(2)}</span></div>` : ''}
                 <div class="b2b-summary-line total"><span>Total:</span><span>₹${totalAmount.toFixed(2)}</span></div>
               </div>
@@ -480,8 +521,8 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
       if (sheetStart >= 0 && sheetEnd > sheetStart) {
         const sheet = html.slice(sheetStart, sheetEnd);
         const gate = sheet.replace(
-          '<div class="b2b-title">TAX INVOICE</div>',
-          '<p class="b2b-gate-pass-heading">GATE PASS</p><div class="b2b-title">TAX INVOICE</div>'
+          `<div class="b2b-title">${docTitle}</div>`,
+          `<p class="b2b-gate-pass-heading">GATE PASS</p><div class="b2b-title">${docTitle}</div>`
         );
         return html.replace('</body>', `<div class="b2b-copy-sep"></div>${gate}</body>`);
       }
