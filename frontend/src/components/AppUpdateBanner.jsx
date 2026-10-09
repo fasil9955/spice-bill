@@ -24,7 +24,7 @@ const AppUpdateBanner = () => {
         updateAvailable: true,
         uiPreview: true,
         latestVersion: '99.0.0',
-        currentVersion: '1.1.0',
+        currentVersion: '1.1.1',
       });
       return undefined;
     }
