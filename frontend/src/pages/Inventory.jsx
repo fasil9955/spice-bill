@@ -552,18 +552,18 @@ const Inventory = () => {
     background: '#ffffff',
   });
 
-  /** 50×25 mm: solid black modules; bars are thickened again before print. */
+  /** Same CODE128 geometry as the sticker so the gun can read it (bar ratio + quiet zone). */
   const getBarcodeOnly50x25Options = () => ({
     format: 'CODE128',
     displayValue: false,
     width: 2,
-    height: 58,
-    margin: 8,
+    height: 80,
+    margin: 14,
     lineColor: '#000000',
     background: '#ffffff',
   });
 
-  const makeBarcodePixelsPureBlackWhite = (canvas, threshold = 140) => {
+  const makeBarcodePixelsPureBlackWhite = (canvas) => {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
     const { width, height } = canvas;
@@ -572,7 +572,7 @@ const Inventory = () => {
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
       const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      const v = gray < threshold ? 0 : 255;
+      const v = gray < 140 ? 0 : 255;
       d[i] = v;
       d[i + 1] = v;
       d[i + 2] = v;
@@ -581,42 +581,15 @@ const Inventory = () => {
     ctx.putImageData(img, 0, 0);
   };
 
-  /** Widen black bars by 1px so thermal print does not wash them out. */
-  const thickenBarcodeBars = (canvas) => {
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
-    const { width, height } = canvas;
-    if (!width || !height) return;
-    makeBarcodePixelsPureBlackWhite(canvas, 200);
-    const img = ctx.getImageData(0, 0, width, height);
-    const src = new Uint8ClampedArray(img.data);
-    const d = img.data;
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
-        const i = (y * width + x) * 4;
-        if (src[i] === 0) continue;
-        const left = x > 0 && src[(y * width + x - 1) * 4] === 0;
-        const right = x < width - 1 && src[(y * width + x + 1) * 4] === 0;
-        if (left || right) {
-          d[i] = 0;
-          d[i + 1] = 0;
-          d[i + 2] = 0;
-        }
-      }
-    }
-    ctx.putImageData(img, 0, 0);
-  };
-
   /** High-DPI black/white PNG — thermal printers blur anti-aliased SVG/canvas. */
-  const generateBarcodeImageForPrint = (barcodeText, barcodeOptions, extra) => {
+  const generateBarcodeImageForPrint = (barcodeText, barcodeOptions) => {
     try {
       const text = String(barcodeText || '').trim();
       if (!text) return '';
       const src = document.createElement('canvas');
       JsBarcode(src, text, barcodeOptions || getBarcodeOptions());
-      if (extra?.thicken) thickenBarcodeBars(src);
-      else makeBarcodePixelsPureBlackWhite(src);
-      const scale = extra?.scale || 3;
+      makeBarcodePixelsPureBlackWhite(src);
+      const scale = 3;
       const out = document.createElement('canvas');
       out.width = Math.max(1, src.width * scale);
       out.height = Math.max(1, src.height * scale);
@@ -624,8 +597,7 @@ const Inventory = () => {
       if (!octx) return src.toDataURL('image/png');
       octx.imageSmoothingEnabled = false;
       octx.drawImage(src, 0, 0, out.width, out.height);
-      if (extra?.thicken) thickenBarcodeBars(out);
-      else makeBarcodePixelsPureBlackWhite(out);
+      makeBarcodePixelsPureBlackWhite(out);
       return out.toDataURL('image/png');
     } catch {
       return '';
@@ -1291,7 +1263,7 @@ const Inventory = () => {
     }
     const code = barcodeValueWithWeightAfterA(base, weight);
     const copies = Math.max(1, Math.min(200, parseInt(String(copiesRaw ?? '2').trim(), 10) || 2));
-    const img = generateBarcodeImageForPrint(code, getBarcodeOnly50x25Options(), { thicken: true, scale: 4 });
+    const img = generateBarcodeImageForPrint(code, getBarcodeOnly50x25Options());
     if (!img) {
       alert('Could not draw barcode. Check the barcode value.');
       return;
@@ -1343,7 +1315,7 @@ const Inventory = () => {
               height: 25mm;
               flex: 0 0 49.5mm;
               box-sizing: border-box;
-              padding: 1mm 0.4mm 0.6mm;
+              padding: 1.2mm 2mm 0.8mm;
               display: flex;
               flex-direction: column;
               align-items: center;
@@ -1352,17 +1324,15 @@ const Inventory = () => {
             }
             .cell-empty { visibility: hidden; }
             .bars {
-              width: 48.5mm;
-              height: 17.5mm;
-              object-fit: fill;
+              width: 44mm;
+              height: 15mm;
+              object-fit: contain;
               object-position: center;
               image-rendering: pixelated;
               image-rendering: crisp-edges;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
             .digits {
-              margin-top: 0.4mm;
+              margin-top: 0.6mm;
               font-family: Consolas, "Courier New", monospace;
               font-size: 7pt;
               font-weight: 700;
