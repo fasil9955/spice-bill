@@ -73,6 +73,67 @@
   color: #b45309;
 }
 
+.app-update-card {
+  margin: 0 0 24px;
+  padding: 16px 18px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+}
+.app-update-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.app-update-card h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  color: #14532d;
+}
+.app-update-card-head p {
+  margin: 0;
+  font-size: 13px;
+  color: #4b5563;
+}
+.app-update-card-check,
+.app-update-card-go {
+  padding: 8px 14px;
+  font-weight: 700;
+  border: 0;
+  border-radius: 8px;
+  background: #047857;
+  color: #fff;
+  cursor: pointer;
+}
+.app-update-card-check:disabled,
+.app-update-card-go:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+.app-update-card-result {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #1f2937;
+}
+.app-update-card-result p {
+  margin: 0 0 6px;
+}
+.app-update-card-path {
+  font-size: 12px;
+  word-break: break-all;
+  color: #6b7280;
+}
+.app-update-card-error {
+  margin: 10px 0 0;
+  color: #b45309;
+  font-size: 13px;
+}
+.app-update-card-go {
+  margin-top: 8px;
+}
+
 .main-content {
   width: 100%;
   max-width: 1200px;

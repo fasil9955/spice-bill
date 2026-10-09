@@ -30,6 +30,7 @@ import ExpensePage from './ExpensePage';
 import DailyAccountingPage from './DailyAccountingPage';
 import ReportsPage from './ReportsPage';
 import BossReportPage from './BossReportPage';
+import AppUpdateCard from '../components/AppUpdateCard';
 import './Dashboard.css';
 
 // Sub-components for the Dashboard Grid – styled like old spices dashboard
@@ -62,6 +63,8 @@ const DashboardHome = ({ user, menuItems }) => {
           <p>Role: {user.role}</p>
           <p>Company: {companyName}</p>
         </div>
+
+        {isAdmin && <AppUpdateCard />}
 
         <h2 className="dashboard-features-heading">
           {isAdmin ? 'Admin Features' : 'Cashier Features'}

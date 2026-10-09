@@ -1,0 +1,16 @@
+# Build output — keep using git add . for source only
+backend/target/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Shop runtime (stay on the PC, not in Git)
+logs/
+*.log
+uploads/
+
+# Editor
+.idea/
+.vscode/
+*.sw?
+.DS_Store

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spicesshop.billing.dto.UpdateManifest;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -13,6 +14,8 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
@@ -20,6 +23,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class AppUpdateService {
+
+    private static final Logger log = LoggerFactory.getLogger(AppUpdateService.class);
 
     public static final String JAR_NAME = "spices-billing.jar";
     public static final String UPDATE_JAR_NAME = "spices-billing-update.jar";
@@ -55,9 +60,13 @@ public class AppUpdateService {
 
     public Map<String, Object> status() {
         Map<String, Object> out = new LinkedHashMap<>();
+        Path jarPath = runningJarPath();
+        boolean fromJar = runningFromJar();
         out.put("currentVersion", this.currentVersion);
         out.put("enabled", this.enabled && this.manifestUrl != null && !this.manifestUrl.isBlank());
-        out.put("runningFromJar", runningFromJar());
+        out.put("runningFromJar", fromJar);
+        out.put("jarPath", jarPath != null ? jarPath.toString() : "");
+        out.put("manifestUrl", this.manifestUrl != null ? this.manifestUrl : "");
         out.put("updateReady", Files.isRegularFile(updateJarPath()));
         out.put("uiPreview", this.uiPreview);
         if (this.uiPreview) {
@@ -65,16 +74,13 @@ public class AppUpdateService {
             out.put("updateAvailable", true);
             out.put("latestVersion", "99.0.0");
             out.put("message", "Preview only. Click Update to confirm the button (no JAR will be replaced).");
+            log.info("App update check (preview): current={}", this.currentVersion);
             return out;
         }
         if (!this.enabled || this.manifestUrl == null || this.manifestUrl.isBlank()) {
             out.put("updateAvailable", false);
             out.put("message", "Update URL is not set.");
-            return out;
-        }
-        if (!runningFromJar()) {
-            out.put("updateAvailable", false);
-            out.put("message", "Updates apply only when started from spices-billing.jar (not from IDE).");
+            log.warn("App update check skipped: enabled={} manifestUrl='{}'", this.enabled, this.manifestUrl);
             return out;
         }
         try {
@@ -82,18 +88,28 @@ public class AppUpdateService {
             String latest = manifest.getVersion() != null ? manifest.getVersion().trim() : "";
             out.put("latestVersion", latest);
             boolean newer = compareVersions(latest, this.currentVersion) > 0;
-            out.put("updateAvailable", newer);
             out.put("jarUrl", manifest.getJarUrl());
-            if (!newer) {
-                out.put("message", "This shop is on the latest version.");
+            if (!fromJar) {
+                out.put("updateAvailable", false);
+                out.put("message", "GitHub latest is " + latest + " but this PC is not running spices-billing.jar (path: "
+                    + (jarPath != null ? jarPath : "unknown") + "). Use start-billing.bat.");
+            } else if (!newer) {
+                out.put("updateAvailable", false);
+                out.put("message", "This shop is on the latest version (" + this.currentVersion + ").");
             } else if (Files.isRegularFile(updateJarPath())) {
+                out.put("updateAvailable", true);
                 out.put("message", "Update downloaded. Restart billing to install.");
             } else {
+                out.put("updateAvailable", true);
                 out.put("message", "A new version is available.");
             }
+            log.info("App update check: current={} latest={} fromJar={} jar={} available={} {}",
+                this.currentVersion, latest, fromJar, jarPath, out.get("updateAvailable"), out.get("message"));
         } catch (Exception e) {
             out.put("updateAvailable", false);
             out.put("message", "Could not check for updates (offline or URL). " + safeMsg(e));
+            log.warn("App update check failed current={} url={} fromJar={} jar={}: {}",
+                this.currentVersion, this.manifestUrl, fromJar, jarPath, safeMsg(e));
         }
         return out;
     }
@@ -186,8 +202,12 @@ public class AppUpdateService {
         if (this.githubToken != null && !this.githubToken.isBlank()) {
             builder.header("Accept", "application/vnd.github.raw+json");
         }
+        log.info("Fetching update manifest {}", this.manifestUrl);
         HttpResponse<String> response = this.httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 400) {
+            log.warn("Manifest HTTP {} body={}", response.statusCode(),
+                response.body() != null && response.body().length() > 200
+                    ? response.body().substring(0, 200) : response.body());
             throw new IllegalStateException("Manifest HTTP " + response.statusCode());
         }
         String body = response.body() == null ? "" : response.body().trim();
@@ -214,26 +234,45 @@ public class AppUpdateService {
     }
 
     private boolean runningFromJar() {
-        try {
-            Path path = runningJarPath();
-            return path != null && path.getFileName().toString().toLowerCase().endsWith(".jar");
-        } catch (Exception e) {
+        Path path = runningJarPath();
+        if (path == null) {
             return false;
         }
+        String name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(".jar");
     }
 
-    private Path runningJarPath() throws Exception {
-        URI uri = AppUpdateService.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-        return Path.of(uri);
+    private Path runningJarPath() {
+        try {
+            URL loc = AppUpdateService.class.getProtectionDomain().getCodeSource().getLocation();
+            if (loc == null) {
+                return null;
+            }
+            String raw = loc.toString();
+            int bang = raw.indexOf('!');
+            if (bang >= 0) {
+                raw = raw.substring(0, bang);
+            }
+            if (raw.startsWith("jar:")) {
+                raw = raw.substring(4);
+            }
+            URI uri = URI.create(raw);
+            if ("file".equalsIgnoreCase(uri.getScheme())) {
+                return Path.of(uri).toAbsolutePath().normalize();
+            }
+            return Path.of(loc.toURI()).toAbsolutePath().normalize();
+        } catch (Exception e) {
+            log.warn("Could not resolve running JAR path: {}", safeMsg(e));
+            return null;
+        }
     }
 
     private Path jarDirectory() {
-        try {
-            Path jar = runningJarPath();
-            return jar.getParent() != null ? jar.getParent() : Path.of(".").toAbsolutePath();
-        } catch (Exception e) {
-            return Path.of(".").toAbsolutePath();
+        Path jar = runningJarPath();
+        if (jar != null && jar.getParent() != null) {
+            return jar.getParent();
         }
+        return Path.of(".").toAbsolutePath();
     }
 
     private Path updateJarPath() {

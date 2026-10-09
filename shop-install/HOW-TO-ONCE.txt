@@ -11,5 +11,5 @@ One-time setup at each shop (host PC only). After this, updates download when in
 7. If GitHub repo is PRIVATE, add this line to application.properties in THIS folder:
    app.update.github-token=YOUR_GITHUB_TOKEN
 
-Next releases: raise version in pom + application.properties + update-manifest.json,
-upload spices-billing.jar to GitHub Release vX.Y.Z, shops will download and ask to restart.
+Next releases from this PC:  release 1.1.2
+(that bumps version, builds JAR, git push, GitHub Release). Shop then Update + restart.

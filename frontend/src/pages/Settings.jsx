@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService, invoiceService } from '../services/api';
+import AppUpdateCard from '../components/AppUpdateCard';
 import { broadcastDataUpdate } from '../utils/dataSync';
 import { normalizeUpiAccounts } from '../utils/upiAccounts';
 import { ArrowLeft, Building2, Hash, Lock, Save } from 'lucide-react';
@@ -196,6 +197,9 @@ const Settings = () => {
       )}
 
       <div className="settings-sections">
+        <section className="settings-section">
+          <AppUpdateCard />
+        </section>
         <section className="settings-section">
           <h2><Building2 size={20} /> Company Details</h2>
           <form onSubmit={handleCompanySubmit} className="settings-form">
