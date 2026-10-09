@@ -4,6 +4,8 @@ This template provides a minimal setup to get React working in Vite with HMR and
 mvn spring-boot:run -DskipFrontendBuild=true -Dspring-boot.run.arguments=--server.port=8081  
 
  mvn clean package -DskipTests
+
+ release 1.1.5
    
 java -jar target\spices-billing-system-1.0.0.jar
 Currently, two official plugins are available:

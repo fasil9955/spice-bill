@@ -2204,6 +2204,22 @@ const Inventory = () => {
               ))}
             </div>
             <div className="form-group">
+              <label htmlFor="barcode-only-weight-input">Or type weight (grams)</label>
+              <input
+                id="barcode-only-weight-input"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                placeholder="e.g. 150"
+                value={barcodeOnlyPrint.weight}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^\d]/g, '');
+                  setBarcodeOnlyPrint((cur) => ({ ...cur, weight: v }));
+                }}
+              />
+            </div>
+            <div className="form-group">
               <label>How many labels (2 per row)</label>
               <input
                 type="number"
