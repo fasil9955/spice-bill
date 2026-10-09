@@ -2,6 +2,7 @@ package com.spicesshop.billing.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spicesshop.billing.dto.UpdateManifest;
+import java.io.File;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -210,9 +212,10 @@ public class AppUpdateService {
                     ? response.body().substring(0, 200) : response.body());
             throw new IllegalStateException("Manifest HTTP " + response.statusCode());
         }
-        String body = response.body() == null ? "" : response.body().trim();
-        if (body.startsWith("{")) {
-            return this.objectMapper.readValue(body, UpdateManifest.class);
+        String body = stripBom(response.body() == null ? "" : response.body()).trim();
+        int jsonAt = body.indexOf('{');
+        if (jsonAt >= 0) {
+            return this.objectMapper.readValue(body.substring(jsonAt), UpdateManifest.class);
         }
         UpdateManifest manifest = new UpdateManifest();
         String[] lines = body.split("\\R");
@@ -221,6 +224,16 @@ public class AppUpdateService {
             manifest.setJarUrl(lines[1].trim());
         }
         return manifest;
+    }
+
+    static String stripBom(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return "";
+        }
+        if (raw.charAt(0) == '\uFEFF') {
+            return raw.substring(1);
+        }
+        return raw;
     }
 
     private void applyAuth(HttpRequest.Builder builder) {
@@ -243,28 +256,89 @@ public class AppUpdateService {
     }
 
     private Path runningJarPath() {
+        Path fromCp = jarFromClasspath();
+        if (fromCp != null) {
+            return fromCp;
+        }
         try {
             URL loc = AppUpdateService.class.getProtectionDomain().getCodeSource().getLocation();
-            if (loc == null) {
-                return null;
+            Path fromUrl = jarFromLocationString(loc != null ? loc.toString() : null);
+            if (fromUrl != null) {
+                return fromUrl;
             }
-            String raw = loc.toString();
-            int bang = raw.indexOf('!');
-            if (bang >= 0) {
-                raw = raw.substring(0, bang);
-            }
-            if (raw.startsWith("jar:")) {
-                raw = raw.substring(4);
-            }
-            URI uri = URI.create(raw);
-            if ("file".equalsIgnoreCase(uri.getScheme())) {
-                return Path.of(uri).toAbsolutePath().normalize();
-            }
-            return Path.of(loc.toURI()).toAbsolutePath().normalize();
         } catch (Exception e) {
             log.warn("Could not resolve running JAR path: {}", safeMsg(e));
+        }
+        Path fallback = Path.of(".").toAbsolutePath().normalize().resolve(JAR_NAME);
+        if (Files.isRegularFile(fallback)) {
+            return fallback;
+        }
+        return null;
+    }
+
+    static Path jarFromClasspath() {
+        String cp = System.getProperty("java.class.path");
+        if (cp == null || cp.isBlank() || cp.contains(File.pathSeparator)) {
             return null;
         }
+        String one = cp.trim();
+        if (!one.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+            return null;
+        }
+        try {
+            return Path.of(one).toAbsolutePath().normalize();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Spring Boot 3.2 fat JAR uses nested: URLs, e.g.
+     * jar:nested:/C:/SpicesBilling/spices-billing.jar/!BOOT-INF/classes/!/
+     */
+    static Path jarFromLocationString(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String s = raw.trim().replace("jar:nested:", "nested:");
+        if (s.startsWith("jar:")) {
+            s = s.substring(4);
+        }
+        int bang = s.indexOf('!');
+        if (bang >= 0) {
+            s = s.substring(0, bang);
+        }
+        if (s.startsWith("nested:")) {
+            s = s.substring("nested:".length());
+        }
+        s = s.replace("%20", " ").replaceFirst("/+$", "");
+        try {
+            if (s.startsWith("file:")) {
+                URI uri = URI.create(s.replace(" ", "%20"));
+                return trimToJarFile(Path.of(uri));
+            }
+            if (s.startsWith("/") && s.length() > 3 && Character.isLetter(s.charAt(1)) && s.charAt(2) == ':') {
+                s = s.substring(1);
+            }
+            if (s.toLowerCase(Locale.ROOT).contains(".jar")) {
+                return trimToJarFile(Path.of(s));
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
+    }
+
+    static Path trimToJarFile(Path path) {
+        Path cur = path;
+        while (cur != null) {
+            Path name = cur.getFileName();
+            if (name != null && name.toString().toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                return cur.toAbsolutePath().normalize();
+            }
+            cur = cur.getParent();
+        }
+        return path != null ? path.toAbsolutePath().normalize() : null;
     }
 
     private Path jarDirectory() {

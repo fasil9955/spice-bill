@@ -1419,3 +1419,65 @@
   color: #555;
   line-height: 1.4;
 }
+
+.barcode-only-modal {
+  min-width: 320px;
+  max-width: 440px;
+  padding: 0 0 12px;
+}
+.barcode-only-modal .modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.barcode-only-modal label {
+  display: block;
+  margin: 12px 20px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+.barcode-only-product {
+  margin: 12px 20px 4px;
+  font-weight: 600;
+}
+.barcode-only-code {
+  margin: 0 20px 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+.barcode-only-weights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 20px 12px;
+}
+.barcode-only-weight {
+  min-width: 64px;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.barcode-only-weight.active {
+  border-color: #c2410c;
+  background: #fff7ed;
+  color: #9a3412;
+}
+.barcode-only-modal .form-group {
+  margin: 0 20px 8px;
+}
+.barcode-only-modal .form-group input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+.barcode-only-modal .barcode-preview-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 12px 20px 8px;
+}

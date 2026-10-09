@@ -45,7 +45,8 @@ $manifestJson = @"
   "jarUrl": "$JarUrl"
 }
 "@
-Set-Content -Path $Manifest -Value $manifestJson.Trim() -Encoding utf8
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($Manifest, ($manifestJson.Trim() + "`n"), $utf8NoBom)
 
 Write-Host "Bumped pom, application.properties, update-manifest.json"
 
@@ -70,15 +71,26 @@ if ($LASTEXITCODE -ne 0) { throw "git push failed" }
 Write-Host "Pushed main"
 
 # 4) GitHub Release with spices-billing.jar
-$gh = Get-Command gh -ErrorAction SilentlyContinue
-if ($gh) {
-    & gh release create $Tag $Jar --repo $Repo --title $Version --notes "Shop billing update $Version"
-    if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+# MSI install updates PATH for NEW terminals only. Reload PATH + check the default install folder.
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path", "User")
+$ghCmd = $null
+$ghFound = Get-Command gh -ErrorAction SilentlyContinue
+if ($ghFound) {
+    $ghCmd = $ghFound.Source
 } else {
-    Write-Host "gh CLI not found. Install GitHub CLI, then run:" -ForegroundColor Yellow
-    Write-Host "  gh release create $Tag `"$Jar`" --repo $Repo --title $Version --notes `"Shop billing update $Version`""
-    throw "Release JAR not uploaded. Code is already on Git. Install gh from https://cli.github.com/ then run the command above."
+    $defaultGh = Join-Path $env:ProgramFiles "GitHub CLI\gh.exe"
+    if (Test-Path $defaultGh) { $ghCmd = $defaultGh }
 }
+if (-not $ghCmd) {
+    Write-Host "gh CLI not found. Close this window, open a new Command Prompt, then run:" -ForegroundColor Yellow
+    Write-Host "  gh auth login"
+    Write-Host "  gh release create $Tag `"$Jar`" --repo $Repo --title $Version --notes `"Shop billing update $Version`""
+    throw "Release JAR not uploaded. Code is already on Git."
+}
+Write-Host "Using $ghCmd"
+& $ghCmd release create $Tag $Jar --repo $Repo --title $Version --notes "Shop billing update $Version"
+if ($LASTEXITCODE -ne 0) { throw "gh release create failed (run: gh auth login )" }
 
 Write-Host ""
 Write-Host "Done. Shop PCs with internet will see $Version after they click Update." -ForegroundColor Green

@@ -14,7 +14,7 @@
 
     <groupId>com.spicesshop</groupId>
     <artifactId>spices-billing-system</artifactId>
-    <version>1.1.3</version>
+    <version>1.1.4</version>
     <name>Spices Billing System</name>
     <description>Billing system for spices shop with React frontend</description>
 

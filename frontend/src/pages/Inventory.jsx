@@ -5,6 +5,17 @@ import { Plus, Search, Edit, Trash2, ArrowLeft, Download, Upload, Printer, Barco
 import JsBarcode from 'jsbarcode';
 import * as XLSX from 'xlsx';
 
+const BARCODE_ONLY_WEIGHTS = ['100', '200', '250', '500', '1000'];
+
+const barcodeValueWithWeightAfterA = (base, weight) => {
+  const b = String(base || '').trim();
+  const w = String(weight || '').trim();
+  if (!b) return '';
+  if (!w) return b;
+  if (/[A-Za-z]$/.test(b)) return `${b}${w}`;
+  return `${b}A${w}`;
+};
+
 const Inventory = () => {
   // Local FSSAI logo for barcode stickers (used in both preview and print).
   // Note: some browsers may restrict loading `file://` images in print windows.
@@ -29,6 +40,7 @@ const Inventory = () => {
     usp: '',
     ingredients: '',
   });
+  const [barcodeOnlyPrint, setBarcodeOnlyPrint] = useState(null);
   const [showBarcodePreview, setShowBarcodePreview] = useState(false);
   const [barcodePreviewProducts, setBarcodePreviewProducts] = useState([]);
   const [barcodeCompanyName, setBarcodeCompanyName] = useState('');
@@ -540,18 +552,18 @@ const Inventory = () => {
     background: '#ffffff',
   });
 
-  /** 50×25 mm: module width 2 + quiet zone (margin) so CODE128 stays scannable. */
+  /** 50×25 mm: solid black modules; bars are thickened again before print. */
   const getBarcodeOnly50x25Options = () => ({
     format: 'CODE128',
     displayValue: false,
     width: 2,
-    height: 52,
-    margin: 12,
+    height: 58,
+    margin: 8,
     lineColor: '#000000',
     background: '#ffffff',
   });
 
-  const makeBarcodePixelsPureBlackWhite = (canvas) => {
+  const makeBarcodePixelsPureBlackWhite = (canvas, threshold = 140) => {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
     const { width, height } = canvas;
@@ -560,7 +572,7 @@ const Inventory = () => {
     const d = img.data;
     for (let i = 0; i < d.length; i += 4) {
       const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      const v = gray < 140 ? 0 : 255;
+      const v = gray < threshold ? 0 : 255;
       d[i] = v;
       d[i + 1] = v;
       d[i + 2] = v;
@@ -569,15 +581,42 @@ const Inventory = () => {
     ctx.putImageData(img, 0, 0);
   };
 
+  /** Widen black bars by 1px so thermal print does not wash them out. */
+  const thickenBarcodeBars = (canvas) => {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    const { width, height } = canvas;
+    if (!width || !height) return;
+    makeBarcodePixelsPureBlackWhite(canvas, 200);
+    const img = ctx.getImageData(0, 0, width, height);
+    const src = new Uint8ClampedArray(img.data);
+    const d = img.data;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = (y * width + x) * 4;
+        if (src[i] === 0) continue;
+        const left = x > 0 && src[(y * width + x - 1) * 4] === 0;
+        const right = x < width - 1 && src[(y * width + x + 1) * 4] === 0;
+        if (left || right) {
+          d[i] = 0;
+          d[i + 1] = 0;
+          d[i + 2] = 0;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  };
+
   /** High-DPI black/white PNG — thermal printers blur anti-aliased SVG/canvas. */
-  const generateBarcodeImageForPrint = (barcodeText, barcodeOptions) => {
+  const generateBarcodeImageForPrint = (barcodeText, barcodeOptions, extra) => {
     try {
       const text = String(barcodeText || '').trim();
       if (!text) return '';
       const src = document.createElement('canvas');
       JsBarcode(src, text, barcodeOptions || getBarcodeOptions());
-      makeBarcodePixelsPureBlackWhite(src);
-      const scale = 3;
+      if (extra?.thicken) thickenBarcodeBars(src);
+      else makeBarcodePixelsPureBlackWhite(src);
+      const scale = extra?.scale || 3;
       const out = document.createElement('canvas');
       out.width = Math.max(1, src.width * scale);
       out.height = Math.max(1, src.height * scale);
@@ -585,7 +624,8 @@ const Inventory = () => {
       if (!octx) return src.toDataURL('image/png');
       octx.imageSmoothingEnabled = false;
       octx.drawImage(src, 0, 0, out.width, out.height);
-      makeBarcodePixelsPureBlackWhite(out);
+      if (extra?.thicken) thickenBarcodeBars(out);
+      else makeBarcodePixelsPureBlackWhite(out);
       return out.toDataURL('image/png');
     } catch {
       return '';
@@ -1234,16 +1274,24 @@ const Inventory = () => {
    * two labels in the remaining 99mm (49.5mm each).
    * TSC driver: paper 101.6mm × 25mm, 100% scale, not 2 columns in the driver.
    */
-  const printBarcodeOnly50x25 = (product) => {
+  const openBarcodeOnlyPrint = (product) => {
     const code = (product?.barcode || '').toString().trim();
     if (!code) {
       alert('This product has no barcode.');
       return;
     }
-    const raw = window.prompt('How many labels? (2 per row on 101.6 mm strip)', '2');
-    if (raw == null) return;
-    const copies = Math.max(1, Math.min(200, parseInt(String(raw).trim(), 10) || 2));
-    const img = generateBarcodeImageForPrint(code, getBarcodeOnly50x25Options());
+    setBarcodeOnlyPrint({ product, weight: '250', copies: '2' });
+  };
+
+  const printBarcodeOnly50x25 = (product, weight, copiesRaw) => {
+    const base = (product?.barcode || '').toString().trim();
+    if (!base) {
+      alert('This product has no barcode.');
+      return;
+    }
+    const code = barcodeValueWithWeightAfterA(base, weight);
+    const copies = Math.max(1, Math.min(200, parseInt(String(copiesRaw ?? '2').trim(), 10) || 2));
+    const img = generateBarcodeImageForPrint(code, getBarcodeOnly50x25Options(), { thicken: true, scale: 4 });
     if (!img) {
       alert('Could not draw barcode. Check the barcode value.');
       return;
@@ -1276,6 +1324,9 @@ const Inventory = () => {
               margin: 0;
               padding: 0;
               background: #fff;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              color-adjust: exact;
             }
             .row {
               width: 101.6mm;
@@ -1302,11 +1353,13 @@ const Inventory = () => {
             .cell-empty { visibility: hidden; }
             .bars {
               width: 48.5mm;
-              height: 16mm;
-              object-fit: contain;
+              height: 17.5mm;
+              object-fit: fill;
               object-position: center;
               image-rendering: pixelated;
               image-rendering: crisp-edges;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
             }
             .digits {
               margin-top: 0.4mm;
@@ -1513,7 +1566,7 @@ const Inventory = () => {
                     <button
                       className="edit-btn"
                       title="Print barcode only — 101.6 mm strip, 1.3 mm side gaps, 2 per row"
-                      onClick={() => printBarcodeOnly50x25(product)}
+                      onClick={() => openBarcodeOnlyPrint(product)}
                       type="button"
                     >
                       <Barcode size={16} />
@@ -2118,6 +2171,64 @@ const Inventory = () => {
             <div className="barcode-preview-footer">
               <button onClick={closeBarcodePreview} className="cancel-button" type="button">Cancel</button>
               <button onClick={printBarcodesFromPreview} className="print-button" type="button">🖨️ Print</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {barcodeOnlyPrint && (
+        <div className="modal-overlay" onClick={() => setBarcodeOnlyPrint(null)}>
+          <div className="modal-content barcode-only-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Barcode only</h2>
+              <button className="close-btn" type="button" onClick={() => setBarcodeOnlyPrint(null)}>×</button>
+            </div>
+            <p className="barcode-only-product">{barcodeOnlyPrint.product.productName}</p>
+            <p className="barcode-only-code">
+              Will print:{' '}
+              <strong>
+                {barcodeValueWithWeightAfterA(barcodeOnlyPrint.product.barcode, barcodeOnlyPrint.weight)}
+              </strong>
+            </p>
+            <label>Weight after A</label>
+            <div className="barcode-only-weights">
+              {BARCODE_ONLY_WEIGHTS.map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  className={`barcode-only-weight ${barcodeOnlyPrint.weight === w ? 'active' : ''}`}
+                  onClick={() => setBarcodeOnlyPrint((cur) => ({ ...cur, weight: w }))}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+            <div className="form-group">
+              <label>How many labels (2 per row)</label>
+              <input
+                type="number"
+                min="1"
+                max="200"
+                value={barcodeOnlyPrint.copies}
+                onChange={(e) => setBarcodeOnlyPrint((cur) => ({ ...cur, copies: e.target.value }))}
+              />
+            </div>
+            <div className="barcode-preview-footer">
+              <button type="button" className="cancel-button" onClick={() => setBarcodeOnlyPrint(null)}>Cancel</button>
+              <button
+                type="button"
+                className="print-button"
+                onClick={() => {
+                  printBarcodeOnly50x25(
+                    barcodeOnlyPrint.product,
+                    barcodeOnlyPrint.weight,
+                    barcodeOnlyPrint.copies
+                  );
+                  setBarcodeOnlyPrint(null);
+                }}
+              >
+                Print
+              </button>
             </div>
           </div>
         </div>
