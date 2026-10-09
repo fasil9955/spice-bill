@@ -10,6 +10,8 @@
   flex-direction: column;
   align-items: flex-start;
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .cart-section .cart-search-bar {
@@ -123,29 +125,94 @@
   font-size: 13px;
 }
 
-.cart-section .section-header,
+.cart-section .section-header {
+  width: 100%;
+  flex-shrink: 0;
+}
+
 .cart-section .cart-table-wrapper {
   width: 100%;
-  max-height: 320px;
-  overflow-y: auto;
-  overflow-x: auto;
+  flex: 1 1 auto;
+  min-height: min(180px, 28vh);
+  max-height: none;
+  overflow: auto;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
 }
 
-/* Billing / B2B page extends naturally – no scroll restriction */
+.cart-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cart-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
+}
+
 .billing-container {
   overflow: visible;
-  padding-bottom: 24px;
+  padding-bottom: 16px;
   max-width: 1200px;
   margin: 0 auto;
   padding-left: 20px;
   padding-right: 20px;
   box-sizing: border-box;
 }
-.billing-content,
-.billing-main-content {
+
+/* Create Invoice: cart uses leftover height on short and tall shop monitors */
+.billing-page-live {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 40px);
+  min-height: 520px;
   overflow: visible;
+}
+.billing-page-live .billing-content,
+.billing-page-live .billing-main-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.billing-page-live .totals-section {
+  flex-shrink: 0;
+}
+
+.retail-billing-layout .billing-main-content {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 20px;
+}
+.retail-billing-layout .cart-section {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.retail-billing-layout .totals-section {
+  flex: 0 0 280px;
+  width: 280px;
+}
+
+@media (max-width: 900px) {
+  .billing-page-live {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .billing-page-live .billing-content,
+  .billing-page-live .billing-main-content {
+    overflow: visible;
+  }
+  .retail-billing-layout .billing-main-content {
+    flex-direction: column;
+  }
+  .retail-billing-layout .totals-section {
+    width: 100%;
+    flex: 0 0 auto;
+  }
 }
 
 .scan-timing-toggle {
@@ -226,6 +293,7 @@
   margin-bottom: 20px;
   padding-bottom: 16px;
   border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
 }
 .billing-header-main {
   display: flex;
@@ -272,7 +340,7 @@
   display: flex;
   flex-direction: row;
   gap: 24px;
-  align-items: flex-start;
+  align-items: stretch;
   flex-wrap: wrap;
 }
 .b2b-billing-layout .cart-section {
@@ -504,9 +572,11 @@
 }
 .b2b-billing-layout .cart-table-wrapper {
   width: 100%;
+  flex: 1 1 auto;
+  min-height: min(180px, 28vh);
   margin-top: 8px;
   margin-bottom: 16px;
-  overflow-x: auto;
+  overflow: auto;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #fff;
@@ -519,6 +589,10 @@
 .b2b-billing-layout .b2b-cart-table thead th {
   text-align: left;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #fff;
 }
 .b2b-billing-layout .b2b-cart-table td:nth-child(3),
 .b2b-billing-layout .b2b-cart-table td:nth-child(4),

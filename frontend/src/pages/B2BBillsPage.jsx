@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService, authService, courierService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe, shouldPrintGatePass } from '../utils/invoicePrint';
+import { formatInvoicePayment } from '../utils/upiAccounts';
 import { ArrowLeft, Search, Printer, Trash2, Pencil, X, Truck, FileMinus, FilePlus } from 'lucide-react';
 
 const formatBillDateTime = (value) => {
@@ -198,6 +199,7 @@ const B2BBillsPage = () => {
               <th>Type</th>
               <th>Customer</th>
               <th>GST</th>
+              <th>Payment</th>
               <th>Total</th>
               <th>Status</th>
               <th>Actions</th>
@@ -205,9 +207,9 @@ const B2BBillsPage = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="8" className="loading">Loading B2B bills...</td></tr>
+              <tr><td colSpan="9" className="loading">Loading B2B bills...</td></tr>
             ) : filteredInvoices.length === 0 ? (
-              <tr><td colSpan="8" className="no-data">No B2B invoices found</td></tr>
+              <tr><td colSpan="9" className="no-data">No B2B invoices found</td></tr>
             ) : filteredInvoices.map(inv => {
               const when = formatBillDateTime(inv.createdAt);
               return (
@@ -231,6 +233,7 @@ const B2BBillsPage = () => {
                 </td>
                 <td>{inv.b2bCustomer?.customerName || '–'}</td>
                 <td>{inv.b2bCustomer?.gstNumber || '–'}</td>
+                <td className="bill-payment">{formatInvoicePayment(inv)}</td>
                 <td>₹{totalWithGST(inv).toFixed(2)}</td>
                 <td><span className={`status-badge status-${(inv.status || 'ACTIVE').toLowerCase()}`}>{inv.status || 'ACTIVE'}</span></td>
                 <td className="action-buttons">

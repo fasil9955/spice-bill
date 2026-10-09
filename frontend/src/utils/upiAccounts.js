@@ -30,6 +30,8 @@ export function normalizeUpiAccounts(list) {
 export function formatInvoicePayment(invoice) {
   const method = invoice?.paymentMethod || 'CASH';
   const acc = String(invoice?.upiAccount || '').trim();
+  if (method === 'CASH') return 'Cash';
+  if (method === 'CARD') return 'Card';
   if (method === 'UPI') {
     return acc && !acc.startsWith('[') ? acc : 'UPI';
   }

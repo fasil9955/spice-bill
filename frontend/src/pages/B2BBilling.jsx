@@ -990,7 +990,7 @@ const B2BBilling = () => {
   }
 
   return (
-    <div className="billing-container">
+    <div className="billing-container billing-page-live">
       <div className="billing-header">
         <div className="billing-header-main">
           <div className="billing-header-actions">

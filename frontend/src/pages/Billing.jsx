@@ -1375,7 +1375,7 @@ const Billing = () => {
 
   return (
     <div
-      className="billing-container"
+      className="billing-container billing-page-live"
       onMouseDown={(e) => {
         const el = e.target;
         if (!(el instanceof HTMLElement)) return;
@@ -1470,7 +1470,7 @@ const Billing = () => {
         </div>
       )}
 
-      <div className="billing-content">
+      <div className="billing-content retail-billing-layout">
         <div className="billing-main-content">
           <div className="cart-section">
           <div className="billing-cart-tabs" role="tablist" aria-label="Held carts">

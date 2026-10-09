@@ -528,6 +528,13 @@
   resize: vertical;
   margin-bottom: 16px;
 }
+.bills-table .bill-payment {
+  max-width: 220px;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .bills-table-container .action-buttons {
   display: flex;
   align-items: center;

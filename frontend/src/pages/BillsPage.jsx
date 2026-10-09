@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService, authService, courierService } from '../services/api';
 import { buildInvoicePrintHtml, printHtmlViaIframe, shouldPrintGatePass } from '../utils/invoicePrint';
+import { formatInvoicePayment } from '../utils/upiAccounts';
 import { ArrowLeft, Search, Printer, Trash2, Truck, Pencil, X, Plus } from 'lucide-react';
 
 const getTodayDateString = () => new Date().toISOString().slice(0, 10);
@@ -211,6 +212,7 @@ const BillsPage = () => {
               <th>Inv #</th>
               <th>Type</th>
               <th>Customer</th>
+              <th>Payment</th>
               <th>Total</th>
               <th>Status</th>
               <th>Actions</th>
@@ -218,9 +220,9 @@ const BillsPage = () => {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="loading">Loading bills...</td></tr>
+              <tr><td colSpan="8" className="loading">Loading bills...</td></tr>
             ) : filteredInvoices.length === 0 ? (
-              <tr><td colSpan="7" className="no-data">No invoices found</td></tr>
+              <tr><td colSpan="8" className="no-data">No invoices found</td></tr>
             ) : filteredInvoices.map(inv => {
               const when = formatBillDateTime(inv.createdAt);
               return (
@@ -234,6 +236,7 @@ const BillsPage = () => {
                 <td>{inv.invoiceNumber}</td>
                 <td><span className="type-badge">{inv.invoiceType}</span></td>
                 <td>{inv.b2bCustomer?.customerName || 'Retail'}</td>
+                <td className="bill-payment">{formatInvoicePayment(inv)}</td>
                 <td>₹{inv.totalAmount.toFixed(2)}</td>
                 <td><span className={`status-badge status-${(inv.status || 'ACTIVE').toLowerCase()}`}>{inv.status || 'ACTIVE'}</span></td>
                 <td className="action-buttons">
