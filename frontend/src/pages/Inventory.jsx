@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService, categoryService, productService } from '../services/api';
-import { Plus, Search, Edit, Trash2, ArrowLeft, Download, Upload, Printer } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, ArrowLeft, Download, Upload, Printer, Barcode } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import * as XLSX from 'xlsx';
 
@@ -540,6 +540,17 @@ const Inventory = () => {
     background: '#ffffff',
   });
 
+  /** 50×25 mm: module width 2 + quiet zone (margin) so CODE128 stays scannable. */
+  const getBarcodeOnly50x25Options = () => ({
+    format: 'CODE128',
+    displayValue: false,
+    width: 2,
+    height: 52,
+    margin: 12,
+    lineColor: '#000000',
+    background: '#ffffff',
+  });
+
   const makeBarcodePixelsPureBlackWhite = (canvas) => {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
@@ -559,12 +570,12 @@ const Inventory = () => {
   };
 
   /** High-DPI black/white PNG — thermal printers blur anti-aliased SVG/canvas. */
-  const generateBarcodeImageForPrint = (barcodeText) => {
+  const generateBarcodeImageForPrint = (barcodeText, barcodeOptions) => {
     try {
       const text = String(barcodeText || '').trim();
       if (!text) return '';
       const src = document.createElement('canvas');
-      JsBarcode(src, text, getBarcodeOptions());
+      JsBarcode(src, text, barcodeOptions || getBarcodeOptions());
       makeBarcodePixelsPureBlackWhite(src);
       const scale = 3;
       const out = document.createElement('canvas');
@@ -1218,6 +1229,101 @@ const Inventory = () => {
     printHtmlViaIframe(printHtml);
   };
 
+  /**
+   * Barcode-only: strip 101.6mm × 25mm, 1.3mm blank left and right,
+   * two labels in the remaining 99mm (49.5mm each).
+   * TSC driver: paper 101.6mm × 25mm, 100% scale, not 2 columns in the driver.
+   */
+  const printBarcodeOnly50x25 = (product) => {
+    const code = (product?.barcode || '').toString().trim();
+    if (!code) {
+      alert('This product has no barcode.');
+      return;
+    }
+    const raw = window.prompt('How many labels? (2 per row on 101.6 mm strip)', '2');
+    if (raw == null) return;
+    const copies = Math.max(1, Math.min(200, parseInt(String(raw).trim(), 10) || 2));
+    const img = generateBarcodeImageForPrint(code, getBarcodeOnly50x25Options());
+    if (!img) {
+      alert('Could not draw barcode. Check the barcode value.');
+      return;
+    }
+    const digits = escapeForPrintHtml(code);
+    const cells = [];
+    for (let i = 0; i < copies; i += 1) {
+      cells.push(`
+        <div class="cell">
+          <img src="${img}" alt="" class="bars" />
+          <div class="digits">${digits}</div>
+        </div>
+      `);
+    }
+    if (cells.length % 2 === 1) {
+      cells.push('<div class="cell cell-empty"></div>');
+    }
+    let rowsHtml = '';
+    for (let i = 0; i < cells.length; i += 2) {
+      rowsHtml += `<div class="row">${cells[i]}${cells[i + 1]}</div>`;
+    }
+    const html = `<!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Barcode 50x25</title>
+          <style>
+            @page { size: 101.6mm 25mm; margin: 0; }
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: #fff;
+            }
+            .row {
+              width: 101.6mm;
+              height: 25mm;
+              box-sizing: border-box;
+              padding: 0 1.3mm;
+              display: flex;
+              page-break-after: always;
+              break-after: page;
+            }
+            .row:last-child { page-break-after: auto; break-after: auto; }
+            .cell {
+              width: 49.5mm;
+              height: 25mm;
+              flex: 0 0 49.5mm;
+              box-sizing: border-box;
+              padding: 1mm 0.4mm 0.6mm;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              overflow: hidden;
+            }
+            .cell-empty { visibility: hidden; }
+            .bars {
+              width: 48.5mm;
+              height: 16mm;
+              object-fit: contain;
+              object-position: center;
+              image-rendering: pixelated;
+              image-rendering: crisp-edges;
+            }
+            .digits {
+              margin-top: 0.4mm;
+              font-family: Consolas, "Courier New", monospace;
+              font-size: 7pt;
+              font-weight: 700;
+              letter-spacing: 0.4px;
+              line-height: 1;
+              color: #000;
+            }
+          </style>
+        </head>
+        <body>${rowsHtml}</body>
+      </html>`;
+    printHtmlViaIframe(html);
+  };
+
   const filteredProducts = products.filter(p => 
     (p.productName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.barcode || '').includes(searchTerm)
@@ -1398,11 +1504,19 @@ const Inventory = () => {
                   <td className="action-buttons">
                     <button
                       className="edit-btn"
-                      title="Print barcode"
+                      title="Print barcode sticker (100×50 mm)"
                       onClick={() => openBarcodePreview([product])}
                       type="button"
                     >
                       <Printer size={16} />
+                    </button>
+                    <button
+                      className="edit-btn"
+                      title="Print barcode only — 101.6 mm strip, 1.3 mm side gaps, 2 per row"
+                      onClick={() => printBarcodeOnly50x25(product)}
+                      type="button"
+                    >
+                      <Barcode size={16} />
                     </button>
                     <button className="edit-btn" onClick={() => {
                       setCurrentProduct({
