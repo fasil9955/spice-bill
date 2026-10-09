@@ -182,6 +182,24 @@
   flex-shrink: 0;
 }
 
+/* B2B / debit-credit note: keep cart + payment on screen; extra customer fields scroll */
+.billing-page-live:has(.b2b-billing-layout) {
+  overflow: hidden;
+}
+.billing-page-live .b2b-customer-section {
+  flex: 0 1 auto;
+  max-height: min(34vh, 280px);
+  overflow-y: auto;
+  min-height: 72px;
+  margin-bottom: 12px;
+}
+.billing-page-live:has(.b2b-billing-layout) .billing-content,
+.billing-page-live:has(.b2b-billing-layout) .billing-main-content {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 260px;
+}
+
 .retail-billing-layout .billing-main-content {
   flex-direction: row;
   align-items: stretch;
@@ -341,21 +359,25 @@
   flex-direction: row;
   gap: 24px;
   align-items: stretch;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .b2b-billing-layout .cart-section {
-  flex: 1;
-  min-width: 320px;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 .b2b-billing-layout .totals-section {
-  flex: 0 0 auto;
-  width: 340px;
-  min-width: 0;
+  flex: 0 0 320px;
+  width: 320px;
+  min-width: 280px;
   max-width: 100%;
   display: flex;
   justify-content: flex-end;
+  align-self: stretch;
   box-sizing: border-box;
+  min-height: 0;
+  overflow-y: auto;
 }
 .b2b-billing-layout .totals-card {
   width: 100%;
@@ -612,9 +634,30 @@
 }
 
 @media (max-width: 900px) {
+  .billing-page-live:has(.b2b-billing-layout) {
+    height: auto;
+    overflow: auto;
+  }
+  .billing-page-live .b2b-customer-section {
+    max-height: none;
+  }
+  .b2b-billing-layout .billing-main-content {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow: visible;
+  }
+  .b2b-billing-layout .cart-section {
+    overflow: visible;
+  }
+  .b2b-billing-layout .cart-table-wrapper {
+    max-height: 50vh;
+  }
   .b2b-billing-layout .totals-section {
     width: 100%;
+    flex: 0 0 auto;
+    min-width: 0;
     justify-content: stretch;
+    overflow: visible;
   }
   .b2b-billing-layout .totals-card {
     max-width: 100%;
