@@ -1,6 +1,7 @@
 package com.spicesshop.billing.controller;
 
 import com.spicesshop.billing.service.GSTR1ExportService;
+import com.spicesshop.billing.service.MonthlySalesExcelService;
 import com.spicesshop.billing.service.ReportService;
 import com.spicesshop.billing.util.CompanyExtractor;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +27,9 @@ public class ReportController {
     private GSTR1ExportService gstr1ExportService;
 
     @Autowired
+    private MonthlySalesExcelService monthlySalesExcelService;
+
+    @Autowired
     private CompanyExtractor companyExtractor;
 
     @GetMapping({"/daily"})
@@ -35,6 +39,33 @@ public class ReportController {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
             return ResponseEntity.ok(this.reportService.generateDailyReport(date, companyName));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Selected product quantities for one day (Boss Report). */
+    @GetMapping({"/daily-product-sales"})
+    public ResponseEntity<?> getDailyProductSales(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) String productIds,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            List<Integer> ids = new java.util.ArrayList<>();
+            if (productIds != null && !productIds.isBlank()) {
+                for (String part : productIds.split(",")) {
+                    try {
+                        ids.add(Integer.parseInt(part.trim()));
+                    } catch (NumberFormatException ignored) {
+                        /* skip */
+                    }
+                }
+            }
+            return ResponseEntity.ok(this.reportService.getDailyProductSales(companyName, date, ids));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -126,6 +157,52 @@ public class ReportController {
             }
             byte[] excel = this.gstr1ExportService.generateExcel(companyName, year, month);
             String fileName = this.gstr1ExportService.getFileName(year, month);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+            headers.setContentDispositionFormData("attachment", fileName);
+            headers.setContentLength(excel.length);
+            return ResponseEntity.ok()
+                .headers(headers)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .body(excel);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Bill-wise list for the month (B2C + B2B) for on-screen print. */
+    @GetMapping({"/monthly-sales"})
+    public ResponseEntity<?> getMonthlySales(
+            @RequestParam Integer year,
+            @RequestParam Integer month,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .body(this.monthlySalesExcelService.getMonthlySales(companyName, year, month));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Excel of every bill in the month: ALL_BILLS, B2C_BILLS, B2B_BILLS, TOTALS. */
+    @GetMapping({"/monthly-sales-export"})
+    public ResponseEntity<?> getMonthlySalesExport(
+            @RequestParam Integer year,
+            @RequestParam Integer month,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            byte[] excel = this.monthlySalesExcelService.generateExcel(companyName, year, month);
+            String fileName = this.monthlySalesExcelService.getFileName(year, month);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
             headers.setContentDispositionFormData("attachment", fileName);

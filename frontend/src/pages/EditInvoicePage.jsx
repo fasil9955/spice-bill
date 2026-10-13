@@ -54,6 +54,7 @@ const EditInvoicePage = () => {
   const [discountType, setDiscountType] = useState('amount');
   const [discountPercent, setDiscountPercent] = useState(0);
   const [discountAmount, setDiscountAmount] = useState(0);
+  const [showExtraTotals, setShowExtraTotals] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [products, setProducts] = useState([]);
@@ -122,6 +123,7 @@ const EditInvoicePage = () => {
         setDiscountAmount(disc);
         setDiscountPercent(0);
         setDiscountType('amount');
+        setShowExtraTotals(disc > 0);
         const mapped = (inv.items || []).map(it => {
           // Keep API decimal text when present (BigDecimal serializes as number/string)
           const rawQty = it.quantity;
@@ -597,8 +599,22 @@ const EditInvoicePage = () => {
                 <span>Subtotal</span>
                 <span>₹{subtotal.toFixed(2)}</span>
               </div>
+              <label className="totals-extra-tick">
+                <input
+                  type="checkbox"
+                  checked={showExtraTotals}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setShowExtraTotals(on);
+                    if (!on) {
+                      setDiscountPercent(0);
+                      setDiscountAmount(0);
+                    }
+                  }}
+                />
+              </label>
+              {showExtraTotals && (
               <div className="discount-section" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e5e7eb' }}>
-                <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Discount</h3>
                 <div className="discount-toggle">
                   <button type="button" className={`discount-toggle-btn ${discountType === 'percent' ? 'active' : ''}`} onClick={() => setDiscountType('percent')}>%</button>
                   <button type="button" className={`discount-toggle-btn ${discountType === 'amount' ? 'active' : ''}`} onClick={() => setDiscountType('amount')}>₹</button>
@@ -631,9 +647,9 @@ const EditInvoicePage = () => {
                   </div>
                 )}
               </div>
+              )}
               {discount > 0 && (
                 <div className="totals-row totals-discount">
-                  <span>Discount applied</span>
                   <span>- ₹{discount.toFixed(2)}</span>
                 </div>
               )}

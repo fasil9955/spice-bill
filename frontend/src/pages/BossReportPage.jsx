@@ -12,13 +12,30 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
-import { ArrowLeft, TrendingUp, Package } from 'lucide-react';
-import { reportService } from '../services/api';
+import { ArrowLeft, TrendingUp, Package, CalendarDays, Search, X } from 'lucide-react';
+import { reportService, productService } from '../services/api';
 import './BossReportPage.css';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0', '#a8edea', '#fed6e3'];
+const WATCH_KEY = 'spice_boss_selected_products';
+
+const toIsoDate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const loadWatchList = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(WATCH_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((p) => p && p.productId != null) : [];
+  } catch {
+    return [];
+  }
+};
 
 const BossReportPage = () => {
   const navigate = useNavigate();
@@ -28,6 +45,14 @@ const BossReportPage = () => {
   const [loading, setLoading] = useState(true);
   const [topItems, setTopItems] = useState([]);
   const [monthlyData, setMonthlyData] = useState([]);
+  const [reportDate, setReportDate] = useState(() => toIsoDate(now));
+  const [daily, setDaily] = useState(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [watchList, setWatchList] = useState(loadWatchList);
+  const [watchSales, setWatchSales] = useState([]);
+  const [allProducts, setAllProducts] = useState([]);
+  const [productQuery, setProductQuery] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -65,14 +90,79 @@ const BossReportPage = () => {
     fetchData();
   }, [year, month]);
 
+  useEffect(() => {
+    productService.getAll()
+      .then((res) => setAllProducts(Array.isArray(res?.data) ? res.data : []))
+      .catch(() => setAllProducts([]));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(WATCH_KEY, JSON.stringify(watchList));
+  }, [watchList]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadDaily = async () => {
+      setDailyLoading(true);
+      try {
+        const ids = watchList.map((p) => p.productId);
+        const [dayRes, prodRes] = await Promise.all([
+          reportService.getDaily(reportDate),
+          ids.length ? reportService.getDailyProductSales(reportDate, ids) : Promise.resolve({ data: [] }),
+        ]);
+        if (cancelled) return;
+        setDaily(dayRes?.data || null);
+        setWatchSales(Array.isArray(prodRes?.data) ? prodRes.data : []);
+      } catch (err) {
+        console.error('Daily boss report failed', err);
+        if (!cancelled) {
+          setDaily(null);
+          setWatchSales([]);
+        }
+      } finally {
+        if (!cancelled) setDailyLoading(false);
+      }
+    };
+    loadDaily();
+    return () => { cancelled = true; };
+  }, [reportDate, watchList]);
+
   const formatCurrency = (v) => (v == null || Number.isNaN(v) ? '₹0' : `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
+  const addWatchedProduct = (product) => {
+    const id = product.productId;
+    if (id == null || watchList.some((p) => p.productId === id)) return;
+    setWatchList((prev) => [...prev, { productId: id, productName: product.productName || 'Unknown' }]);
+    setProductQuery('');
+    setPickerOpen(false);
+  };
+
+  const removeWatchedProduct = (productId) => {
+    setWatchList((prev) => prev.filter((p) => p.productId !== productId));
+  };
+
+  const q = productQuery.trim().toLowerCase();
+  const pickerMatches = q
+    ? allProducts.filter((p) =>
+        (p.productName || '').toLowerCase().includes(q)
+        || (p.barcode || '').toLowerCase().includes(q)
+        || (p.productCode || '').toLowerCase().includes(q)
+      ).slice(0, 12)
+    : [];
+
+  const watchChart = watchSales.map((i) => ({
+    name: (i.productName || 'Unknown').length > 16 ? `${(i.productName || '').slice(0, 16)}…` : (i.productName || 'Unknown'),
+    fullName: i.productName || 'Unknown',
+    quantity: parseFloat(i.quantity) || 0,
+    revenue: parseFloat(i.totalRevenue) || 0,
+  }));
 
   return (
     <div className="boss-report-page">
       <div className="boss-report-header">
         <div>
           <h1>Boss Report</h1>
-          <p className="boss-report-subtitle">Most sale items &amp; month-wise sales at a glance</p>
+          <p className="boss-report-subtitle">Daily sales, selected products, and month-wise charts</p>
         </div>
         <button type="button" className="boss-report-back-btn" onClick={() => navigate('/dashboard')}>
           <ArrowLeft size={18} /> Dashboard
@@ -81,9 +171,13 @@ const BossReportPage = () => {
 
       <div className="boss-report-controls">
         <div className="boss-report-field">
+          <label>Day</label>
+          <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
+        </div>
+        <div className="boss-report-field">
           <label>Year</label>
           <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {[year - 2, year - 1, year, year + 1].map((y) => (
+            {[now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
@@ -98,8 +192,131 @@ const BossReportPage = () => {
         </div>
       </div>
 
+      <section className="boss-report-section">
+        <h2 className="boss-report-section-title">
+          <CalendarDays size={22} /> Daily report ({reportDate.split('-').reverse().join('/')})
+        </h2>
+        <p className="boss-report-section-desc">Totals for the selected day, then only the products you pick below</p>
+        {dailyLoading && !daily ? (
+          <p className="boss-report-empty">Loading daily totals…</p>
+        ) : (
+          <div className="boss-daily-cards">
+            <div className="boss-daily-card">
+              <span>Sales</span>
+              <strong>{formatCurrency(daily?.totalSales)}</strong>
+            </div>
+            <div className="boss-daily-card">
+              <span>Bills</span>
+              <strong>{daily?.totalInvoices ?? 0}</strong>
+            </div>
+            <div className="boss-daily-card">
+              <span>Cash</span>
+              <strong>{formatCurrency(daily?.cashSales)}</strong>
+            </div>
+            <div className="boss-daily-card">
+              <span>Card</span>
+              <strong>{formatCurrency(daily?.cardSales)}</strong>
+            </div>
+            <div className="boss-daily-card">
+              <span>UPI</span>
+              <strong>{formatCurrency(daily?.upiSales)}</strong>
+            </div>
+            <div className="boss-daily-card">
+              <span>Mixed</span>
+              <strong>{formatCurrency(daily?.mixedSales)}</strong>
+            </div>
+          </div>
+        )}
+
+        <h3 className="boss-watch-heading">Selected products</h3>
+        <p className="boss-report-section-desc">Search and add items to watch. The list stays saved on this computer.</p>
+        <div className="boss-watch-picker">
+          <Search size={16} className="boss-watch-search-icon" />
+          <input
+            type="text"
+            value={productQuery}
+            onChange={(e) => {
+              setProductQuery(e.target.value);
+              setPickerOpen(true);
+            }}
+            onFocus={() => setPickerOpen(true)}
+            placeholder="Search product name or barcode"
+          />
+          {pickerOpen && pickerMatches.length > 0 && (
+            <ul className="boss-watch-dropdown">
+              {pickerMatches.map((p) => (
+                <li key={p.productId}>
+                  <button type="button" onClick={() => addWatchedProduct(p)}>
+                    {p.productName}
+                    {p.barcode ? <span> · {p.barcode}</span> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        {watchList.length > 0 && (
+          <div className="boss-watch-chips">
+            {watchList.map((p) => (
+              <span key={p.productId} className="boss-watch-chip">
+                {p.productName}
+                <button type="button" aria-label={`Remove ${p.productName}`} onClick={() => removeWatchedProduct(p.productId)}>
+                  <X size={14} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {watchList.length === 0 ? (
+          <p className="boss-report-empty">Select products to see how much sold on this day.</p>
+        ) : dailyLoading ? (
+          <p className="boss-report-empty">Loading selected products…</p>
+        ) : (
+          <>
+            <div className="boss-report-chart-wrap boss-watch-chart">
+              <ResponsiveContainer width="100%" height={Math.max(220, watchChart.length * 36)}>
+                <BarChart data={watchChart} layout="vertical" margin={{ left: 20, right: 30, top: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value) => [value, 'Quantity']}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName}
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  />
+                  <Bar dataKey="quantity" name="Quantity sold" radius={[0, 4, 4, 0]} maxBarSize={24}>
+                    {watchChart.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <table className="boss-watch-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {watchSales.map((row) => (
+                  <tr key={row.productId}>
+                    <td>{row.productName}</td>
+                    <td className="num">{Number(row.quantity || 0)}</td>
+                    <td className="num">{formatCurrency(row.totalRevenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </section>
+
       {loading ? (
-        <div className="boss-report-loading">Loading report…</div>
+        <div className="boss-report-loading">Loading month charts…</div>
       ) : (
         <>
           <section className="boss-report-section">

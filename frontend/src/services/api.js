@@ -89,8 +89,15 @@ export const invoiceService = {
   requestCancellation: (id, reason) => api.post(`/invoices/${id}/cancel`, { reason }),
   approveCancellation: (id) => api.post(`/invoices/${id}/approve-cancellation`),
   alignRetailGstNumbers: () => api.post('/invoices/retail/align-gst-numbers', {}, { timeout: 180000 }),
-  deleteCashBillsForDate: (date) => api.post(`/invoices/retail/cash-bills/delete?date=${encodeURIComponent(date)}`),
-  deleteAllCashBills: () => api.post('/invoices/retail/cash-bills/delete-all'),
+  recalculateRetailGst: () => api.post('/invoices/retail/recalculate-gst', {}, { timeout: 180000 }),
+  deleteCashBillsForDate: (date) => api.post(`/invoices/retail/cash-bills/delete?date=${encodeURIComponent(date)}`, {}, { timeout: 180000 }),
+  deleteCashBillsForDates: (from, to) =>
+    api.post(
+      `/invoices/retail/cash-bills/delete?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      {},
+      { timeout: 180000 }
+    ),
+  deleteAllCashBills: () => api.post('/invoices/retail/cash-bills/delete-all', {}, { timeout: 180000 }),
 };
 
 export const attendanceService = {
@@ -166,13 +173,25 @@ export const appUpdateService = {
   status: () => api.get('/app/update-status'),
   download: () => api.post('/app/update-download', {}, { timeout: 600000 }),
   restart: () => api.post('/app/update-restart'),
+  reportProblem: (note) => api.post('/app/problem-report', { note }),
 };
 
 export const reportService = {
   getGSTR1Export: (year, month) =>
     api.get(`/reports/gstr1-export?year=${year}&month=${month}&_=${Date.now()}`, { responseType: 'blob' }),
+  getMonthlySales: (year, month) =>
+    api.get(`/reports/monthly-sales?year=${year}&month=${month}&_=${Date.now()}`),
+  getMonthlySalesExport: (year, month) =>
+    api.get(`/reports/monthly-sales-export?year=${year}&month=${month}&_=${Date.now()}`, { responseType: 'blob' }),
   getGSTR1Summary: (year, month) =>
     api.get(`/reports/gstr1-summary?year=${year}&month=${month}&_=${Date.now()}`),
+  getDaily: (date) => api.get(`/reports/daily?date=${encodeURIComponent(date)}`),
+  getDailyProductSales: (date, productIds = []) => {
+    const ids = (productIds || []).filter((id) => id != null).join(',');
+    return api.get(
+      `/reports/daily-product-sales?date=${encodeURIComponent(date)}${ids ? `&productIds=${encodeURIComponent(ids)}` : ''}`
+    );
+  },
   getMonthlyByYear: (year) => api.get(`/reports/monthly-by-year?year=${year}`),
   getTopSellingItems: (year, month, limit = 15) =>
     api.get(`/reports/top-selling-items?year=${year}&month=${month}&limit=${limit}`),

@@ -53,11 +53,20 @@ const B2BBillsPage = () => {
   }, []);
 
   const filteredInvoices = invoices
-    .filter(inv =>
-      (inv.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inv.b2bCustomer?.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inv.b2bCustomer?.gstNumber || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(inv => {
+      const q = (searchTerm || '').trim().toLowerCase();
+      if (!q) return true;
+      if ((inv.invoiceNumber || '').toLowerCase().includes(q)) return true;
+      if ((inv.b2bCustomer?.customerName || '').toLowerCase().includes(q)) return true;
+      if ((inv.b2bCustomer?.gstNumber || '').toLowerCase().includes(q)) return true;
+      const amount = (Number(inv.subtotal) || 0) + (Number(inv.taxAmount) || 0) - (Number(inv.discountAmount) || 0);
+      if (!Number.isFinite(amount)) return false;
+      const digits = q.replace(/[^\d.]/g, '');
+      if (!digits) return false;
+      if (amount.toFixed(2).includes(digits) || String(amount).includes(digits)) return true;
+      const typed = Number(digits);
+      return Number.isFinite(typed) && Math.abs(amount - typed) < 0.005;
+    })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const handlePrint = async (inv) => {
@@ -183,7 +192,7 @@ const B2BBillsPage = () => {
           <input
             type="text"
             className="search-input"
-            placeholder="Search invoice number or customer or GST..."
+            placeholder="Search invoice, customer, GST, or amount..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />

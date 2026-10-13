@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { appUpdateService } from '../services/api';
 
-const AppUpdateCard = () => {
+const AppUpdateCard = ({ embedded = false }) => {
   const [info, setInfo] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,7 +45,7 @@ const AppUpdateCard = () => {
   };
 
   return (
-    <div className="app-update-card">
+    <div className={embedded ? 'utilities-section' : 'app-update-card'}>
       <div className="app-update-card-head">
         <div>
           <h3>Check for updates</h3>

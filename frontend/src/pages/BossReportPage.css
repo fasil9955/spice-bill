@@ -69,7 +69,8 @@
   color: #475569;
 }
 
-.boss-report-field select {
+.boss-report-field select,
+.boss-report-field input[type="date"] {
   padding: 8px 12px;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
@@ -143,4 +144,146 @@
 
 .boss-report-page .recharts-tooltip-wrapper {
   outline: none;
+}
+
+.boss-daily-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.boss-daily-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.boss-daily-card span {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.boss-daily-card strong {
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.boss-watch-heading {
+  margin: 8px 0 4px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.boss-watch-picker {
+  position: relative;
+  max-width: 420px;
+  margin-bottom: 12px;
+}
+
+.boss-watch-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.boss-watch-picker input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px 10px 34px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.boss-watch-dropdown {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.boss-watch-dropdown button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.boss-watch-dropdown button:hover {
+  background: #f1f5f9;
+}
+
+.boss-watch-dropdown span {
+  color: #94a3b8;
+}
+
+.boss-watch-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.boss-watch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+}
+
+.boss-watch-chip button {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: #6366f1;
+}
+
+.boss-watch-chart {
+  min-height: 200px;
+}
+
+.boss-watch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-top: 8px;
+}
+
+.boss-watch-table th,
+.boss-watch-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.boss-watch-table th.num,
+.boss-watch-table td.num {
+  text-align: right;
 }

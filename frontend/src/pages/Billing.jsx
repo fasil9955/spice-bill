@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { productService, invoiceService, authService } from '../services/api';
 import { formatPrintMultiline, companyPrintContact } from '../utils/invoicePrint';
+import { retailGstAfterDiscount, retailLineGross } from '../utils/retailGst';
 import { broadcastDataUpdate } from '../utils/dataSync';
 import { buildPaymentChoices, encodeUpiAccountField, formatInvoicePayment, normalizeUpiAccounts } from '../utils/upiAccounts';
 import './Billing.css';
@@ -104,6 +105,7 @@ const Billing = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [showPreview, setShowPreview] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showExtraTotals, setShowExtraTotals] = useState(false);
   const [mixedParts, setMixedParts] = useState({ cash: false, card: false, upi: false, upiLabels: {} });
   const [companyUpiAccounts, setCompanyUpiAccounts] = useState([]);
   const companyDetailsRef = useRef({});
@@ -307,8 +309,8 @@ const Billing = () => {
   const applyScannedCodeRef = useRef(null);
 
   useEffect(() => {
-    blockScanFocusRef.current = !!(showPreview || selectedForCart || insufficientStockContext);
-  }, [showPreview, selectedForCart, insufficientStockContext]);
+    blockScanFocusRef.current = !!(showPreview || selectedForCart || insufficientStockContext || showPaymentModal);
+  }, [showPreview, selectedForCart, insufficientStockContext, showPaymentModal]);
 
   useEffect(() => {
     let wasHidden = document.visibilityState === 'hidden';
@@ -359,6 +361,8 @@ const Billing = () => {
           paymentModalOpenedAtRef.current = Date.now();
           paymentNavIndexRef.current = 0;
           setPaymentNavIndex(0);
+          searchInputRef.current?.blur();
+          setSearchResults([]);
           setShowPaymentModal(true);
         }
       }
@@ -436,6 +440,16 @@ const Billing = () => {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [showPaymentModal, loading]);
 
+  useEffect(() => {
+    if (!showPaymentModal) return;
+    searchInputRef.current?.blur();
+    setSearchResults([]);
+    const t = setTimeout(() => {
+      document.querySelector('[data-pay-nav="method-0"]')?.focus();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [showPaymentModal]);
+
   // When bill preview modal is open (draft): Enter triggers Save & Print
   useEffect(() => {
     if (!showPreview || !previewDraft) return;
@@ -455,6 +469,7 @@ const Billing = () => {
   }, [sessions, activeId]);
 
   const handleSearchChange = (val) => {
+    if (showPaymentModal) return;
     const trimmed = (val || '').trim();
     setSearchTerm(val);
     usedSearchArrowsRef.current = false;
@@ -584,7 +599,7 @@ const Billing = () => {
   };
 
   const returnFocusToSearch = () => {
-    if (showPreview || selectedForCart || insufficientStockContext) return;
+    if (showPreview || selectedForCart || insufficientStockContext || showPaymentModal) return;
     searchInputRef.current?.focus();
   };
 
@@ -922,23 +937,6 @@ const Billing = () => {
 
   const calculateSubtotal = () => cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
 
-  const calculateCartGst = () => {
-    let cgst = 0;
-    let sgst = 0;
-    cart.forEach(item => {
-      const itemTotal = item.unitPrice * item.quantity;
-      // GST % from category table only (no product-level GST column)
-      const gstPct = Number(item.category?.gstPercentage) || 0;
-      if (gstPct > 0) {
-        const gstAmount = itemTotal - itemTotal / (1 + gstPct / 100);
-        const half = gstAmount / 2;
-        cgst += half;
-        sgst += half;
-      }
-    });
-    return { cgst, sgst };
-  };
-
   const getDiscountValue = () => {
     const sub = calculateSubtotal();
     if (discountType === 'percent') {
@@ -948,6 +946,8 @@ const Billing = () => {
     if (discountType === 'amount') return Math.min(Number(discountAmount) || 0, sub);
     return 0;
   };
+
+  const calculateCartGst = () => retailGstAfterDiscount(cart, getDiscountValue());
 
   const calculateTotal = () => {
     const sub = calculateSubtotal();
@@ -973,11 +973,10 @@ const Billing = () => {
     const discountAmt = Number(invoice.discountAmount) || 0;
     const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
     const payment = invoice.paymentMethod || 'CASH';
-    // Retail: backend stores subtotal = taxable base. Base Amount = subtotal; Subtotal = base + CGST + SGST.
+    // Discount first, then GST on remaining (s.15). Base = taxable after discount.
     const baseAmount = Math.max(0, Number(invoice.subtotal) || 0);
     const cgstAmt = Number(invoice.cgstAmount) || 0;
     const sgstAmt = Number(invoice.sgstAmount) || 0;
-    const subtotalVal = baseAmount + cgstAmt + sgstAmt;
     const discountRow = discountAmt > 0
       ? `<div class="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹${discountAmt.toFixed(2)}</span></div>`
       : '';
@@ -990,7 +989,7 @@ const Billing = () => {
         const qty = item.quantity ?? 0;
         const unit = item.unit || item.product?.unit || '';
         const qtyDisplay = unit ? `${qty} ${unit}` : String(qty);
-        const total = item.totalPrice ?? qty * (item.unitPrice ?? item.sellingPricePerUnit ?? 0);
+        const total = retailLineGross(item);
         return `
           <tr>
             <td class="btoc-col-item">${name}</td>
@@ -1022,11 +1021,10 @@ const Billing = () => {
         </table>
         <div class="btoc-divider-dashed"></div>
         <div class="btoc-totals">
+          ${discountRow}
           <div class="btoc-totals-row"><span>Base Amount</span><span>₹${baseAmount.toFixed(2)}</span></div>
           ${cgstRow}
           ${sgstRow}
-          <div class="btoc-totals-row"><span>Subtotal</span><span>₹${subtotalVal.toFixed(2)}</span></div>
-          ${discountRow}
           <div class="btoc-totals-row btoc-total-amount"><span>Total Amount</span><span>₹${totalAmount}</span></div>
         </div>
         <div class="btoc-divider-solid"></div>
@@ -1161,6 +1159,8 @@ const Billing = () => {
     paymentModalOpenedAtRef.current = Date.now();
     paymentNavIndexRef.current = 0;
     setPaymentNavIndex(0);
+    searchInputRef.current?.blur();
+    setSearchResults([]);
     setShowPaymentModal(true);
   };
 
@@ -1253,12 +1253,10 @@ const Billing = () => {
       const userJson = localStorage.getItem('user');
       const user = userJson ? JSON.parse(userJson) : null;
       const company = companyDetailsRef.current || {};
-      const itemsTotal = calculateSubtotal();
-      const { cgst, sgst } = calculateCartGst();
+      const { cgst, sgst, taxable } = calculateCartGst();
       const discountVal = getDiscountValue();
       const total = calculateTotal();
-      // Draft subtotal = taxable base (same as backend), so preview/print logic matches
-      const taxableBase = Math.max(0, itemsTotal - cgst - sgst);
+      const taxableBase = taxable;
       const draft = {
         invoiceNumber,
         createdAt: new Date().toISOString(),
@@ -1539,8 +1537,16 @@ const Billing = () => {
                 className="billing-search-input"
                 placeholder="Scan barcode or search by product name..."
                 value={searchTerm}
+                readOnly={showPaymentModal}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
+                onKeyDown={(e) => {
+                  if (showPaymentModal) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                  }
+                  handleSearchKeyDown(e);
+                }}
                 autoComplete="off"
               />
             </form>
@@ -1668,9 +1674,15 @@ const Billing = () => {
 
         <div className="totals-section">
           <div className="totals-card">
+            {getDiscountValue() > 0 && (
+              <div className="totals-row totals-discount">
+                <span>Discount</span>
+                <span>- ₹{getDiscountValue().toFixed(2)}</span>
+              </div>
+            )}
             <div className="totals-row">
               <span>Base Amount</span>
-              <span>₹{(Math.max(0, calculateSubtotal() - cartGst.cgst - cartGst.sgst)).toFixed(2)}</span>
+              <span>₹{(cartGst.taxable ?? 0).toFixed(2)}</span>
             </div>
             {cartGst.cgst > 0 && (
               <div className="totals-row">
@@ -1684,67 +1696,72 @@ const Billing = () => {
                 <span>₹{cartGst.sgst.toFixed(2)}</span>
               </div>
             )}
-            <div className="totals-row">
-              <span>Subtotal</span>
-              <span>₹{calculateSubtotal().toFixed(2)}</span>
-            </div>
-            {getDiscountValue() > 0 && (
-              <div className="totals-row totals-discount">
-                <span>Discount{discountType === 'percent' ? ` (${Math.min(Number(discountPercent) || 0, DISCOUNT_PERCENT_MAX)}%)` : ''}</span>
-                <span>- ₹{getDiscountValue().toFixed(2)}</span>
-              </div>
-            )}
             <div className="totals-row total-amount">
               <span>Total Amount</span>
               <span>₹{calculateTotal().toFixed(2)}</span>
             </div>
 
-            <div className="discount-section">
-              <h3>Discount</h3>
-              <div className="discount-toggle">
-                <button
-                  type="button"
-                  className={`discount-toggle-btn ${discountType === 'percent' ? 'active' : ''}`}
-                  onClick={() => setDiscountType('percent')}
-                >
-                  %
-                </button>
-                <button
-                  type="button"
-                  className={`discount-toggle-btn ${discountType === 'amount' ? 'active' : ''}`}
-                  onClick={() => setDiscountType('amount')}
-                >
-                  ₹
-                </button>
+            <label className="totals-extra-tick">
+              <input
+                type="checkbox"
+                checked={showExtraTotals}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setShowExtraTotals(on);
+                  if (!on) {
+                    setDiscountPercent(0);
+                    setDiscountAmount(0);
+                  }
+                }}
+              />
+            </label>
+            {showExtraTotals && (
+              <div className="discount-section">
+                <div className="discount-toggle">
+                  <button
+                    type="button"
+                    className={`discount-toggle-btn ${discountType === 'percent' ? 'active' : ''}`}
+                    onClick={() => setDiscountType('percent')}
+                  >
+                    %
+                  </button>
+                  <button
+                    type="button"
+                    className={`discount-toggle-btn ${discountType === 'amount' ? 'active' : ''}`}
+                    onClick={() => setDiscountType('amount')}
+                  >
+                    ₹
+                  </button>
+                </div>
+                {discountType === 'percent' && (
+                  <div className="discount-input-row">
+                    <input
+                      type="number"
+                      min="0"
+                      max={DISCOUNT_PERCENT_MAX}
+                      step="0.5"
+                      value={discountPercent || ''}
+                      onChange={(e) => setDiscountPercent(Math.min(DISCOUNT_PERCENT_MAX, parseFloat(e.target.value) || 0))}
+                      placeholder="0–30"
+                    />
+                    <span>%</span>
+                  </div>
+                )}
+                {discountType === 'amount' && (
+                  <div className="discount-input-row">
+                    <span>₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={discountAmount || ''}
+                      onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                    />
+                  </div>
+                )}
               </div>
-              {discountType === 'percent' && (
-                <div className="discount-input-row">
-                  <input
-                    type="number"
-                    min="0"
-                    max={DISCOUNT_PERCENT_MAX}
-                    step="0.5"
-                    value={discountPercent || ''}
-                    onChange={(e) => setDiscountPercent(Math.min(DISCOUNT_PERCENT_MAX, parseFloat(e.target.value) || 0))}
-                    placeholder="0–30"
-                  />
-                  <span>%</span>
-                </div>
-              )}
-              {discountType === 'amount' && (
-                <div className="discount-input-row">
-                  <span>₹</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={discountAmount || ''}
-                    onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                  />
-                </div>
-              )}
-            </div>
+            )}
 
             <button
               className="submit-btn checkout-btn"
@@ -1939,7 +1956,6 @@ const Billing = () => {
         const baseAmount = Math.max(0, Number(display.subtotal) || 0);
         const cgstAmt = Number(display.cgstAmount) || 0;
         const sgstAmt = Number(display.sgstAmount) || 0;
-        const subtotalVal = baseAmount + cgstAmt + sgstAmt;
         const discountAmt = Number(display.discountAmount) || 0;
         const totalAmt = Number(display.totalAmount) || 0;
         return (
@@ -1994,7 +2010,7 @@ const Billing = () => {
                     const qty = item.quantity ?? 0;
                     const unit = item.unit || '';
                     const qtyDisplay = unit ? `${qty} ${unit}` : String(qty);
-                    const total = item.totalPrice ?? qty * (item.unitPrice ?? 0);
+                    const total = retailLineGross(item);
                     return (
                       <tr key={item.itemId ?? idx}>
                         <td className="btoc-col-item">{item.productName}</td>
@@ -2007,11 +2023,10 @@ const Billing = () => {
               </table>
               <div className="btoc-divider-dashed" />
               <div className="btoc-totals">
+                {discountAmt > 0 && <div className="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹{discountAmt.toFixed(2)}</span></div>}
                 <div className="btoc-totals-row"><span>Base Amount</span><span>₹{baseAmount.toFixed(2)}</span></div>
                 {cgstAmt > 0 && <div className="btoc-totals-row"><span>CGST</span><span>₹{cgstAmt.toFixed(2)}</span></div>}
                 {sgstAmt > 0 && <div className="btoc-totals-row"><span>SGST</span><span>₹{sgstAmt.toFixed(2)}</span></div>}
-                <div className="btoc-totals-row"><span>Subtotal</span><span>₹{subtotalVal.toFixed(2)}</span></div>
-                {discountAmt > 0 && <div className="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹{discountAmt.toFixed(2)}</span></div>}
                 <div className="btoc-divider-solid" />
                 <div className="btoc-totals-row btoc-total-amount"><span>Total Amount</span><span>₹{totalAmt.toFixed(2)}</span></div>
               </div>

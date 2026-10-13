@@ -30,7 +30,7 @@ import ExpensePage from './ExpensePage';
 import DailyAccountingPage from './DailyAccountingPage';
 import ReportsPage from './ReportsPage';
 import BossReportPage from './BossReportPage';
-import AppUpdateCard from '../components/AppUpdateCard';
+import UtilitiesPage from './UtilitiesPage';
 import './Dashboard.css';
 
 // Sub-components for the Dashboard Grid – styled like old spices dashboard
@@ -63,8 +63,6 @@ const DashboardHome = ({ user, menuItems }) => {
           <p>Role: {user.role}</p>
           <p>Company: {companyName}</p>
         </div>
-
-        {isAdmin && <AppUpdateCard />}
 
         <h2 className="dashboard-features-heading">
           {isAdmin ? 'Admin Features' : 'Cashier Features'}
@@ -118,6 +116,7 @@ const Dashboard = () => {
     { path: '/dashboard/boss-report', displayIcon: '📈', label: 'Boss Report', description: 'Most sale items & month-wise sales charts' },
     { path: '/dashboard/reports', displayIcon: '📊', label: 'Reports', description: 'Sales, GST and accounting reports' },
     { path: '/dashboard/settings', displayIcon: '⚙️', label: 'Settings', description: 'Company and system configuration' },
+    { path: '/dashboard/utilities', displayIcon: '🧰', label: 'Utilities', description: 'Check for updates and report a problem' },
   ];
 
   const cashierMenu = [
@@ -129,6 +128,7 @@ const Dashboard = () => {
     { path: '/dashboard/inventory-view', displayIcon: '📦', label: 'Product Management', description: 'Search and check product availability' },
     { path: '/dashboard/attendance', displayIcon: '📅', label: 'My Attendance', description: 'Mark your daily attendance' },
     { path: '/dashboard/courier', displayIcon: '🚚', label: 'Courier', description: 'Track courier requests' },
+    { path: '/dashboard/utilities', displayIcon: '🧰', label: 'Utilities', description: 'Check for updates and report a problem' },
   ];
 
   const menuItems = isAdmin ? adminMenu : cashierMenu;
@@ -157,6 +157,7 @@ const Dashboard = () => {
             <Route path="courier" element={<CourierPage />} />
             <Route path="expenses" element={<ExpensePage />} />
             <Route path="accounting" element={<DailyAccountingPage />} />
+            <Route path="utilities" element={<UtilitiesPage />} />
           </Route>
           {/* Fallback for /dashboard so direct visit to /dashboard shows home */}
           <Route path="/" element={<DashboardHome user={user} menuItems={menuItems} />} />
@@ -177,6 +178,7 @@ const Dashboard = () => {
           <Route path="/courier" element={<CourierPage />} />
           <Route path="/expenses" element={<ExpensePage />} />
           <Route path="/accounting" element={<DailyAccountingPage />} />
+          <Route path="/utilities" element={<UtilitiesPage />} />
         </Routes>
       </main>
     </div>

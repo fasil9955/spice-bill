@@ -3,6 +3,7 @@ package com.spicesshop.billing.service;
 import com.spicesshop.billing.model.*;
 import com.spicesshop.billing.repository.*;
 import com.spicesshop.billing.util.GstInvoiceNumbers;
+import com.spicesshop.billing.util.RetailDiscountGst;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -47,6 +48,7 @@ public class InvoiceService {
     private ReportService reportService;
 
     private final ReentrantLock retailNumberAlignLock = new ReentrantLock();
+    private final ReentrantLock retailGstRecalcLock = new ReentrantLock();
 
     /** Returns the next invoice number for preview only – does NOT increment (peek). */
     public String getNextInvoiceNumber(String companyName, String invoiceType) {
@@ -297,6 +299,10 @@ public class InvoiceService {
             item.setInvoice(invoice);
         }
 
+        if (!Invoice.isB2bFamily(invoice.getInvoiceType())) {
+            RetailDiscountGst.applyBillDiscountBeforeGst(normalizedItems, invoice.getDiscountAmount());
+        }
+
         // Sum CGST and SGST for invoice totals
         BigDecimal totalCgst = normalizedItems.stream()
             .map(i -> i.getCgstAmount() != null ? i.getCgstAmount() : BigDecimal.ZERO)
@@ -321,7 +327,8 @@ public class InvoiceService {
         if (Invoice.isB2bFamily(invoice.getInvoiceType())) {
             invoice.setTotalAmount(subtotalBeforeTax.add(invoice.getTaxAmount()).subtract(invoice.getDiscountAmount() != null ? invoice.getDiscountAmount() : BigDecimal.ZERO));
         } else {
-            invoice.setTotalAmount(sumItemTotals.subtract(invoice.getDiscountAmount() != null ? invoice.getDiscountAmount() : BigDecimal.ZERO));
+            // Item totals are already net of bill discount; GST is on remaining consideration.
+            invoice.setTotalAmount(sumItemTotals);
         }
 
         invoice.setItems(normalizedItems);
@@ -494,6 +501,10 @@ public class InvoiceService {
             existingInvoice.getItems().add(item);
         }
 
+        if (!Invoice.isB2bFamily(existingInvoice.getInvoiceType())) {
+            RetailDiscountGst.applyBillDiscountBeforeGst(existingInvoice.getItems(), existingInvoice.getDiscountAmount());
+        }
+
         BigDecimal sumItemTotals = existingInvoice.getItems().stream()
             .map(i -> i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -512,10 +523,10 @@ public class InvoiceService {
         existingInvoice.setCgstAmount(totalCgst);
         existingInvoice.setSgstAmount(totalSgst);
         existingInvoice.setTaxAmount(totalCgst.add(totalSgst));
-        if ("B2B".equals(existingInvoice.getInvoiceType())) {
+        if (Invoice.isB2bFamily(existingInvoice.getInvoiceType())) {
             existingInvoice.setTotalAmount(subtotalBeforeTax.add(totalCgst.add(totalSgst)).subtract(existingInvoice.getDiscountAmount() != null ? existingInvoice.getDiscountAmount() : BigDecimal.ZERO));
         } else {
-            existingInvoice.setTotalAmount(sumItemTotals.subtract(existingInvoice.getDiscountAmount() != null ? existingInvoice.getDiscountAmount() : BigDecimal.ZERO));
+            existingInvoice.setTotalAmount(sumItemTotals);
         }
 
         return this.invoiceRepository.save(existingInvoice);
@@ -670,25 +681,47 @@ public class InvoiceService {
         if (date == null) {
             throw new RuntimeException("Date is required");
         }
-        List<Invoice> dayInvoices = this.invoiceRepository.findByCompanyNameAndDateRange(
+        return deleteRetailCashInvoicesForDates(companyName, date, date);
+    }
+
+    /**
+     * Permanently removes retail CASH invoices from {@code from} through {@code to} (inclusive),
+     * then GST-renumbers remaining retail bills. Stock is not restored.
+     */
+    @Transactional(timeout = 180)
+    public Map<String, Object> deleteRetailCashInvoicesForDates(String companyName, LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new RuntimeException("From date and to date are required");
+        }
+        if (to.isBefore(from)) {
+            throw new RuntimeException("To date cannot be before from date");
+        }
+        List<Invoice> rangeInvoices = this.invoiceRepository.findByCompanyNameAndDateRange(
             companyName,
-            date.atStartOfDay(),
-            date.plusDays(1).atStartOfDay().minusNanos(1)
+            from.atStartOfDay(),
+            to.plusDays(1).atStartOfDay().minusNanos(1)
         );
-        List<Invoice> cashBills = dayInvoices.stream()
+        List<Invoice> cashBills = rangeInvoices.stream()
             .filter(i -> i.getPaymentMethod() == Invoice.PaymentMethod.CASH)
-            .filter(i -> i.getInvoiceType() == null || !"B2B".equals(i.getInvoiceType()))
+            .filter(i -> !Invoice.isB2bFamily(i.getInvoiceType()))
             .toList();
         if (cashBills.isEmpty()) {
             Map<String, Object> empty = new LinkedHashMap<>();
             empty.put("deleted", 0);
             empty.put("stockRestoredBills", 0);
-            empty.put("date", date.toString());
+            empty.put("from", from.toString());
+            empty.put("to", to.toString());
+            empty.put("date", from.toString());
             empty.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
             empty.put("renumbered", 0);
             return empty;
         }
+        java.util.Set<LocalDate> days = new java.util.HashSet<>();
+        java.util.Set<String> months = new java.util.HashSet<>();
         for (Invoice invoice : cashBills) {
+            LocalDate d = invoice.getCreatedAt() != null ? invoice.getCreatedAt().toLocalDate() : from;
+            days.add(d);
+            months.add(d.getYear() + "-" + d.getMonthValue());
             this.courierRequestRepository.deleteByInvoiceId(invoice.getInvoiceId());
             List<InvoiceItem> items = this.invoiceItemRepository.findByInvoice_InvoiceId(invoice.getInvoiceId());
             if (items != null && !items.isEmpty()) {
@@ -700,12 +733,19 @@ public class InvoiceService {
         this.invoiceItemRepository.flush();
 
         Map<String, Object> aligned = alignRetailInvoiceNumbersToGst(companyName);
-        this.reportService.generateDailyReport(date, companyName);
-        this.reportService.generateMonthlyReport(date.getYear(), date.getMonthValue(), companyName);
+        for (LocalDate d : days) {
+            this.reportService.generateDailyReport(d, companyName);
+        }
+        for (String ym : months) {
+            String[] p = ym.split("-");
+            this.reportService.generateMonthlyReport(Integer.parseInt(p[0]), Integer.parseInt(p[1]), companyName);
+        }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("deleted", cashBills.size());
         result.put("stockRestoredBills", 0);
-        result.put("date", date.toString());
+        result.put("from", from.toString());
+        result.put("to", to.toString());
+        result.put("date", from.toString());
         result.put("nextPreview", aligned.get("nextPreview"));
         result.put("renumbered", aligned.get("updated"));
         return result;
@@ -756,6 +796,87 @@ public class InvoiceService {
         result.put("nextPreview", aligned.get("nextPreview"));
         result.put("renumbered", aligned.get("updated"));
         return result;
+    }
+
+    /**
+     * Recomputes CGST/SGST on existing retail bills from each product's current category GST %.
+     * Tax-inclusive line totals (what the customer paid) are not changed. B2B bills are skipped.
+     */
+    @Transactional(timeout = 180)
+    public Map<String, Object> recalculateRetailGstFromCategories(String companyName) {
+        if (!this.retailGstRecalcLock.tryLock()) {
+            throw new IllegalStateException(
+                "GST recalculation is already running. Wait until it finishes, then click once.");
+        }
+        try {
+            List<Invoice> retail = this.invoiceRepository.findRetailInvoicesByCompanyOrdered(companyName);
+            int invoicesTouched = 0;
+            int itemsUpdated = 0;
+            int itemsSkipped = 0;
+            for (Invoice invoice : retail) {
+                if (Invoice.isB2bFamily(invoice.getInvoiceType())) {
+                    continue;
+                }
+                if (invoice.getItems() == null || invoice.getItems().isEmpty()) {
+                    continue;
+                }
+                boolean changed = false;
+                for (InvoiceItem item : invoice.getItems()) {
+                    Product linked = item.getProduct();
+                    if (linked == null || linked.getProductId() == null) {
+                        itemsSkipped++;
+                        continue;
+                    }
+                    Product product = this.productRepository.findById(linked.getProductId()).orElse(null);
+                    if (product == null) {
+                        itemsSkipped++;
+                        continue;
+                    }
+                    BigDecimal gstPct = product.getCategory() != null && product.getCategory().getGstPercentage() != null
+                        ? product.getCategory().getGstPercentage()
+                        : BigDecimal.ZERO;
+                    BigDecimal oldPct = item.getGstPercentage() != null ? item.getGstPercentage() : BigDecimal.ZERO;
+                    BigDecimal net = item.getTotalPrice() != null ? item.getTotalPrice() : BigDecimal.ZERO;
+                    item.setGstPercentage(gstPct);
+                    RetailDiscountGst.applyInclusiveGst(item, net);
+                    if (oldPct.compareTo(gstPct) != 0) {
+                        itemsUpdated++;
+                        changed = true;
+                    }
+                }
+                if (!changed) {
+                    continue;
+                }
+                BigDecimal totalCgst = invoice.getItems().stream()
+                    .map(i -> i.getCgstAmount() != null ? i.getCgstAmount() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal totalSgst = invoice.getItems().stream()
+                    .map(i -> i.getSgstAmount() != null ? i.getSgstAmount() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal subtotalBeforeTax = invoice.getItems().stream()
+                    .map(i -> (i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
+                        .subtract(i.getCgstAmount() != null ? i.getCgstAmount() : BigDecimal.ZERO)
+                        .subtract(i.getSgstAmount() != null ? i.getSgstAmount() : BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal sumItemTotals = invoice.getItems().stream()
+                    .map(i -> i.getTotalPrice() != null ? i.getTotalPrice() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                invoice.setCgstAmount(totalCgst);
+                invoice.setSgstAmount(totalSgst);
+                invoice.setTaxAmount(totalCgst.add(totalSgst));
+                invoice.setSubtotal(subtotalBeforeTax);
+                invoice.setTotalAmount(sumItemTotals);
+                this.invoiceRepository.save(invoice);
+                invoicesTouched++;
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("invoicesUpdated", invoicesTouched);
+            result.put("itemsUpdated", itemsUpdated);
+            result.put("itemsSkipped", itemsSkipped);
+            return result;
+        } finally {
+            this.retailGstRecalcLock.unlock();
+        }
     }
 
     /**

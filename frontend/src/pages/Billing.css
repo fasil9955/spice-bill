@@ -949,6 +949,20 @@
 }
 
 /* Discount section */
+.totals-extra-tick {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+  cursor: pointer;
+  width: fit-content;
+}
+.totals-extra-tick input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+}
+
 .discount-section {
   margin-top: 12px;
 }

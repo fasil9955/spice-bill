@@ -1468,6 +1468,20 @@
 .barcode-only-modal .form-group {
   margin: 0 20px 8px;
 }
+.barcode-only-modal .barcode-only-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 20px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+.barcode-only-check input {
+  width: 16px;
+  height: 16px;
+}
 .barcode-only-modal .form-group input {
   width: 100%;
   padding: 8px 10px;

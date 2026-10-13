@@ -55,11 +55,23 @@ const BillsPage = () => {
     fetchInvoices();
   }, [selectedDate]);
 
+  const billMatchesSearch = (inv, raw) => {
+    const q = (raw || '').trim().toLowerCase();
+    if (!q) return true;
+    if ((inv.invoiceNumber || '').toLowerCase().includes(q)) return true;
+    if ((inv.b2bCustomer?.customerName || '').toLowerCase().includes(q)) return true;
+    const amount = Number(inv.totalAmount);
+    if (!Number.isFinite(amount)) return false;
+    const digits = q.replace(/[^\d.]/g, '');
+    if (!digits) return false;
+    const asFixed = amount.toFixed(2);
+    if (asFixed.includes(digits) || String(amount).includes(digits)) return true;
+    const typed = Number(digits);
+    return Number.isFinite(typed) && Math.abs(amount - typed) < 0.005;
+  };
+
   const filteredInvoices = invoices
-    .filter(inv =>
-      (inv.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (inv.b2bCustomer?.customerName || '').toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(inv => billMatchesSearch(inv, searchTerm))
     .sort((a, b) => {
       const dateA = a.createdAt || a.created_at || '';
       const dateB = b.createdAt || b.created_at || '';
@@ -197,7 +209,7 @@ const BillsPage = () => {
           <input
             type="text"
             className="search-input"
-            placeholder="Search invoice number or customer..."
+            placeholder="Search invoice, customer, or amount..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />

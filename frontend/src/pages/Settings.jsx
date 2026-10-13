@@ -4,7 +4,7 @@ import { authService, invoiceService } from '../services/api';
 import AppUpdateCard from '../components/AppUpdateCard';
 import { broadcastDataUpdate } from '../utils/dataSync';
 import { normalizeUpiAccounts } from '../utils/upiAccounts';
-import { ArrowLeft, Building2, Hash, Lock, Save } from 'lucide-react';
+import { ArrowLeft, Building2, Hash, Lock, Percent, Save } from 'lucide-react';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -12,6 +12,7 @@ const Settings = () => {
   const [savingCompany, setSavingCompany] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [aligningRetail, setAligningRetail] = useState(false);
+  const [recalculatingGst, setRecalculatingGst] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   const [company, setCompany] = useState({
@@ -162,6 +163,39 @@ const Settings = () => {
       });
     } finally {
       setAligningRetail(false);
+    }
+  };
+
+  const handleRecalculateRetailGst = async () => {
+    if (recalculatingGst) return;
+    const ok = window.confirm(
+      'First put every product in the correct category (example: spices 5%, cosmetics 18%).\n\nThis will recompute CGST/SGST on existing retail (shop) bills from each product’s current category.\n\nWhat the customer paid does not change (prices already include GST). B2B bills are not changed.\n\nDo not run if those bills are already filed in GSTR-1. Reprint any bill you already gave to a customer.\n\nContinue?'
+    );
+    if (!ok) return;
+    setRecalculatingGst(true);
+    setMessage({ type: 'success', text: 'Recalculating GST… keep this window open.' });
+    try {
+      const res = await invoiceService.recalculateRetailGst();
+      const invoicesUpdated = res.data?.invoicesUpdated ?? 0;
+      const itemsUpdated = res.data?.itemsUpdated ?? 0;
+      const itemsSkipped = res.data?.itemsSkipped ?? 0;
+      setMessage({
+        type: 'success',
+        text: invoicesUpdated === 0 && itemsUpdated === 0
+          ? `No retail bill lines needed a GST change.${itemsSkipped ? ` ${itemsSkipped} line(s) had no product.` : ''}`
+          : `Updated GST on ${itemsUpdated} line(s) across ${invoicesUpdated} retail bill(s).${itemsSkipped ? ` Skipped ${itemsSkipped} line(s) with no product.` : ''} GSTR-1 Excel will now use the new 5%/18% split.`,
+      });
+      broadcastDataUpdate();
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: err.response?.data?.error
+          || (err.code === 'ECONNABORTED'
+            ? 'Timed out. Wait a minute, then click Recalculate GST once.'
+            : 'Failed to recalculate GST'),
+      });
+    } finally {
+      setRecalculatingGst(false);
     }
   };
 
@@ -427,6 +461,26 @@ const Settings = () => {
               onClick={handleAlignRetailNumbers}
             >
               <Hash size={18} /> {aligningRetail ? 'Updating bill numbers…' : 'Convert existing retail bills to GST numbers'}
+            </button>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h2><Percent size={20} /> Recalculate GST on retail bills</h2>
+          <p className="settings-field-hint">
+            If a spice was billed at <strong>18%</strong> because it was in the wrong category, first move it to the
+            <strong> 5%</strong> spices category in Product Management. Then use this button.
+            Shop bills keep the same total (GST is inside the price); only CGST/SGST and taxable value are corrected.
+            B2B invoices are not changed.
+          </p>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="submit-btn"
+              disabled={recalculatingGst}
+              onClick={handleRecalculateRetailGst}
+            >
+              <Percent size={18} /> {recalculatingGst ? 'Recalculating GST…' : 'Recalculate GST from product categories'}
             </button>
           </div>
         </section>

@@ -1252,10 +1252,10 @@ const Inventory = () => {
       alert('This product has no barcode.');
       return;
     }
-    setBarcodeOnlyPrint({ product, weight: '250', copies: '2' });
+    setBarcodeOnlyPrint({ product, weight: '250', copies: '2', includeName: false });
   };
 
-  const printBarcodeOnly50x25 = (product, weight, copiesRaw) => {
+  const printBarcodeOnly50x25 = (product, weight, copiesRaw, includeName) => {
     const base = (product?.barcode || '').toString().trim();
     if (!base) {
       alert('This product has no barcode.');
@@ -1269,12 +1269,19 @@ const Inventory = () => {
       return;
     }
     const digits = escapeForPrintHtml(code);
+    const rawName = (product?.productName || '').replace(/\s*\([^)]*\)/g, '').trim();
+    const nameHtml = includeName && rawName
+      ? `<div class="pname">${escapeForPrintHtml(rawName)}</div>`
+      : '';
     const cells = [];
     for (let i = 0; i < copies; i += 1) {
       cells.push(`
         <div class="cell">
-          <img src="${img}" alt="" class="bars" />
-          <div class="digits">${digits}</div>
+          <div class="zone">
+            ${nameHtml}
+            <img src="${img}" alt="" class="bars" />
+            <div class="digits">${digits}</div>
+          </div>
         </div>
       `);
     }
@@ -1304,41 +1311,78 @@ const Inventory = () => {
               width: 101.6mm;
               height: 25mm;
               box-sizing: border-box;
-              padding: 0 1.3mm;
+              padding: 0;
+              margin: 0;
               display: flex;
               page-break-after: always;
               break-after: page;
             }
             .row:last-child { page-break-after: auto; break-after: auto; }
             .cell {
-              width: 49.5mm;
+              width: 50.8mm;
               height: 25mm;
-              flex: 0 0 49.5mm;
+              flex: 0 0 50.8mm;
               box-sizing: border-box;
-              padding: 1.2mm 2mm 0.8mm;
+              padding: 0;
+              margin: 0;
               display: flex;
               flex-direction: column;
-              align-items: center;
-              justify-content: center;
+              align-items: flex-start;
+              justify-content: flex-start;
               overflow: hidden;
             }
             .cell-empty { visibility: hidden; }
+            /* Printer defect after 3 cm on each 50.8 mm label — keep bars in the left 30 mm */
+            .zone {
+              width: 30mm;
+              max-width: 30mm;
+              height: 25mm;
+              box-sizing: border-box;
+              padding: 0.4mm 0 0.4mm 0;
+              display: flex;
+              flex-direction: column;
+              align-items: flex-start;
+              justify-content: flex-start;
+              overflow: hidden;
+            }
+            .pname {
+              width: 30mm;
+              max-width: 30mm;
+              font-family: Arial, Helvetica, sans-serif;
+              font-size: 6pt;
+              font-weight: 700;
+              line-height: 1.1;
+              color: #000;
+              text-align: left;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              margin: 0 0 0.3mm 0;
+            }
             .bars {
-              width: 44mm;
-              height: 15mm;
+              width: 30mm;
+              max-width: 30mm;
+              height: ${includeName ? '15mm' : '18mm'};
               object-fit: contain;
-              object-position: center;
+              object-position: left center;
               image-rendering: pixelated;
               image-rendering: crisp-edges;
+              display: block;
+              margin: 0;
             }
             .digits {
-              margin-top: 0.6mm;
+              width: 30mm;
+              max-width: 30mm;
+              margin: 0.3mm 0 0 0;
               font-family: Consolas, "Courier New", monospace;
-              font-size: 7pt;
+              font-size: 6.5pt;
               font-weight: 700;
-              letter-spacing: 0.4px;
+              letter-spacing: 0.2px;
               line-height: 1;
               color: #000;
+              text-align: left;
+              white-space: nowrap;
+              overflow: hidden;
             }
           </style>
         </head>
@@ -2199,6 +2243,14 @@ const Inventory = () => {
                 onChange={(e) => setBarcodeOnlyPrint((cur) => ({ ...cur, copies: e.target.value }))}
               />
             </div>
+            <label className="barcode-only-check">
+              <input
+                type="checkbox"
+                checked={!!barcodeOnlyPrint.includeName}
+                onChange={(e) => setBarcodeOnlyPrint((cur) => ({ ...cur, includeName: e.target.checked }))}
+              />
+              Include item name
+            </label>
             <div className="barcode-preview-footer">
               <button type="button" className="cancel-button" onClick={() => setBarcodeOnlyPrint(null)}>Cancel</button>
               <button
@@ -2208,7 +2260,8 @@ const Inventory = () => {
                   printBarcodeOnly50x25(
                     barcodeOnlyPrint.product,
                     barcodeOnlyPrint.weight,
-                    barcodeOnlyPrint.copies
+                    barcodeOnlyPrint.copies,
+                    barcodeOnlyPrint.includeName
                   );
                   setBarcodeOnlyPrint(null);
                 }}

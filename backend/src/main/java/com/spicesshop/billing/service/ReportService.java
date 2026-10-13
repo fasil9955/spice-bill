@@ -5,9 +5,11 @@ import com.spicesshop.billing.model.DailySalesReport;
 import com.spicesshop.billing.model.Invoice;
 import com.spicesshop.billing.model.InvoiceItem;
 import com.spicesshop.billing.model.MonthlySalesSummary;
+import com.spicesshop.billing.model.Product;
 import com.spicesshop.billing.repository.DailySalesReportRepository;
 import com.spicesshop.billing.repository.InvoiceRepository;
 import com.spicesshop.billing.repository.MonthlySalesSummaryRepository;
+import com.spicesshop.billing.repository.ProductRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,6 +34,9 @@ public class ReportService {
 
     @Autowired
     private InvoiceRepository invoiceRepository;
+
+    @Autowired
+    private ProductRepository productRepository;
 
     @Transactional
     public DailySalesReport generateDailyReport(LocalDate date, String companyName) {
@@ -183,6 +188,58 @@ public class ReportService {
         return byProduct.values().stream()
             .sorted((a, b) -> b.quantity.compareTo(a.quantity))
             .limit(limit > 0 ? limit : 20)
+            .map(a -> new TopSellingItemDto(a.productId, a.productName, a.barcode, a.quantity, a.totalRevenue))
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Quantity sold for specific products on one day (retail + B2B sales; credit/debit notes skipped).
+     * Selected products with no sales that day still appear with quantity 0.
+     */
+    public List<TopSellingItemDto> getDailyProductSales(String companyName, LocalDate date, List<Integer> productIds) {
+        if (date == null || productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashMap<Integer, AggItem> byProduct = new LinkedHashMap<>();
+        for (Integer id : productIds) {
+            if (id == null || byProduct.containsKey(id)) {
+                continue;
+            }
+            Product product = this.productRepository.findById(id).orElse(null);
+            String name = product != null && product.getProductName() != null ? product.getProductName() : ("Product #" + id);
+            String barcode = product != null ? product.getBarcode() : null;
+            byProduct.put(id, new AggItem(id, name, barcode, BigDecimal.ZERO, BigDecimal.ZERO));
+        }
+        if (byProduct.isEmpty()) {
+            return List.of();
+        }
+        List<Invoice> invoices = this.invoiceRepository.findByCompanyNameAndDateRange(
+            companyName,
+            date.atStartOfDay(),
+            date.plusDays(1).atStartOfDay().minusNanos(1)
+        );
+        for (Invoice inv : invoices) {
+            if (inv.getStatus() != null && inv.getStatus() != Invoice.InvoiceStatus.ACTIVE) {
+                continue;
+            }
+            String type = inv.getInvoiceType();
+            if (type != null && !"RETAIL".equals(type) && !"B2B".equals(type)) {
+                continue;
+            }
+            if (inv.getItems() == null) {
+                continue;
+            }
+            for (InvoiceItem ii : inv.getItems()) {
+                Integer pid = ii.getProduct() != null ? ii.getProduct().getProductId() : null;
+                if (pid == null || !byProduct.containsKey(pid)) {
+                    continue;
+                }
+                AggItem v = byProduct.get(pid);
+                v.quantity = v.quantity.add(ii.getQuantity() != null ? ii.getQuantity() : BigDecimal.ZERO);
+                v.totalRevenue = v.totalRevenue.add(ii.getTotalPrice() != null ? ii.getTotalPrice() : BigDecimal.ZERO);
+            }
+        }
+        return byProduct.values().stream()
             .map(a -> new TopSellingItemDto(a.productId, a.productName, a.barcode, a.quantity, a.totalRevenue))
             .collect(Collectors.toList());
     }

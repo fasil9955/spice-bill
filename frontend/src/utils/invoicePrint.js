@@ -2,6 +2,7 @@
  * Shared invoice print helpers for Billing and Bills pages.
  */
 import { formatInvoicePayment } from './upiAccounts';
+import { retailLineGross } from './retailGst';
 
 /** When the company setting is missing, keep printing a gate-pass copy (previous default). */
 export function shouldPrintGatePass(company) {
@@ -552,11 +553,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         return String(invoice.createdAt);
       }
     })();
-    // Retail: backend stores subtotal = taxable base (amount before GST). So Base Amount = subtotal; Subtotal = base + CGST + SGST.
+    // Discount first, then GST on remaining. Base Amount = taxable after discount.
     const baseAmount = Math.max(0, Number(invoice.subtotal) || 0);
     const cgstAmt = Number(invoice.cgstAmount) || 0;
     const sgstAmt = Number(invoice.sgstAmount) || 0;
-    const subtotalVal = baseAmount + cgstAmt + sgstAmt;
     const discountAmt = Number(invoice.discountAmount) || 0;
     const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
     const payment = formatInvoicePayment(invoice);
@@ -571,7 +571,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         const qty = item.quantity ?? 0;
         const unit = item.unit || item.product?.unit || '';
         const qtyDisplay = unit ? `${qty} ${unit}` : String(qty);
-        const total = item.totalPrice ?? qty * (item.unitPrice ?? item.sellingPricePerUnit ?? 0);
+        const total = retailLineGross(item);
         return `
           <tr>
             <td class="btoc-col-item">${name}</td>
@@ -601,11 +601,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         </table>
         <div class="btoc-divider-dashed"></div>
         <div class="btoc-totals">
+          ${discountRow}
           <div class="btoc-totals-row"><span>Base Amount</span><span>₹${baseAmount.toFixed(2)}</span></div>
           ${cgstRow}
           ${sgstRow}
-          <div class="btoc-totals-row"><span>Subtotal</span><span>₹${subtotalVal.toFixed(2)}</span></div>
-          ${discountRow}
           <div class="btoc-totals-row btoc-total-amount"><span>Total Amount</span><span>₹${totalAmount}</span></div>
         </div>
         <div class="btoc-divider-solid"></div>

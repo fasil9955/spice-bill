@@ -382,6 +382,23 @@ public class InvoiceController {
         }
     }
 
+    @PostMapping({"/retail/recalculate-gst"})
+    public ResponseEntity<?> recalculateRetailGstFromCategories(HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
+            }
+            return ResponseEntity.ok(this.invoiceService.recalculateRetailGstFromCategories(companyName));
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "Failed to recalculate GST";
+            if (e instanceof IllegalStateException) {
+                return ResponseEntity.status(409).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
     @PostMapping({"/retail/align-gst-numbers"})
     public ResponseEntity<?> alignRetailGstNumbers(HttpServletRequest request) {
         try {
@@ -405,14 +422,22 @@ public class InvoiceController {
 
     @PostMapping({"/retail/cash-bills/delete"})
     public ResponseEntity<?> deleteRetailCashBillsForDate(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
             if (companyName == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
             }
-            return ResponseEntity.ok(this.invoiceService.deleteRetailCashInvoicesForDate(companyName, date));
+            if (from != null && to != null) {
+                return ResponseEntity.ok(this.invoiceService.deleteRetailCashInvoicesForDates(companyName, from, to));
+            }
+            if (date != null) {
+                return ResponseEntity.ok(this.invoiceService.deleteRetailCashInvoicesForDate(companyName, date));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", "Select from and to dates"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
