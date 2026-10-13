@@ -89,8 +89,14 @@ if (-not $ghCmd) {
     throw "Release JAR not uploaded. Code is already on Git."
 }
 Write-Host "Using $ghCmd"
+& $ghCmd release view $Tag --repo $Repo 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) {
+    throw "GitHub already has release $Tag. Use a new version, for example: .\release.ps1 1.1.8"
+}
 & $ghCmd release create $Tag $Jar --repo $Repo --title $Version --notes "Shop billing update $Version"
-if ($LASTEXITCODE -ne 0) { throw "gh release create failed (run: gh auth login )" }
+if ($LASTEXITCODE -ne 0) {
+    throw "gh release create failed for $Tag (if it says login, run: gh auth login)"
+}
 
 Write-Host ""
 Write-Host "Done. Shop PCs with internet will see $Version after they click Update." -ForegroundColor Green
