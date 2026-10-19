@@ -971,12 +971,15 @@ const Billing = () => {
     const gstNumber = invoice.cashier?.gstNumber || '';
     const createdAt = formatInvoiceDateTime(invoice.createdAt);
     const discountAmt = Number(invoice.discountAmount) || 0;
-    const totalAmount = (invoice.totalAmount ?? invoice.grandTotal ?? 0).toFixed(2);
+    const payable = Number(invoice.totalAmount ?? invoice.grandTotal ?? 0);
+    const totalAmount = payable.toFixed(2);
     const payment = invoice.paymentMethod || 'CASH';
-    // Discount first, then GST on remaining (s.15). Base = taxable after discount.
     const baseAmount = Math.max(0, Number(invoice.subtotal) || 0);
     const cgstAmt = Number(invoice.cgstAmount) || 0;
     const sgstAmt = Number(invoice.sgstAmount) || 0;
+    const itemsGross = (invoice.items || []).reduce((sum, item) => sum + retailLineGross(item), 0);
+    const beforeDiscount = discountAmt > 0 ? (itemsGross > 0 ? itemsGross : payable + discountAmt) : payable;
+    const beforeDiscountRow = `<div class="btoc-totals-row"><span>Total</span><span>₹${beforeDiscount.toFixed(2)}</span></div>`;
     const discountRow = discountAmt > 0
       ? `<div class="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹${discountAmt.toFixed(2)}</span></div>`
       : '';
@@ -1021,11 +1024,12 @@ const Billing = () => {
         </table>
         <div class="btoc-divider-dashed"></div>
         <div class="btoc-totals">
+          ${beforeDiscountRow}
           ${discountRow}
           <div class="btoc-totals-row"><span>Base Amount</span><span>₹${baseAmount.toFixed(2)}</span></div>
           ${cgstRow}
           ${sgstRow}
-          <div class="btoc-totals-row btoc-total-amount"><span>Total Amount</span><span>₹${totalAmount}</span></div>
+          <div class="btoc-totals-row btoc-total-amount"><span>Amount to pay</span><span>₹${totalAmount}</span></div>
         </div>
         <div class="btoc-divider-solid"></div>
         <div class="btoc-divider-dashed"></div>
@@ -1081,7 +1085,7 @@ const Billing = () => {
             .btoc-totals { font-size: 12px; margin-top: 4px; }
             .btoc-totals-row { display: flex; justify-content: space-between; padding: 3px 0; }
             .btoc-totals-row.btoc-total-amount { font-weight: 700; font-size: 14px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #111; }
-            .btoc-discount { color: #059669; }
+            .btoc-discount { color: #111; font-weight: 700; }
             .btoc-payment { margin-top: 8px; font-size: 11px; }
             .btoc-footer { margin-top: 14px; text-align: center; font-size: 12px; color: #4b5563; }
             .btoc-footer div { margin: 2px 0; }
@@ -1674,6 +1678,10 @@ const Billing = () => {
 
         <div className="totals-section">
           <div className="totals-card">
+            <div className="totals-row">
+              <span>Total</span>
+              <span>₹{calculateSubtotal().toFixed(2)}</span>
+            </div>
             {getDiscountValue() > 0 && (
               <div className="totals-row totals-discount">
                 <span>Discount</span>
@@ -1697,7 +1705,7 @@ const Billing = () => {
               </div>
             )}
             <div className="totals-row total-amount">
-              <span>Total Amount</span>
+              <span>Amount to pay</span>
               <span>₹{calculateTotal().toFixed(2)}</span>
             </div>
 
@@ -1958,6 +1966,8 @@ const Billing = () => {
         const sgstAmt = Number(display.sgstAmount) || 0;
         const discountAmt = Number(display.discountAmount) || 0;
         const totalAmt = Number(display.totalAmount) || 0;
+        const itemsGross = (display.items || []).reduce((sum, item) => sum + retailLineGross(item), 0);
+        const beforeDiscount = discountAmt > 0 ? (itemsGross > 0 ? itemsGross : totalAmt + discountAmt) : totalAmt;
         return (
         <div className="bill-preview-overlay">
           <div className="bill-preview-container btoc-preview-container">
@@ -2023,12 +2033,13 @@ const Billing = () => {
               </table>
               <div className="btoc-divider-dashed" />
               <div className="btoc-totals">
+                <div className="btoc-totals-row"><span>Total</span><span>₹{beforeDiscount.toFixed(2)}</span></div>
                 {discountAmt > 0 && <div className="btoc-totals-row btoc-discount"><span>Discount</span><span>- ₹{discountAmt.toFixed(2)}</span></div>}
                 <div className="btoc-totals-row"><span>Base Amount</span><span>₹{baseAmount.toFixed(2)}</span></div>
                 {cgstAmt > 0 && <div className="btoc-totals-row"><span>CGST</span><span>₹{cgstAmt.toFixed(2)}</span></div>}
                 {sgstAmt > 0 && <div className="btoc-totals-row"><span>SGST</span><span>₹{sgstAmt.toFixed(2)}</span></div>}
                 <div className="btoc-divider-solid" />
-                <div className="btoc-totals-row btoc-total-amount"><span>Total Amount</span><span>₹{totalAmt.toFixed(2)}</span></div>
+                <div className="btoc-totals-row btoc-total-amount"><span>Amount to pay</span><span>₹{totalAmt.toFixed(2)}</span></div>
               </div>
               <div className="btoc-divider-dashed" />
               <div className="btoc-payment">

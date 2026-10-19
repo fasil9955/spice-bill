@@ -89,9 +89,9 @@ if (-not $ghCmd) {
     throw "Release JAR not uploaded. Code is already on Git."
 }
 Write-Host "Using $ghCmd"
-& $ghCmd release view $Tag --repo $Repo 2>$null | Out-Null
+cmd.exe /c "`"$ghCmd`" release view $Tag --repo $Repo 1>nul 2>nul"
 if ($LASTEXITCODE -eq 0) {
-    throw "GitHub already has release $Tag. Use a new version, for example: .\release.ps1 1.1.8"
+    throw "GitHub already has release $Tag. Use a new version, for example: .\release.ps1 1.1.10"
 }
 & $ghCmd release create $Tag $Jar --repo $Repo --title $Version --notes "Shop billing update $Version"
 if ($LASTEXITCODE -ne 0) {

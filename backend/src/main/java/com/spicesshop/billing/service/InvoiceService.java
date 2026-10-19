@@ -701,53 +701,10 @@ public class InvoiceService {
             from.atStartOfDay(),
             to.plusDays(1).atStartOfDay().minusNanos(1)
         );
-        List<Invoice> cashBills = rangeInvoices.stream()
-            .filter(i -> i.getPaymentMethod() == Invoice.PaymentMethod.CASH)
-            .filter(i -> !Invoice.isB2bFamily(i.getInvoiceType()))
-            .toList();
-        if (cashBills.isEmpty()) {
-            Map<String, Object> empty = new LinkedHashMap<>();
-            empty.put("deleted", 0);
-            empty.put("stockRestoredBills", 0);
-            empty.put("from", from.toString());
-            empty.put("to", to.toString());
-            empty.put("date", from.toString());
-            empty.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
-            empty.put("renumbered", 0);
-            return empty;
-        }
-        java.util.Set<LocalDate> days = new java.util.HashSet<>();
-        java.util.Set<String> months = new java.util.HashSet<>();
-        for (Invoice invoice : cashBills) {
-            LocalDate d = invoice.getCreatedAt() != null ? invoice.getCreatedAt().toLocalDate() : from;
-            days.add(d);
-            months.add(d.getYear() + "-" + d.getMonthValue());
-            this.courierRequestRepository.deleteByInvoiceId(invoice.getInvoiceId());
-            List<InvoiceItem> items = this.invoiceItemRepository.findByInvoice_InvoiceId(invoice.getInvoiceId());
-            if (items != null && !items.isEmpty()) {
-                this.invoiceItemRepository.deleteAll(items);
-            }
-            this.invoiceRepository.delete(invoice);
-        }
-        this.invoiceRepository.flush();
-        this.invoiceItemRepository.flush();
-
-        Map<String, Object> aligned = alignRetailInvoiceNumbersToGst(companyName);
-        for (LocalDate d : days) {
-            this.reportService.generateDailyReport(d, companyName);
-        }
-        for (String ym : months) {
-            String[] p = ym.split("-");
-            this.reportService.generateMonthlyReport(Integer.parseInt(p[0]), Integer.parseInt(p[1]), companyName);
-        }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("deleted", cashBills.size());
-        result.put("stockRestoredBills", 0);
+        Map<String, Object> result = removeRetailCashAndRenumber(companyName, rangeInvoices);
         result.put("from", from.toString());
         result.put("to", to.toString());
         result.put("date", from.toString());
-        result.put("nextPreview", aligned.get("nextPreview"));
-        result.put("renumbered", aligned.get("updated"));
         return result;
     }
 
@@ -757,10 +714,19 @@ public class InvoiceService {
      */
     @Transactional
     public Map<String, Object> deleteAllRetailCashInvoices(String companyName) {
-        List<Invoice> cashBills = this.invoiceRepository.findRetailCashInvoicesByCompany(companyName);
-        if (cashBills.isEmpty()) {
+        return removeRetailCashAndRenumber(
+            companyName,
+            this.invoiceRepository.findRetailInvoicesByCompanyOrdered(companyName)
+        );
+    }
+
+    private Map<String, Object> removeRetailCashAndRenumber(String companyName, List<Invoice> pool) {
+        List<Invoice> cashBills = pool.stream().filter(this::isRetailCashOnly).toList();
+        List<Invoice> mixedWithCash = pool.stream().filter(this::isRetailMixedWithCash).toList();
+        if (cashBills.isEmpty() && mixedWithCash.isEmpty()) {
             Map<String, Object> empty = new LinkedHashMap<>();
             empty.put("deleted", 0);
+            empty.put("mixedAdjusted", 0);
             empty.put("stockRestoredBills", 0);
             empty.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
             empty.put("renumbered", 0);
@@ -768,16 +734,20 @@ public class InvoiceService {
         }
         java.util.Set<LocalDate> days = new java.util.HashSet<>();
         java.util.Set<String> months = new java.util.HashSet<>();
-        for (Invoice invoice : cashBills) {
-            LocalDate d = invoice.getCreatedAt() != null ? invoice.getCreatedAt().toLocalDate() : LocalDate.now();
-            days.add(d);
-            months.add(d.getYear() + "-" + d.getMonthValue());
-            this.courierRequestRepository.deleteByInvoiceId(invoice.getInvoiceId());
-            List<InvoiceItem> items = this.invoiceItemRepository.findByInvoice_InvoiceId(invoice.getInvoiceId());
-            if (items != null && !items.isEmpty()) {
-                this.invoiceItemRepository.deleteAll(items);
+        int mixedAdjusted = 0;
+        int deleted = 0;
+        for (Invoice invoice : mixedWithCash) {
+            noteCashRemovalDay(invoice, days, months);
+            if (stripCashKeepOtherPayments(invoice)) {
+                deleted++;
+            } else {
+                mixedAdjusted++;
             }
-            this.invoiceRepository.delete(invoice);
+        }
+        for (Invoice invoice : cashBills) {
+            noteCashRemovalDay(invoice, days, months);
+            permanentlyDeleteRetailInvoice(invoice);
+            deleted++;
         }
         this.invoiceRepository.flush();
         this.invoiceItemRepository.flush();
@@ -791,11 +761,132 @@ public class InvoiceService {
             this.reportService.generateMonthlyReport(Integer.parseInt(p[0]), Integer.parseInt(p[1]), companyName);
         }
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("deleted", cashBills.size());
+        result.put("deleted", deleted);
+        result.put("mixedAdjusted", mixedAdjusted);
         result.put("stockRestoredBills", 0);
         result.put("nextPreview", aligned.get("nextPreview"));
         result.put("renumbered", aligned.get("updated"));
         return result;
+    }
+
+    private boolean isRetailCashOnly(Invoice invoice) {
+        return !Invoice.isB2bFamily(invoice.getInvoiceType())
+            && invoice.getPaymentMethod() == Invoice.PaymentMethod.CASH;
+    }
+
+    private boolean isRetailMixedWithCash(Invoice invoice) {
+        return !Invoice.isB2bFamily(invoice.getInvoiceType())
+            && invoice.getPaymentMethod() == Invoice.PaymentMethod.MIXED
+            && nzAmt(invoice.getCashAmount()).compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    private static void noteCashRemovalDay(Invoice invoice, java.util.Set<LocalDate> days, java.util.Set<String> months) {
+        LocalDate d = invoice.getCreatedAt() != null ? invoice.getCreatedAt().toLocalDate() : LocalDate.now();
+        days.add(d);
+        months.add(d.getYear() + "-" + d.getMonthValue());
+    }
+
+    private void permanentlyDeleteRetailInvoice(Invoice invoice) {
+        this.courierRequestRepository.deleteByInvoiceId(invoice.getInvoiceId());
+        List<InvoiceItem> items = this.invoiceItemRepository.findByInvoice_InvoiceId(invoice.getInvoiceId());
+        if (items != null && !items.isEmpty()) {
+            this.invoiceItemRepository.deleteAll(items);
+        }
+        this.invoiceRepository.delete(invoice);
+    }
+
+    /**
+     * Drops the cash portion of a mixed retail bill and resizes lines to card+UPI.
+     * Returns true if the bill was deleted because nothing non-cash remained. Stock is not restored.
+     */
+    private boolean stripCashKeepOtherPayments(Invoice invoice) {
+        BigDecimal card = nzAmt(invoice.getCardAmount());
+        BigDecimal upi = nzAmt(invoice.getUpiAmount());
+        BigDecimal keep = card.add(upi).setScale(2, RoundingMode.HALF_UP);
+        if (keep.compareTo(BigDecimal.ZERO) <= 0) {
+            permanentlyDeleteRetailInvoice(invoice);
+            return true;
+        }
+        List<InvoiceItem> items = this.invoiceItemRepository.findByInvoice_InvoiceId(invoice.getInvoiceId());
+        BigDecimal oldTotal = nzAmt(invoice.getTotalAmount());
+        if (items != null && !items.isEmpty()) {
+            BigDecimal itemsSum = items.stream()
+                .map(it -> nzAmt(it.getTotalPrice()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (itemsSum.compareTo(BigDecimal.ZERO) > 0) {
+                oldTotal = itemsSum;
+            }
+        }
+        if (keep.compareTo(oldTotal) < 0 && items != null && !items.isEmpty()) {
+            BigDecimal assigned = BigDecimal.ZERO;
+            for (int i = 0; i < items.size(); i++) {
+                InvoiceItem item = items.get(i);
+                BigDecimal oldLine = nzAmt(item.getTotalPrice());
+                BigDecimal newLine;
+                if (i == items.size() - 1) {
+                    newLine = keep.subtract(assigned).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+                } else if (oldTotal.compareTo(BigDecimal.ZERO) > 0) {
+                    newLine = oldLine.multiply(keep).divide(oldTotal, 2, RoundingMode.HALF_UP);
+                    assigned = assigned.add(newLine);
+                } else {
+                    newLine = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                }
+                BigDecimal oldDisc = nzAmt(item.getDiscountAmount());
+                if (oldTotal.compareTo(BigDecimal.ZERO) > 0 && oldDisc.compareTo(BigDecimal.ZERO) > 0) {
+                    item.setDiscountAmount(oldDisc.multiply(keep).divide(oldTotal, 2, RoundingMode.HALF_UP));
+                }
+                RetailDiscountGst.applyInclusiveGst(item, newLine);
+                if (item.getQuantity() != null && item.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                    item.setUnitPrice(newLine.divide(item.getQuantity(), 2, RoundingMode.HALF_UP));
+                }
+                this.invoiceItemRepository.save(item);
+            }
+            BigDecimal totalCgst = items.stream()
+                .map(i -> nzAmt(i.getCgstAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal totalSgst = items.stream()
+                .map(i -> nzAmt(i.getSgstAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal subtotalBeforeTax = items.stream()
+                .map(i -> nzAmt(i.getTotalPrice()).subtract(nzAmt(i.getCgstAmount())).subtract(nzAmt(i.getSgstAmount())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal sumDisc = items.stream()
+                .map(i -> nzAmt(i.getDiscountAmount()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            invoice.setCgstAmount(totalCgst);
+            invoice.setSgstAmount(totalSgst);
+            invoice.setTaxAmount(totalCgst.add(totalSgst));
+            invoice.setSubtotal(subtotalBeforeTax);
+            invoice.setTotalAmount(keep);
+            invoice.setDiscountAmount(sumDisc);
+        }
+        applyRemainingPaymentMethod(invoice, card, upi);
+        invoice.setUpdatedAt(LocalDateTime.now());
+        this.invoiceRepository.save(invoice);
+        return false;
+    }
+
+    private static void applyRemainingPaymentMethod(Invoice invoice, BigDecimal card, BigDecimal upi) {
+        invoice.setCashAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        boolean hasCard = card.compareTo(BigDecimal.ZERO) > 0;
+        boolean hasUpi = upi.compareTo(BigDecimal.ZERO) > 0;
+        if (hasCard && hasUpi) {
+            invoice.setPaymentMethod(Invoice.PaymentMethod.MIXED);
+            invoice.setCardAmount(card);
+            invoice.setUpiAmount(upi);
+        } else if (hasCard) {
+            invoice.setPaymentMethod(Invoice.PaymentMethod.CARD);
+            invoice.setCardAmount(card);
+            invoice.setUpiAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        } else {
+            invoice.setPaymentMethod(Invoice.PaymentMethod.UPI);
+            invoice.setCardAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            invoice.setUpiAmount(upi);
+        }
+    }
+
+    private static BigDecimal nzAmt(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
     /**

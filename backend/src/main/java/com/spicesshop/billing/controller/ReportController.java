@@ -5,6 +5,7 @@ import com.spicesshop.billing.service.MonthlySalesExcelService;
 import com.spicesshop.billing.service.ReportService;
 import com.spicesshop.billing.util.CompanyExtractor;
 import jakarta.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -141,6 +142,33 @@ public class ReportController {
         }
     }
 
+    /** Manual B2C 5% / 18% taxable split for the selected month (GSTR-1 Table 7). */
+    @PostMapping({"/b2c-gst-split"})
+    public ResponseEntity<?> saveB2cGstSplit(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            Integer year = body.get("year") instanceof Number n ? n.intValue() : Integer.parseInt(String.valueOf(body.get("year")));
+            Integer month = body.get("month") instanceof Number n ? n.intValue() : Integer.parseInt(String.valueOf(body.get("month")));
+            BigDecimal taxable5 = toDecimal(body.get("taxable5"));
+            BigDecimal taxable18 = toDecimal(body.get("taxable18"));
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .body(this.gstr1ExportService.saveB2cGstSplit(companyName, year, month, taxable5, taxable18));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private static BigDecimal toDecimal(Object v) {
+        if (v == null || String.valueOf(v).isBlank()) {
+            return BigDecimal.ZERO;
+        }
+        return new BigDecimal(String.valueOf(v).trim());
+    }
+
     /**
      * GSTR-1 ready Excel export: 3 sheets – B2B_SALES, B2C_SUMMARY, MONTHLY_SUMMARY.
      * File name: GSTR1_Sales_Jan_2026.xlsx
@@ -195,14 +223,15 @@ public class ReportController {
     public ResponseEntity<?> getMonthlySalesExport(
             @RequestParam Integer year,
             @RequestParam Integer month,
+            @RequestParam(required = false, defaultValue = "all") String kind,
             HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
             if (companyName == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
             }
-            byte[] excel = this.monthlySalesExcelService.generateExcel(companyName, year, month);
-            String fileName = this.monthlySalesExcelService.getFileName(year, month);
+            byte[] excel = this.monthlySalesExcelService.generateExcel(companyName, year, month, kind);
+            String fileName = this.monthlySalesExcelService.getFileName(year, month, kind);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
             headers.setContentDispositionFormData("attachment", fileName);

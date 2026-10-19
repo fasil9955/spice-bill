@@ -187,12 +187,18 @@ const DailyAccountingPage = () => {
     try {
       const res = await invoiceService.deleteCashBillsForDate(isoDate);
       const deleted = res.data?.deleted ?? 0;
+      const mixedAdjusted = res.data?.mixedAdjusted ?? 0;
       const nextPreview = res.data?.nextPreview || '';
       closeCashDeleteModal();
+      const parts = [];
+      if (deleted > 0) parts.push(`Deleted ${deleted} cash bill(s)`);
+      if (mixedAdjusted > 0) {
+        parts.push(`removed cash from ${mixedAdjusted} mixed bill(s); those bills now equal card/UPI only`);
+      }
       window.alert(
-        deleted === 0
-          ? `No cash bills found for ${formatDisplayDate(isoDate)}.`
-          : `Deleted ${deleted} cash bill(s) for ${formatDisplayDate(isoDate)}. Remaining retail bills were GST-renumbered. Next bill: ${nextPreview}`
+        parts.length === 0
+          ? `No cash or mixed-with-cash bills found for ${formatDisplayDate(isoDate)}.`
+          : `${parts.join('. ')} for ${formatDisplayDate(isoDate)}. Remaining retail bills were GST-renumbered. Next bill: ${nextPreview}`
       );
       broadcastDataUpdate();
       window.location.reload();
@@ -556,7 +562,8 @@ const DailyAccountingPage = () => {
               This will permanently delete all <strong>cash</strong> retail bills for{' '}
               <strong>{formatDisplayDate(isoDate)}</strong>
               {dataLoaded ? ` (${cashBills.length} on this page)` : ''}.
-              Card, UPI, and mixed bills (even if they include some cash) are kept. Only bills paid fully as Cash are deleted. Stock is not added back.
+              Mixed bills that include cash are kept, with cash removed so the bill equals card/UPI only.
+              Pure card and UPI bills are unchanged. Only bills paid fully as Cash are deleted. Stock is not added back.
               Remaining retail bills are then GST-renumbered in date order.
             </p>
             {cashDeleteError && (

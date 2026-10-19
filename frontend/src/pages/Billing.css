@@ -1013,7 +1013,8 @@
   font-size: 14px;
 }
 .totals-discount {
-  color: #059669;
+  color: #111;
+  font-weight: 700;
 }
 
 /* Editable quantity in cart */
@@ -1393,7 +1394,8 @@
 }
 
 .btoc-preview-content .btoc-totals-row.btoc-discount {
-  color: #059669;
+  color: #111;
+  font-weight: 700;
 }
 
 .btoc-preview-content .btoc-payment {

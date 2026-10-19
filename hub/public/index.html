@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shop reports</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; }
+    h1 { font-size: 1.35rem; margin: 0 0 12px; }
+    label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: #cbd5e1; }
+    input, select, button { width: 100%; box-sizing: border-box; font-size: 1rem; padding: 12px; border-radius: 10px; border: 1px solid #334155; }
+    input, select { background: #1e293b; color: #fff; }
+    button { background: #4f46e5; color: #fff; font-weight: 700; border: none; margin-top: 12px; }
+    button.secondary { background: #334155; }
+    .card { background: #1e293b; border-radius: 14px; padding: 14px; margin: 10px 0; }
+    .row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #334155; }
+    .row:last-child { border-bottom: none; }
+    .muted { color: #94a3b8; font-size: 0.85rem; }
+    .err { color: #fca5a5; }
+    .bar { height: 8px; background: #312e81; border-radius: 99px; margin-top: 4px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: #818cf8; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app"></div>
+  <script>
+    const money = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const today = () => new Date().toISOString().slice(0, 10);
+    let token = sessionStorage.getItem('bossToken') || '';
+    let shops = [];
+    let shopId = '';
+    let date = today();
+
+    async function api(path, opts = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const res = await fetch(path, { ...opts, headers });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) { token = ''; sessionStorage.removeItem('bossToken'); throw new Error('Login expired'); }
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function renderLogin(err) {
+      document.getElementById('app').innerHTML = `
+        <h1>Boss reports</h1>
+        <p class="muted">Daily sales from each shop PC. Billing stays in the shop.</p>
+        ${err ? `<p class="err">${err}</p>` : ''}
+        <label>PIN</label>
+        <input id="pin" type="password" inputmode="numeric" />
+        <button id="go">Open</button>`;
+      document.getElementById('go').onclick = async () => {
+        try {
+          const out = await api('/api/login', { method: 'POST', body: JSON.stringify({ pin: document.getElementById('pin').value }) });
+          token = out.token;
+          sessionStorage.setItem('bossToken', token);
+          await loadHome();
+        } catch (e) { renderLogin(e.message); }
+      };
+    }
+
+    async function loadHome() {
+      shops = await api('/api/shops');
+      shopId = shopId || (shops[0] && shops[0].shop_id) || '';
+      const daily = shopId ? await api(`/api/daily?shopId=${encodeURIComponent(shopId)}&date=${date}`) : [];
+      const order = shopId ? await api(`/api/order?shopId=${encodeURIComponent(shopId)}&date=${date}`) : [];
+      const year = date.slice(0, 4);
+      const monthly = shopId ? await api(`/api/monthly?shopId=${encodeURIComponent(shopId)}&year=${year}`) : [];
+      const maxSales = Math.max(1, ...monthly.map((m) => m.sales || 0));
+      const d = daily[0] || null;
+      const shopOpts = shops.map((s) => `<option value="${s.shop_id}" ${s.shop_id === shopId ? 'selected' : ''}>${s.display_name}</option>`).join('');
+      document.getElementById('app').innerHTML = `
+        <h1>Boss reports</h1>
+        <label>Shop</label>
+        <select id="shop">${shopOpts}</select>
+        <label>Date</label>
+        <input id="dt" type="date" value="${date}" />
+        <div class="card">
+          <div class="muted">Sales ${date}</div>
+          <div style="font-size:1.8rem;font-weight:800">${d ? money(d.total_sales) : '—'}</div>
+          <div class="row"><span>Bills</span><span>${d ? d.total_invoices : '—'}</span></div>
+          <div class="row"><span>Cash</span><span>${d ? money(d.cash_sales) : '—'}</span></div>
+          <div class="row"><span>Card</span><span>${d ? money(d.card_sales) : '—'}</span></div>
+          <div class="row"><span>UPI</span><span>${d ? money(d.upi_sales) : '—'}</span></div>
+          <div class="row"><span>Mixed</span><span>${d ? money(d.mixed_sales) : '—'}</span></div>
+          <div class="row"><span>Expenses</span><span>${d ? money(d.expenses) : '—'}</span></div>
+          ${d && d.company_name ? `<p class="muted">${d.company_name}${daily.length > 1 ? ' +' + (daily.length - 1) : ''}</p>` : '<p class="muted">No snapshot yet for this date.</p>'}
+        </div>
+        <div class="card">
+          <strong>Required order</strong>
+          ${order.length ? order.map((o) => `<div class="row"><span>${o.product_name}</span><span>${o.quantity} / min ${o.min_stock_level}</span></div>`).join('') : '<p class="muted">None on this snapshot.</p>'}
+        </div>
+        <div class="card">
+          <strong>Monthly ${year}</strong>
+          ${monthly.length ? monthly.map((m) => `<div style="margin:10px 0"><div class="row"><span>M${m.month}</span><span>${money(m.sales)}</span></div><div class="bar"><i style="width:${Math.round(100 * (m.sales || 0) / maxSales)}%"></i></div></div>`).join('') : '<p class="muted">Graphs fill after shops sync.</p>'}
+        </div>
+        <button class="secondary" id="out">Log out</button>`;
+      document.getElementById('shop').onchange = (e) => { shopId = e.target.value; loadHome(); };
+      document.getElementById('dt').onchange = (e) => { date = e.target.value; loadHome(); };
+      document.getElementById('out').onclick = () => { token = ''; sessionStorage.removeItem('bossToken'); renderLogin(); };
+    }
+
+    if (token) loadHome().catch(() => renderLogin());
+    else renderLogin();
+  </script>
+</body>
+</html>

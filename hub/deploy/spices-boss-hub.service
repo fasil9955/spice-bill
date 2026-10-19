@@ -1,0 +1,16 @@
+[Unit]
+Description=Spices boss phone hub (not shop billing, not Spice Bazar)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=fasil
+WorkingDirectory=/home/fasil/projects/spices-boss-hub
+EnvironmentFile=/home/fasil/spices-boss-hub.env
+ExecStart=/usr/bin/node /home/fasil/projects/spices-boss-hub/server.js
+Restart=on-failure
+RestartSec=4
+MemoryMax=400M
+
+[Install]
+WantedBy=multi-user.target

@@ -24,7 +24,7 @@ const ReportsPage = () => {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [downloading, setDownloading] = useState(false);
-  const [downloadingSales, setDownloadingSales] = useState(false);
+  const [downloadingSales, setDownloadingSales] = useState(null);
   const [printingSales, setPrintingSales] = useState(false);
   const [error, setError] = useState(null);
   const [taxSummary, setTaxSummary] = useState(null);
@@ -35,6 +35,51 @@ const ReportsPage = () => {
   const [toolsBusy, setToolsBusy] = useState(false);
   const [toolsMsg, setToolsMsg] = useState('');
   const [toolsErr, setToolsErr] = useState('');
+  const [split5, setSplit5] = useState('');
+  const [split18, setSplit18] = useState('');
+
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const applySplitFromSummary = (data) => {
+    if (!data) {
+      setSplit5('');
+      setSplit18('');
+      return;
+    }
+    const remaining = round2(data.b2cRemainingTaxable);
+    let t5 = round2(data.b2cTaxable5);
+    let t18 = round2(data.b2cTaxable18);
+    if (!data.b2cSplitApplied) {
+      t5 = round2(data.b2cFromBills5);
+      t18 = round2(remaining - t5);
+    } else if (Math.abs(round2(t5 + t18) - remaining) > 0.02) {
+      t5 = round2(data.b2cFromBills5);
+      t18 = round2(remaining - t5);
+    }
+    if (t18 < 0) t18 = 0;
+    setSplit5(t5.toFixed(2));
+    setSplit18(t18.toFixed(2));
+  };
+
+  const loadTaxSummary = () => {
+    setTaxSummaryLoading(true);
+    return reportService
+      .getGSTR1Summary(year, month)
+      .then((res) => {
+        if (res?.data) {
+          setTaxSummary(res.data);
+          applySplitFromSummary(res.data);
+        }
+        return res?.data;
+      })
+      .catch(() => {
+        setTaxSummary(null);
+        return null;
+      })
+      .finally(() => {
+        setTaxSummaryLoading(false);
+      });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +88,10 @@ const ReportsPage = () => {
       reportService
         .getGSTR1Summary(year, month)
         .then((res) => {
-          if (!cancelled && res?.data) setTaxSummary(res.data);
+          if (!cancelled && res?.data) {
+            setTaxSummary(res.data);
+            applySplitFromSummary(res.data);
+          }
         })
         .catch(() => {
           if (!cancelled) setTaxSummary(null);
@@ -92,14 +140,23 @@ const ReportsPage = () => {
     try {
       const res = await invoiceService.deleteCashBillsForDates(fromDate, toDate);
       const deleted = res.data?.deleted ?? 0;
+      const mixedAdjusted = res.data?.mixedAdjusted ?? 0;
       const nextPreview = res.data?.nextPreview || '';
       const renumbered = res.data?.renumbered ?? 0;
+      const parts = [];
+      if (deleted > 0) parts.push(`Deleted ${deleted} cash bill(s)`);
+      if (mixedAdjusted > 0) {
+        parts.push(
+          `removed cash from ${mixedAdjusted} mixed bill(s); those bills now equal card/UPI only`
+        );
+      }
       setToolsMsg(
-        deleted === 0
-          ? `No cash bills in that date range. You can still re-sequence numbers.`
-          : `Deleted ${deleted} cash bill(s). Remaining retail bills re-numbered (${renumbered}). Next bill: ${nextPreview}`
+        parts.length === 0
+          ? `No cash or mixed-with-cash bills in that date range. You can still re-sequence numbers.`
+          : `${parts.join('. ')}. Remaining retail bills re-numbered (${renumbered}). Next bill: ${nextPreview}`
       );
       broadcastDataUpdate();
+      await loadTaxSummary();
     } catch (err) {
       setToolsErr(err.response?.data?.error || err.message || 'Failed to delete cash bills.');
     } finally {
@@ -121,11 +178,80 @@ const ReportsPage = () => {
           : `Re-sequenced ${updated} retail bill number(s). Next bill: ${nextPreview}. Reprint any bill already given to a customer.`
       );
       broadcastDataUpdate();
+      await loadTaxSummary();
     } catch (err) {
       setToolsErr(
         err.response?.data?.error
         || (err.code === 'ECONNABORTED' ? 'Timed out. Wait 1 minute, then try Re-sequence once.' : (err.message || 'Failed to re-sequence numbers.'))
       );
+    } finally {
+      setToolsBusy(false);
+    }
+  };
+
+  const remainingB2c = round2(taxSummary?.b2cRemainingTaxable);
+
+  const parseAmount = (raw) => {
+    const t = String(raw ?? '').replace(/,/g, '').trim();
+    if (t === '' || t === '.') return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const isAmountDraft = (raw) => /^\d*\.?\d{0,2}$/.test(String(raw ?? '').replace(/,/g, '').trim());
+
+  const commitSplit5 = (raw) => {
+    const n = parseAmount(raw);
+    const clamped = Math.min(remainingB2c, Math.max(0, round2(n ?? 0)));
+    setSplit5(clamped.toFixed(2));
+    setSplit18(round2(remainingB2c - clamped).toFixed(2));
+  };
+
+  const commitSplit18 = (raw) => {
+    const n = parseAmount(raw);
+    const clamped = Math.min(remainingB2c, Math.max(0, round2(n ?? 0)));
+    setSplit18(clamped.toFixed(2));
+    setSplit5(round2(remainingB2c - clamped).toFixed(2));
+  };
+
+  const onSplit5Change = (raw) => {
+    if (!isAmountDraft(raw)) return;
+    setSplit5(raw);
+    const n = parseAmount(raw);
+    if (n == null) return;
+    const clamped = Math.min(remainingB2c, Math.max(0, round2(n)));
+    setSplit18(round2(remainingB2c - clamped).toFixed(2));
+  };
+
+  const onSplit18Change = (raw) => {
+    if (!isAmountDraft(raw)) return;
+    setSplit18(raw);
+    const n = parseAmount(raw);
+    if (n == null) return;
+    const clamped = Math.min(remainingB2c, Math.max(0, round2(n)));
+    setSplit5(round2(remainingB2c - clamped).toFixed(2));
+  };
+
+  const handleSaveGstSplit = async () => {
+    const t5 = round2(split5);
+    const t18 = round2(split18);
+    if (Math.abs(round2(t5 + t18) - remainingB2c) > 0.02) {
+      setToolsErr(`5% and 18% must add up to remaining taxable ${remainingB2c.toFixed(2)}.`);
+      return;
+    }
+    setToolsBusy(true);
+    setToolsErr('');
+    try {
+      const res = await reportService.saveB2cGstSplit(year, month, t5, t18);
+      if (res?.data) {
+        setTaxSummary(res.data);
+        applySplitFromSummary(res.data);
+      }
+      setToolsMsg(
+        `Saved for ${MONTH_NAMES[month - 1]} ${year}: ₹${t5.toFixed(2)} at 5% and ₹${t18.toFixed(2)} at 18%. GSTR-1 Excel uses this split.`
+      );
+    } catch (err) {
+      setToolsErr(err.response?.data?.error || err.message || 'Failed to save GST split.');
     } finally {
       setToolsBusy(false);
     }
@@ -180,16 +306,20 @@ const ReportsPage = () => {
     }
   };
 
-  const handleMonthlySalesDownload = async () => {
+  const handleMonthlySalesDownload = async (kind = 'all') => {
     setError(null);
-    setDownloadingSales(true);
+    setDownloadingSales(kind);
+    const names = {
+      b2c: `Monthly_Sales_B2C_${MONTH_NAMES[month - 1]}_${year}.xlsx`,
+      b2b: `Monthly_Sales_B2B_${MONTH_NAMES[month - 1]}_${year}.xlsx`,
+    };
     try {
-      const res = await reportService.getMonthlySalesExport(year, month);
-      await downloadExcelBlob(res, `Monthly_Sales_${MONTH_NAMES[month - 1]}_${year}.xlsx`);
+      const res = await reportService.getMonthlySalesExport(year, month, kind);
+      await downloadExcelBlob(res, names[kind] || names.b2c);
     } catch (err) {
       setError(await excelErrorMessage(err));
     } finally {
-      setDownloadingSales(false);
+      setDownloadingSales(null);
     }
   };
 
@@ -199,8 +329,10 @@ const ReportsPage = () => {
     try {
       const res = await reportService.getMonthlySales(year, month);
       const data = res.data || {};
-      const bills = data.bills || [];
-      const totals = data.totals || {};
+      const b2c = data.b2c || [];
+      const b2b = data.b2b || [];
+      const b2cTotals = data.b2cTotals || {};
+      const b2bTotals = data.b2bTotals || {};
       let company = 'Our Spices Shop';
       try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -208,19 +340,24 @@ const ReportsPage = () => {
       } catch (_) {}
       const money = (v) =>
         `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      const rows = bills.map((b) => `
+      const b2cRows = b2c.map((b) => `
+        <tr>
+          <td>${b.date || ''}</td>
+          <td>${b.invoiceNo || ''}</td>
+          <td class="num">${money(b.total)}</td>
+        </tr>
+      `).join('');
+      const b2bRows = b2b.map((b) => `
         <tr>
           <td>${b.date || ''}</td>
           <td>${b.invoiceNo || ''}</td>
           <td>${b.type || ''}</td>
           <td>${b.customer || ''}</td>
-          <td>${b.phone || ''}</td>
+          <td>${b.gstin || ''}</td>
           <td class="num">${money(b.taxable)}</td>
-          <td class="num">${money(b.discount)}</td>
           <td class="num">${money(b.cgst)}</td>
           <td class="num">${money(b.sgst)}</td>
           <td class="num">${money(b.total)}</td>
-          <td>${b.payment || ''}</td>
           <td>${b.status || ''}</td>
         </tr>
       `).join('');
@@ -228,6 +365,7 @@ const ReportsPage = () => {
         <style>
           body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 16px; }
           h1 { font-size: 16px; margin: 0 0 4px; }
+          h2 { font-size: 13px; margin: 16px 0 8px; }
           p { margin: 0 0 12px; color: #444; }
           table { width: 100%; border-collapse: collapse; }
           th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
@@ -237,22 +375,33 @@ const ReportsPage = () => {
           @media print { body { padding: 0; } }
         </style></head><body>
         <h1>${company.replace(/</g, '&lt;')}</h1>
-        <p>Monthly sales — all bills — ${MONTH_NAMES[month - 1]} ${year}</p>
+        <p>Monthly sales — ${MONTH_NAMES[month - 1]} ${year}</p>
+        <h2>B2C (retail)</h2>
         <table>
           <thead><tr>
-            <th>Date</th><th>Invoice No</th><th>Type</th><th>Customer</th><th>Phone</th>
-            <th class="num">Taxable</th><th class="num">Discount</th><th class="num">CGST</th><th class="num">SGST</th>
-            <th class="num">Total</th><th>Payment</th><th>Status</th>
+            <th>Date</th><th>Invoice No</th><th class="num">Total</th>
           </tr></thead>
-          <tbody>${rows || '<tr><td colspan="12">No bills this month</td></tr>'}</tbody>
+          <tbody>${b2cRows || '<tr><td colspan="3">No B2C bills this month</td></tr>'}</tbody>
           <tfoot><tr>
-            <td colspan="5">Total (active bills: ${totals.activeBills ?? 0})</td>
-            <td class="num">${money(totals.taxable)}</td>
-            <td class="num">${money(totals.discount)}</td>
-            <td class="num">${money(totals.cgst)}</td>
-            <td class="num">${money(totals.sgst)}</td>
-            <td class="num">${money(totals.total)}</td>
-            <td></td><td></td>
+            <td colspan="2">Total (active bills: ${b2cTotals.activeBills ?? 0})</td>
+            <td class="num">${money(b2cTotals.total)}</td>
+          </tr></tfoot>
+        </table>
+        <h2>B2B</h2>
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Invoice No</th><th>Type</th><th>Customer</th><th>GSTIN</th>
+            <th class="num">Taxable</th><th class="num">CGST</th><th class="num">SGST</th>
+            <th class="num">Total</th><th>Status</th>
+          </tr></thead>
+          <tbody>${b2bRows || '<tr><td colspan="10">No B2B bills this month</td></tr>'}</tbody>
+          <tfoot><tr>
+            <td colspan="5">Total (active bills: ${b2bTotals.activeBills ?? 0})</td>
+            <td class="num">${money(b2bTotals.taxable)}</td>
+            <td class="num">${money(b2bTotals.cgst)}</td>
+            <td class="num">${money(b2bTotals.sgst)}</td>
+            <td class="num">${money(b2bTotals.total)}</td>
+            <td></td>
           </tr></tfoot>
         </table>
         </body></html>`;
@@ -285,8 +434,8 @@ const ReportsPage = () => {
       <section className="reports-section gstr1-section">
         <h2>Monthly sales (all bills)</h2>
         <p className="reports-desc">
-          Excel of every bill in the month: <strong>ALL_BILLS</strong>, <strong>B2C_BILLS</strong>, <strong>B2B_BILLS</strong>, and <strong>TOTALS</strong>.
-          This is the shop record / officer backup (bill by bill). GSTR-1 filing still uses the summary file below.
+          Shop record / officer backup (bill by bill). Download B2C or B2B Excel separately.
+          B2C Excel has date, invoice number and total only. GSTR-1 filing still uses the summary file below.
         </p>
         <div className="gstr1-controls">
           <div className="gstr1-field">
@@ -310,11 +459,23 @@ const ReportsPage = () => {
             <button
               type="button"
               className="gstr1-download-btn"
-              onClick={handleMonthlySalesDownload}
-              disabled={downloadingSales}
+              onClick={() => handleMonthlySalesDownload('b2c')}
+              disabled={!!downloadingSales}
             >
               <FileSpreadsheet size={18} />
-              {downloadingSales ? 'Downloading…' : 'Download Excel'}
+              {downloadingSales === 'b2c' ? 'Downloading…' : 'Download B2C Excel'}
+            </button>
+          </div>
+          <div className="gstr1-field gstr1-action">
+            <label>&nbsp;</label>
+            <button
+              type="button"
+              className="gstr1-download-btn"
+              onClick={() => handleMonthlySalesDownload('b2b')}
+              disabled={!!downloadingSales}
+            >
+              <FileSpreadsheet size={18} />
+              {downloadingSales === 'b2b' ? 'Downloading…' : 'Download B2B Excel'}
             </button>
           </div>
           <div className="gstr1-field gstr1-action">
@@ -381,6 +542,14 @@ const ReportsPage = () => {
                   <td className="reports-tax-amount">{formatMoney(taxSummary.taxableValue)}</td>
                 </tr>
                 <tr>
+                  <td>B2C taxable 5%</td>
+                  <td className="reports-tax-amount">{formatMoney(taxSummary.b2cTaxable5)}</td>
+                </tr>
+                <tr>
+                  <td>B2C taxable 18%</td>
+                  <td className="reports-tax-amount">{formatMoney(taxSummary.b2cTaxable18)}</td>
+                </tr>
+                <tr>
                   <td><strong>CGST</strong></td>
                   <td className="reports-tax-amount">{formatMoney(taxSummary.cgst)}</td>
                 </tr>
@@ -416,7 +585,8 @@ const ReportsPage = () => {
             <p className="reports-tools-step">1. Delete cash bills by date</p>
             <p className="reports-desc">
               Permanently deletes retail bills paid fully as <strong>Cash</strong> between the dates.
-              Card, UPI, mixed, and B2B are kept. Stock is not added back.
+              Mixed bills that include cash are kept, with the cash part removed so the bill total
+              matches card/UPI only. Pure card, UPI, and B2B are unchanged. Stock is not added back.
             </p>
             <div className="reports-tools-dates">
               <label>
@@ -448,6 +618,60 @@ const ReportsPage = () => {
               disabled={toolsBusy}
             >
               {toolsBusy ? 'Working…' : 'Re-sequence numbers'}
+            </button>
+            <p className="reports-tools-step">3. Remaining taxable — 5% / 18%</p>
+            <p className="reports-desc">
+              After cash bills are removed, remaining B2C taxable for <strong>{MONTH_NAMES[month - 1]} {year}</strong>
+              can be split for GSTR-1 (Table 7). Enter one amount; the other fills automatically.
+            </p>
+            <div className="reports-tools-split">
+              <div className="reports-tools-split-row">
+                <span>Remaining taxable</span>
+                <strong>{formatMoney(taxSummary?.b2cRemainingTaxable)}</strong>
+              </div>
+              <div className="reports-tools-split-row">
+                <span>On bills now (5% / 18%)</span>
+                <span>
+                  {formatMoney(taxSummary?.b2cFromBills5)} / {formatMoney(taxSummary?.b2cFromBills18)}
+                </span>
+              </div>
+              {Number(taxSummary?.b2cFromBillsOther) > 0.009 && (
+                <p className="reports-tools-split-hint">
+                  Other rates on bills: {formatMoney(taxSummary.b2cFromBillsOther)}. Your split below uses the full remaining taxable.
+                </p>
+              )}
+              <label>
+                Taxable under 5%
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={split5}
+                  disabled={toolsBusy || remainingB2c <= 0}
+                  onChange={(e) => onSplit5Change(e.target.value)}
+                  onBlur={() => commitSplit5(split5)}
+                />
+              </label>
+              <label>
+                Taxable under 18%
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={split18}
+                  disabled={toolsBusy || remainingB2c <= 0}
+                  onChange={(e) => onSplit18Change(e.target.value)}
+                  onBlur={() => commitSplit18(split18)}
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              className="gstr1-download-btn"
+              onClick={handleSaveGstSplit}
+              disabled={toolsBusy || remainingB2c <= 0}
+            >
+              {toolsBusy ? 'Working…' : 'Save 5% / 18% split'}
             </button>
             {toolsErr && <p className="reports-error">{toolsErr}</p>}
             {toolsMsg && <p className="reports-tools-ok">{toolsMsg}</p>}

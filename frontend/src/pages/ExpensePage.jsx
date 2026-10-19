@@ -27,6 +27,7 @@ const formatTime = (createdAt) => {
 
 const CREATE_NEW_VALUE = 'CREATE_NEW';
 const EMPLOYEE_VALUE = 'EMPLOYEE';
+const WRITE_ONCE_VALUE = 'WRITE_ONCE';
 
 const ExpensePage = () => {
   const [expenses, setExpenses] = useState([]);
@@ -34,7 +35,7 @@ const ExpensePage = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(getTodayDateString);
-  const [selectedType, setSelectedType] = useState(EMPLOYEE_VALUE); // 'CREATE_NEW' | 'EMPLOYEE' | String(categoryId)
+  const [selectedType, setSelectedType] = useState(WRITE_ONCE_VALUE); // 'WRITE_ONCE' | 'CREATE_NEW' | 'EMPLOYEE' | String(categoryId)
   const [newCategoryName, setNewCategoryName] = useState('');
   const [savingCategory, setSavingCategory] = useState(false);
   const [showManageCategories, setShowManageCategories] = useState(false);
@@ -104,6 +105,8 @@ const ExpensePage = () => {
   useEffect(() => {
     if (selectedType === EMPLOYEE_VALUE) {
       setForm((f) => ({ ...f, accountType: 'EMPLOYEE', otherName: '' }));
+    } else if (selectedType === WRITE_ONCE_VALUE) {
+      setForm((f) => ({ ...f, accountType: 'OTHER', otherName: '' }));
     } else if (selectedType !== CREATE_NEW_VALUE && selectedType !== '') {
       const cat = categories.find((c) => String(c.id) === String(selectedType));
       if (cat) setForm((f) => ({ ...f, accountType: 'OTHER', otherName: cat.name }));
@@ -120,7 +123,12 @@ const ExpensePage = () => {
     setForm({
       accountType: selectedType === EMPLOYEE_VALUE ? 'EMPLOYEE' : 'OTHER',
       employeeId: '',
-      otherName: selectedType !== EMPLOYEE_VALUE && selectedType !== CREATE_NEW_VALUE && selectedType !== '' ? (categories.find((c) => String(c.id) === String(selectedType))?.name || '') : '',
+      otherName:
+        selectedType === WRITE_ONCE_VALUE
+          ? ''
+          : selectedType !== EMPLOYEE_VALUE && selectedType !== CREATE_NEW_VALUE && selectedType !== ''
+            ? (categories.find((c) => String(c.id) === String(selectedType))?.name || '')
+            : '',
       amount: '0.00',
       paymentMethod: 'CASH',
       expenseDate: selectedDate || getTodayDateString(),
@@ -220,6 +228,7 @@ const ExpensePage = () => {
   const isToday = selectedDate === getTodayDateString();
   const isEmployeeType = selectedType === EMPLOYEE_VALUE;
   const isCreateNew = selectedType === CREATE_NEW_VALUE;
+  const isWriteOnce = selectedType === WRITE_ONCE_VALUE;
   const selectedCategory = categories.find((c) => String(c.id) === String(selectedType));
 
   const renderAddForm = () => (
@@ -231,6 +240,8 @@ const ExpensePage = () => {
         if (!Number.isFinite(amount) || amount <= 0) return;
         if (isEmployeeType) {
           if (!form.employeeId) return;
+        } else if (isWriteOnce) {
+          if (!(form.otherName || '').trim()) return;
         } else if (selectedCategory) {
           // category selected – use category name as otherName
         } else {
@@ -241,7 +252,11 @@ const ExpensePage = () => {
           .create({
             accountType: isEmployeeType ? 'EMPLOYEE' : 'OTHER',
             employeeId: isEmployeeType ? parseInt(form.employeeId, 10) : null,
-            otherName: !isEmployeeType && selectedCategory ? selectedCategory.name : (isEmployeeType ? null : (form.otherName || '').trim() || null),
+            otherName: isEmployeeType
+              ? null
+              : isWriteOnce
+                ? (form.otherName || '').trim()
+                : (selectedCategory ? selectedCategory.name : (form.otherName || '').trim() || null),
             amount,
             paymentMethod: form.paymentMethod || 'CASH',
             expenseDate: form.expenseDate || selectedDate || getTodayDateString(),
@@ -261,6 +276,7 @@ const ExpensePage = () => {
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
           >
+            <option value={WRITE_ONCE_VALUE}>Write expense (no category)</option>
             <option value={CREATE_NEW_VALUE}>+ Create new category</option>
             <option value={EMPLOYEE_VALUE}>Employee</option>
             {categories.map((c) => (
@@ -280,6 +296,18 @@ const ExpensePage = () => {
             <button type="button" className="expense-add-btn" onClick={handleCreateCategory} disabled={savingCategory || !(newCategoryName || '').trim()}>
               {savingCategory ? 'Saving…' : 'Save category'}
             </button>
+          </div>
+        )}
+        {isWriteOnce && (
+          <div className="expense-form-field expense-form-field-type">
+            <label>Description:</label>
+            <input
+              type="text"
+              placeholder="e.g. Auto fare, tea, packing"
+              value={form.otherName}
+              onChange={(e) => setForm({ ...form, otherName: e.target.value })}
+              required
+            />
           </div>
         )}
         {!isCreateNew && isEmployeeType && (
@@ -408,7 +436,7 @@ const ExpensePage = () => {
           </div>
           <div>
             <h1>Expenses</h1>
-            <p className="expense-header-subtitle">Add by type: Employee, Pigmi, Vegetable, Current bill, or create new</p>
+            <p className="expense-header-subtitle">Write a one-time expense, choose Employee, pick a category, or create a category</p>
           </div>
         </div>
         <button type="button" className="expense-dashboard-btn" onClick={() => navigate('/dashboard')}>

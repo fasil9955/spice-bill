@@ -1,6 +1,8 @@
 # Build output — keep using git add . for source only
 backend/target/
 frontend/node_modules/
+hub/node_modules/
+hub/.env
 frontend/dist/
 frontend/dist-ssr/
 

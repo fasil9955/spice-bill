@@ -1,8 +1,10 @@
 package com.spicesshop.billing.service;
 
 import com.spicesshop.billing.model.B2BCustomer;
+import com.spicesshop.billing.model.B2cGstSplit;
 import com.spicesshop.billing.model.Invoice;
 import com.spicesshop.billing.model.InvoiceItem;
+import com.spicesshop.billing.repository.B2cGstSplitRepository;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -28,6 +31,8 @@ public class GSTR1ExportService {
     private InvoiceService invoiceService;
     @Autowired
     private AuthService authService;
+    @Autowired
+    private B2cGstSplitRepository b2cGstSplitRepository;
 
     /**
      * Generate Excel file for the given month. File name pattern: GSTR1_Sales_Jan_2026.xlsx
@@ -52,8 +57,7 @@ public class GSTR1ExportService {
         List<B2BRow> b2bRows = buildB2BRows(b2bActive, sellerStateCode);
         addCancelledB2BRows(b2bRows, b2bCancelled);
 
-        // B2C rate-wise summary
-        List<B2CSummaryRow> b2cRows = buildB2CSummary(b2cInvoices);
+        List<B2CSummaryRow> b2cRows = applyB2cSplitOverride(companyName, year, month, buildB2CSummary(b2cInvoices));
 
         // Monthly summary
         MonthlySummary summary = buildMonthlySummary(b2bRows, b2cRows);
@@ -95,7 +99,8 @@ public class GSTR1ExportService {
 
         List<B2BRow> b2bRows = buildB2BRows(b2bActive, sellerStateCode);
         addCancelledB2BRows(b2bRows, b2bCancelled);
-        List<B2CSummaryRow> b2cRows = buildB2CSummary(b2cInvoices);
+        List<B2CSummaryRow> fromBills = buildB2CSummary(b2cInvoices);
+        List<B2CSummaryRow> b2cRows = applyB2cSplitOverride(companyName, year, month, fromBills);
         MonthlySummary summary = buildMonthlySummary(b2bRows, b2cRows);
 
         java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
@@ -119,7 +124,101 @@ public class GSTR1ExportService {
             "cgst", summary.b2cCgst.doubleValue(),
             "sgst", summary.b2cSgst.doubleValue(),
             "igst", summary.b2cIgst.doubleValue()));
+        putB2cSplitFields(out, fromBills, b2cRows, companyName, year, month);
         return out;
+    }
+
+    public java.util.Map<String, Object> saveB2cGstSplit(String companyName, int year, int month,
+            BigDecimal taxable5, BigDecimal taxable18) throws Exception {
+        if (month < 1 || month > 12) {
+            throw new IllegalArgumentException("Invalid month");
+        }
+        BigDecimal t5 = nvl(taxable5).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal t18 = nvl(taxable18).setScale(2, RoundingMode.HALF_UP);
+        if (t5.compareTo(BigDecimal.ZERO) < 0 || t18.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Taxable amounts cannot be negative");
+        }
+        List<Invoice> allInvoices = invoiceService.getMonthlyInvoices(companyName, year, month);
+        List<Invoice> b2cInvoices = allInvoices.stream()
+            .filter(i -> !Invoice.isB2bFamily(i.getInvoiceType()) && i.getStatus() == Invoice.InvoiceStatus.ACTIVE)
+            .toList();
+        BigDecimal remaining = taxableTotal(buildB2CSummary(b2cInvoices));
+        BigDecimal entered = t5.add(t18);
+        if (entered.subtract(remaining).abs().compareTo(new BigDecimal("0.02")) > 0) {
+            throw new IllegalArgumentException(
+                "5% and 18% taxable must add up to remaining taxable " + remaining.toPlainString());
+        }
+        t18 = remaining.subtract(t5).setScale(2, RoundingMode.HALF_UP);
+        if (t18.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("18% taxable cannot exceed remaining taxable");
+        }
+        B2cGstSplit split = b2cGstSplitRepository
+            .findByCompanyNameAndYearAndMonth(companyName, year, month)
+            .orElseGet(B2cGstSplit::new);
+        split.setCompanyName(companyName);
+        split.setYear(year);
+        split.setMonth(month);
+        split.setTaxable5(t5);
+        split.setTaxable18(t18);
+        split.setUpdatedAt(LocalDateTime.now());
+        b2cGstSplitRepository.save(split);
+        return getMonthlyTaxSummary(companyName, year, month);
+    }
+
+    private void putB2cSplitFields(java.util.Map<String, Object> out, List<B2CSummaryRow> fromBills,
+            List<B2CSummaryRow> usedRows, String companyName, int year, int month) {
+        BigDecimal remaining = taxableTotal(fromBills);
+        out.put("b2cRemainingTaxable", remaining.doubleValue());
+        out.put("b2cFromBills5", taxableAtRate(fromBills, 5).doubleValue());
+        out.put("b2cFromBills18", taxableAtRate(fromBills, 18).doubleValue());
+        out.put("b2cFromBillsOther", remaining.subtract(taxableAtRate(fromBills, 5)).subtract(taxableAtRate(fromBills, 18)).doubleValue());
+        boolean applied = b2cGstSplitRepository.findByCompanyNameAndYearAndMonth(companyName, year, month).isPresent();
+        out.put("b2cSplitApplied", applied);
+        out.put("b2cTaxable5", taxableAtRate(usedRows, 5).doubleValue());
+        out.put("b2cTaxable18", taxableAtRate(usedRows, 18).doubleValue());
+    }
+
+    private List<B2CSummaryRow> applyB2cSplitOverride(String companyName, int year, int month, List<B2CSummaryRow> fromBills) {
+        return b2cGstSplitRepository.findByCompanyNameAndYearAndMonth(companyName, year, month)
+            .map(split -> rowsFromSplit(nvl(split.getTaxable5()), nvl(split.getTaxable18())))
+            .orElse(fromBills);
+    }
+
+    private List<B2CSummaryRow> rowsFromSplit(BigDecimal taxable5, BigDecimal taxable18) {
+        List<B2CSummaryRow> rows = new ArrayList<>();
+        if (taxable5.compareTo(BigDecimal.ZERO) > 0) {
+            rows.add(rowForRate(5, taxable5));
+        }
+        if (taxable18.compareTo(BigDecimal.ZERO) > 0) {
+            rows.add(rowForRate(18, taxable18));
+        }
+        return rows;
+    }
+
+    private B2CSummaryRow rowForRate(int rate, BigDecimal taxableRaw) {
+        BigDecimal taxable = nvl(taxableRaw).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal halfRate = BigDecimal.valueOf(rate)
+            .divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
+            .divide(BigDecimal.valueOf(2), 4, RoundingMode.HALF_UP);
+        BigDecimal cgst = taxable.multiply(halfRate).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal sgst = taxable.multiply(halfRate).setScale(2, RoundingMode.HALF_UP);
+        return new B2CSummaryRow(rate, taxable, cgst, sgst, cgst.add(sgst).setScale(2, RoundingMode.HALF_UP));
+    }
+
+    private static BigDecimal taxableTotal(List<B2CSummaryRow> rows) {
+        return rows.stream().map(r -> r.taxableValue).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal taxableAtRate(List<B2CSummaryRow> rows, int rate) {
+        return rows.stream()
+            .filter(r -> r.gstRate == rate)
+            .map(r -> r.taxableValue)
+            .reduce(BigDecimal.ZERO, BigDecimal::add)
+            .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal nvl(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
     }
 
     private static int gstRateFromItem(InvoiceItem item) {

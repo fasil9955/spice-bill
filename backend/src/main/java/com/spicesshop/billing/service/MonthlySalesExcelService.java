@@ -40,7 +40,18 @@ public class MonthlySalesExcelService {
     private InvoiceService invoiceService;
 
     public String getFileName(int year, int month) {
-        return String.format("Monthly_Sales_%s_%d.xlsx", MONTH_NAMES[month - 1], year);
+        return getFileName(year, month, "all");
+    }
+
+    public String getFileName(int year, int month, String kind) {
+        String monthName = MONTH_NAMES[month - 1];
+        if ("b2c".equalsIgnoreCase(kind)) {
+            return String.format("Monthly_Sales_B2C_%s_%d.xlsx", monthName, year);
+        }
+        if ("b2b".equalsIgnoreCase(kind)) {
+            return String.format("Monthly_Sales_B2B_%s_%d.xlsx", monthName, year);
+        }
+        return String.format("Monthly_Sales_%s_%d.xlsx", monthName, year);
     }
 
     public Map<String, Object> getMonthlySales(String companyName, int year, int month) {
@@ -71,6 +82,10 @@ public class MonthlySalesExcelService {
     }
 
     public byte[] generateExcel(String companyName, int year, int month) throws Exception {
+        return generateExcel(companyName, year, month, "all");
+    }
+
+    public byte[] generateExcel(String companyName, int year, int month, String kind) throws Exception {
         Map<String, Object> data = getMonthlySales(companyName, year, month);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> all = (List<Map<String, Object>>) data.get("bills");
@@ -87,10 +102,17 @@ public class MonthlySalesExcelService {
             CellStyle moneyStyle = wb.createCellStyle();
             moneyStyle.setDataFormat(wb.createDataFormat().getFormat("#,##0.00"));
 
-            writeBillsSheet(wb, "ALL_BILLS", all, headerStyle, moneyStyle);
-            writeBillsSheet(wb, "B2C_BILLS", b2c, headerStyle, moneyStyle);
-            writeBillsSheet(wb, "B2B_BILLS", b2b, headerStyle, moneyStyle);
-            writeTotalsSheet(wb, data, headerStyle, moneyStyle);
+            String which = kind == null ? "all" : kind.trim().toLowerCase();
+            if ("b2c".equals(which)) {
+                writeB2cBillsSheet(wb, b2c, headerStyle, moneyStyle);
+            } else if ("b2b".equals(which)) {
+                writeBillsSheet(wb, "B2B_BILLS", b2b, headerStyle, moneyStyle);
+            } else {
+                writeBillsSheet(wb, "ALL_BILLS", all, headerStyle, moneyStyle);
+                writeB2cBillsSheet(wb, b2c, headerStyle, moneyStyle);
+                writeBillsSheet(wb, "B2B_BILLS", b2b, headerStyle, moneyStyle);
+                writeTotalsSheet(wb, data, headerStyle, moneyStyle);
+            }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             wb.write(out);
@@ -275,6 +297,39 @@ public class MonthlySalesExcelService {
             moneyCell(sum, 11, t.get("total"), moneyStyle);
         }
         for (int i = 0; i < BILL_HEADERS.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+    }
+
+    private static void writeB2cBillsSheet(
+        Workbook wb,
+        List<Map<String, Object>> rows,
+        CellStyle headerStyle,
+        CellStyle moneyStyle
+    ) {
+        Sheet sheet = wb.createSheet("B2C_BILLS");
+        String[] headers = { "Date", "Invoice No", "Total" };
+        Row header = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            Cell c = header.createCell(i);
+            c.setCellValue(headers[i]);
+            c.setCellStyle(headerStyle);
+        }
+        int r = 1;
+        for (Map<String, Object> row : rows) {
+            Row excel = sheet.createRow(r++);
+            excel.createCell(0).setCellValue(str(row.get("date")));
+            excel.createCell(1).setCellValue(str(row.get("invoiceNo")));
+            moneyCell(excel, 2, row.get("total"), moneyStyle);
+        }
+        if (!rows.isEmpty()) {
+            Row sum = sheet.createRow(r);
+            Cell label = sum.createCell(0);
+            label.setCellValue("TOTAL (active bills)");
+            label.setCellStyle(headerStyle);
+            moneyCell(sum, 2, totals(rows).get("total"), moneyStyle);
+        }
+        for (int i = 0; i < headers.length; i++) {
             sheet.autoSizeColumn(i);
         }
     }

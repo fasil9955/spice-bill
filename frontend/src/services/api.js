@@ -181,10 +181,12 @@ export const reportService = {
     api.get(`/reports/gstr1-export?year=${year}&month=${month}&_=${Date.now()}`, { responseType: 'blob' }),
   getMonthlySales: (year, month) =>
     api.get(`/reports/monthly-sales?year=${year}&month=${month}&_=${Date.now()}`),
-  getMonthlySalesExport: (year, month) =>
-    api.get(`/reports/monthly-sales-export?year=${year}&month=${month}&_=${Date.now()}`, { responseType: 'blob' }),
+  getMonthlySalesExport: (year, month, kind = 'all') =>
+    api.get(`/reports/monthly-sales-export?year=${year}&month=${month}&kind=${encodeURIComponent(kind)}&_=${Date.now()}`, { responseType: 'blob' }),
   getGSTR1Summary: (year, month) =>
     api.get(`/reports/gstr1-summary?year=${year}&month=${month}&_=${Date.now()}`),
+  saveB2cGstSplit: (year, month, taxable5, taxable18) =>
+    api.post('/reports/b2c-gst-split', { year, month, taxable5, taxable18 }),
   getDaily: (date) => api.get(`/reports/daily?date=${encodeURIComponent(date)}`),
   getDailyProductSales: (date, productIds = []) => {
     const ids = (productIds || []).filter((id) => id != null).join(',');
