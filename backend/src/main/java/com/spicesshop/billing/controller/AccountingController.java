@@ -53,6 +53,8 @@ public class AccountingController {
                 return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
             }
 
+            this.accountingDaySummaryService.purgeClearedDaysBeforeToday(companyName);
+
             AccountingDaySummary summary = this.accountingDaySummaryService.getSummary(companyName, date).orElse(null);
             BigDecimal billingBookSales = (summary != null && summary.getBillingBookSales() != null) ? 
                 summary.getBillingBookSales() : BigDecimal.ZERO;
@@ -135,29 +137,14 @@ public class AccountingController {
             if (companyName == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
             }
-            boolean alreadyCleared = this.accountingDaySummaryService.getSummary(companyName, date)
-                .map(s -> Boolean.TRUE.equals(s.getDayCloseCleared()))
-                .orElse(false);
-            if (alreadyCleared) {
-                return ResponseEntity.ok(Map.of(
-                    "ok", true,
-                    "hubSent", false,
-                    "expensesCleared", 0,
-                    "alreadyCleared", true
-                ));
-            }
             boolean hubSent = this.bossHubSyncService.pushDayClose(companyName, date);
-            int staffMoved = this.expenseService.moveEmployeeExpensesToStaffForDate(companyName, date);
-            int otherExpensesCleared = this.expenseService.deleteNonEmployeeExpensesForDate(companyName, date);
-            this.accountingDaySummaryService.clearEnteredValues(companyName, date, true);
+            this.accountingDaySummaryService.markDayCloseCleared(companyName, date);
             boolean queued = !hubSent && this.bossHubSyncService.isConfigured()
                 && this.bossHubSyncService.isQueued(companyName, date);
             return ResponseEntity.ok(Map.of(
                 "ok", true,
                 "hubSent", hubSent,
                 "queued", queued,
-                "expensesCleared", otherExpensesCleared,
-                "staffMoved", staffMoved,
                 "alreadyCleared", false
             ));
         } catch (Exception e) {
@@ -177,7 +164,7 @@ public class AccountingController {
             }
             int staffMoved = this.expenseService.moveEmployeeExpensesToStaffForDate(companyName, date);
             int otherExpenses = this.expenseService.deleteNonEmployeeExpensesForDate(companyName, date);
-            this.accountingDaySummaryService.clearEnteredValues(companyName, date, false);
+            this.accountingDaySummaryService.clearEnteredValues(companyName, date, true);
             return ResponseEntity.ok(Map.of(
                 "ok", true,
                 "otherExpensesCleared", otherExpenses,
@@ -204,6 +191,23 @@ public class AccountingController {
                 "staffMoved", staffMoved,
                 "daysCleared", days
             ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Same day only: show day-close fields again to edit and print/send again. */
+    @PostMapping({"/restore-today"})
+    public ResponseEntity<?> restoreToday(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            this.accountingDaySummaryService.reopenTodayForEdit(companyName, date);
+            return ResponseEntity.ok(Map.of("ok", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

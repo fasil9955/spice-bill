@@ -6,7 +6,6 @@ import {
   expenseService,
   employeeService,
 } from '../services/api';
-import { broadcastDataUpdate } from '../utils/dataSync';
 import { ArrowLeft, Printer, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import './DailyAccountingPage.css';
 
@@ -73,11 +72,9 @@ const DailyAccountingPage = () => {
   const [cardAmount, setCardAmount] = useState('');
   const [gpayName, setGpayName] = useState('');
   const [gpayAmount, setGpayAmount] = useState('');
-  const [cashDeleteChecked, setCashDeleteChecked] = useState(false);
-  const [cashDeleteBusy, setCashDeleteBusy] = useState(false);
-  const [cashDeleteError, setCashDeleteError] = useState('');
   const [dayCloseCleared, setDayCloseCleared] = useState(false);
   const [printBusy, setPrintBusy] = useState(false);
+  const [restoreBusy, setRestoreBusy] = useState(false);
 
   const navigate = useNavigate();
 
@@ -134,7 +131,7 @@ const DailyAccountingPage = () => {
       setDayCloseCleared(cleared);
       const allExp = Array.isArray(expRes?.data) ? expRes.data : [];
       const otherOnly = allExp.filter((e) => String(e.accountType || '').toUpperCase() !== 'EMPLOYEE');
-      setExpenses(cleared ? [] : otherOnly);
+      setExpenses(otherOnly);
       setEmployees(Array.isArray(empRes?.data) ? empRes.data : []);
     } catch (err) {
       console.error('Load data failed', err);
@@ -178,38 +175,22 @@ const DailyAccountingPage = () => {
     loadData();
   };
 
-  const cashBills = invoices.filter((i) => (i.paymentMethod || 'CASH') === 'CASH');
+  const isToday = isoDate === getTodayDateString();
 
-  const closeCashDeleteModal = () => {
-    setCashDeleteChecked(false);
-    setCashDeleteError('');
-  };
-
-  const handleDeleteCashBills = async () => {
-    setCashDeleteBusy(true);
-    setCashDeleteError('');
+  const handleHiddenRestore = async () => {
+    if (restoreBusy) return;
+    if (!isToday) {
+      window.alert('Only today’s day-close can be opened for edit. Older dates stay closed.');
+      return;
+    }
+    setRestoreBusy(true);
     try {
-      const res = await invoiceService.deleteCashBillsForDate(isoDate);
-      const deleted = res.data?.deleted ?? 0;
-      const mixedAdjusted = res.data?.mixedAdjusted ?? 0;
-      const nextPreview = res.data?.nextPreview || '';
-      closeCashDeleteModal();
-      const parts = [];
-      if (deleted > 0) parts.push(`Deleted ${deleted} cash bill(s)`);
-      if (mixedAdjusted > 0) {
-        parts.push(`removed cash from ${mixedAdjusted} mixed bill(s); those bills now equal card/UPI only`);
-      }
-      window.alert(
-        parts.length === 0
-          ? `No cash or mixed-with-cash bills found for ${formatDisplayDate(isoDate)}.`
-          : `${parts.join('. ')} for ${formatDisplayDate(isoDate)}. Remaining retail bills were GST-renumbered. Next bill: ${nextPreview}`
-      );
-      broadcastDataUpdate();
-      window.location.reload();
+      await accountingService.restoreToday(isoDate);
+      await loadData();
     } catch (err) {
-      setCashDeleteError(err.response?.data?.error || 'Failed to delete cash bills.');
+      window.alert(err.response?.data?.error || 'Could not reopen today’s day-close.');
     } finally {
-      setCashDeleteBusy(false);
+      setRestoreBusy(false);
     }
   };
 
@@ -475,22 +456,15 @@ const DailyAccountingPage = () => {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
-    if (dayCloseCleared || printBusy) return;
+    if (printBusy) return;
     setPrintBusy(true);
     try {
       await persistAccountingSummary();
-      const res = await accountingService.dayClosePrint(isoDate);
+      await accountingService.dayClosePrint(isoDate);
       setDayCloseCleared(true);
-      setExpenses([]);
-      setCardEntries([]);
-      setGpayEntries([]);
-      setBillingBookSales('');
-      if (res?.data?.queued) {
-        /* printed locally; boss pack is waiting for internet */
-      }
     } catch (err) {
       console.error('Day close send failed', err);
-      window.alert(err.response?.data?.error || 'Printed. Could not save day-close clear. Try Print Report again when the shop computer is ready.');
+      window.alert(err.response?.data?.error || 'Printed. Could not save day-close. Try Print Report again when the shop computer is ready.');
     } finally {
       setPrintBusy(false);
     }
@@ -544,17 +518,13 @@ const DailyAccountingPage = () => {
 
       <div className="daily-accounting-header">
         <div className="daily-accounting-title-block">
-          <label className="daily-accounting-cash-delete-hidden">
-            <input
-              type="checkbox"
-              checked={cashDeleteChecked}
-              onChange={(e) => {
-                setCashDeleteError('');
-                setCashDeleteChecked(e.target.checked);
-              }}
-              aria-label="Delete cash bills"
-            />
-          </label>
+          <button
+            type="button"
+            className="daily-accounting-cash-delete-hidden"
+            aria-label="Reopen today day-close"
+            onClick={handleHiddenRestore}
+            disabled={restoreBusy}
+          />
           <div>
             <h1>Accounting &amp; Day Close</h1>
             <p>Manage daily accounting and payment splits.</p>
@@ -569,48 +539,6 @@ const DailyAccountingPage = () => {
           </button>
         </div>
       </div>
-
-      {cashDeleteChecked && (
-        <div
-          className="daily-accounting-gate-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="daily-accounting-cash-delete-title"
-        >
-          <div className="daily-accounting-gate-modal">
-            <h2 id="daily-accounting-cash-delete-title">Delete cash bills</h2>
-            <p>
-              This will permanently delete all <strong>cash</strong> retail bills for{' '}
-              <strong>{formatDisplayDate(isoDate)}</strong>
-              {dataLoaded ? ` (${cashBills.length} on this page)` : ''}.
-              Mixed bills that include cash are kept, with cash removed so the bill equals card/UPI only.
-              Pure card and UPI bills are unchanged. Only bills paid fully as Cash are deleted. Stock is not added back.
-              Remaining retail bills are then GST-renumbered in date order.
-            </p>
-            {cashDeleteError && (
-              <p className="daily-accounting-cash-delete-error">{cashDeleteError}</p>
-            )}
-            <div className="daily-accounting-gate-actions">
-              <button
-                type="button"
-                className="daily-accounting-cash-delete-confirm"
-                onClick={handleDeleteCashBills}
-                disabled={cashDeleteBusy}
-              >
-                {cashDeleteBusy ? 'Deleting…' : `Delete cash bills for ${formatDisplayDate(isoDate)}`}
-              </button>
-              <button
-                type="button"
-                className="daily-accounting-gate-secondary"
-                onClick={closeCashDeleteModal}
-                disabled={cashDeleteBusy}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div id="daily-accounting-print-area" className="daily-accounting-print-area" aria-hidden="true" />
 

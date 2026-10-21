@@ -769,6 +769,10 @@
   margin: 4px 0 0;
   cursor: pointer;
   flex-shrink: 0;
+  opacity: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
 }
 
 .daily-accounting-cash-delete-hidden input {

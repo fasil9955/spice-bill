@@ -538,8 +538,8 @@ const Settings = () => {
           <h2><Trash2 size={20} /> Clear Accounting &amp; Day Close entries</h2>
           <p className="settings-field-hint">
             Removes values you typed on Accounting &amp; Day Close: billing book, card/UPI payment split, and
-            other expenses. <strong>System bill totals stay.</strong> Employee payouts are moved to
-            <strong>Staff → employee account</strong> and removed from this page. Cash balance stays.
+            other expenses, payment split, and the balance check. <strong>System bill totals stay.</strong> Employee payouts are moved to
+            <strong>Staff → employee account</strong>. Cash balance stays. The accounting page then shows only system sales and cash.
           </p>
           <div className="form-group" style={{ marginTop: 12, maxWidth: 280 }}>
             <label>Date</label>

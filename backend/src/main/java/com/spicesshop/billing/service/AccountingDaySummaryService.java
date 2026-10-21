@@ -4,6 +4,7 @@ import com.spicesshop.billing.model.AccountingDaySummary;
 import com.spicesshop.billing.repository.AccountingDaySummaryRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,9 @@ public class AccountingDaySummaryService {
 
     @Autowired
     private AccountingDaySummaryRepository accountingDaySummaryRepository;
+
+    @Autowired
+    private ExpenseService expenseService;
 
     public Optional<AccountingDaySummary> getSummary(String companyName, LocalDate reportDate) {
         return this.accountingDaySummaryRepository.findByCompanyNameAndReportDate(companyName, reportDate);
@@ -83,10 +87,45 @@ public class AccountingDaySummaryService {
             summary.setBillingBookSales(BigDecimal.ZERO);
             summary.setClosingGpayTotal(BigDecimal.ZERO);
             summary.setPaymentDetailsJson("{\"cards\":[],\"upis\":[]}");
-            summary.setDayCloseCleared(false);
+            summary.setDayCloseCleared(true);
             this.accountingDaySummaryRepository.save(summary);
             n++;
         }
         return n;
+    }
+
+    @Transactional
+    public AccountingDaySummary reopenTodayForEdit(String companyName, LocalDate reportDate) {
+        if (!LocalDate.now().equals(reportDate)) {
+            throw new RuntimeException("Only today's day-close can be edited");
+        }
+        AccountingDaySummary summary = this.accountingDaySummaryRepository
+            .findByCompanyNameAndReportDate(companyName, reportDate)
+            .orElseGet(AccountingDaySummary::new);
+        summary.setCompanyName(companyName);
+        summary.setReportDate(reportDate);
+        if (summary.getBillingBookSales() == null) {
+            summary.setBillingBookSales(BigDecimal.ZERO);
+        }
+        summary.setDayCloseCleared(false);
+        return this.accountingDaySummaryRepository.save(summary);
+    }
+
+    /** Yesterday and older printed days: move staff payouts, wipe other expenses and splits. Cash stays. */
+    @Transactional
+    public void purgeClearedDaysBeforeToday(String companyName) {
+        LocalDate today = LocalDate.now();
+        List<AccountingDaySummary> old = this.accountingDaySummaryRepository
+            .findByCompanyNameAndDayCloseClearedTrueAndReportDateBefore(companyName, today);
+        for (AccountingDaySummary summary : old) {
+            LocalDate d = summary.getReportDate();
+            this.expenseService.moveEmployeeExpensesToStaffForDate(companyName, d);
+            this.expenseService.deleteNonEmployeeExpensesForDate(companyName, d);
+            summary.setBillingBookSales(BigDecimal.ZERO);
+            summary.setClosingGpayTotal(BigDecimal.ZERO);
+            summary.setPaymentDetailsJson("{\"cards\":[],\"upis\":[]}");
+            summary.setDayCloseCleared(true);
+            this.accountingDaySummaryRepository.save(summary);
+        }
     }
 }

@@ -12,4 +12,7 @@ public interface AccountingDaySummaryRepository extends JpaRepository<Accounting
     Optional<AccountingDaySummary> findByCompanyNameAndReportDate(String companyName, LocalDate reportDate);
 
     List<AccountingDaySummary> findByCompanyName(String companyName);
+
+    List<AccountingDaySummary> findByCompanyNameAndDayCloseClearedTrueAndReportDateBefore(
+        String companyName, LocalDate reportDate);
 }

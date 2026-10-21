@@ -147,6 +147,7 @@ export const accountingService = {
   getDaySummary: (date) => api.get(`/accounting/summary?date=${date}`),
   updateDaySummary: (date, data) => api.post(`/accounting/summary?date=${date}`, data),
   dayClosePrint: (date) => api.post(`/accounting/day-close-print?date=${date}`),
+  restoreToday: (date) => api.post(`/accounting/restore-today?date=${date}`),
   clearEntered: (date) => api.post(`/accounting/clear-entered?date=${date}`),
   clearEnteredAll: () => api.post('/accounting/clear-entered-all'),
 };
