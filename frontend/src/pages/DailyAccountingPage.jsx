@@ -140,8 +140,7 @@ const DailyAccountingPage = () => {
       const cleared = !!sumData?.dayCloseCleared;
       setDayCloseCleared(cleared);
       const allExp = Array.isArray(expRes?.data) ? expRes.data : [];
-      const otherOnly = allExp.filter((e) => String(e.accountType || '').toUpperCase() !== 'EMPLOYEE');
-      setExpenses(otherOnly);
+      setExpenses(allExp);
       setEmployees(Array.isArray(empRes?.data) ? empRes.data : []);
     } catch (err) {
       console.error('Load data failed', err);

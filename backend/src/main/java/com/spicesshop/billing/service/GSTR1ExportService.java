@@ -1,5 +1,6 @@
 package com.spicesshop.billing.service;
 
+import com.spicesshop.billing.dto.CompanyDetailsResponse;
 import com.spicesshop.billing.model.B2BCustomer;
 import com.spicesshop.billing.model.B2cGstSplit;
 import com.spicesshop.billing.model.Invoice;
@@ -38,7 +39,8 @@ public class GSTR1ExportService {
      * Generate Excel file for the given month. File name pattern: GSTR1_Sales_Jan_2026.xlsx
      */
     public byte[] generateExcel(String companyName, int year, int month) throws Exception {
-        String sellerGstin = authService.getCompanyDetails(companyName).getGstNumber();
+        CompanyDetailsResponse company = authService.getCompanyDetails(companyName);
+        String sellerGstin = company.getGstNumber();
         String sellerStateCode = (sellerGstin != null && sellerGstin.length() >= 2)
             ? sellerGstin.substring(0, 2) : "";
 
@@ -62,10 +64,11 @@ public class GSTR1ExportService {
         // Monthly summary
         MonthlySummary summary = buildMonthlySummary(b2bRows, b2cRows);
 
+        String period = getFileName(year, month).replace("GSTR1_Sales_", "").replace(".xlsx", "").replace("_", " ");
         try (Workbook wb = new XSSFWorkbook()) {
-            writeSheet1B2BSales(wb, b2bRows);
-            writeSheet2B2CSummary(wb, b2cRows);
-            writeSheet3MonthlySummary(wb, summary);
+            writeSheet1B2BSales(wb, b2bRows, company, period);
+            writeSheet2B2CSummary(wb, b2cRows, company, period);
+            writeSheet3MonthlySummary(wb, summary, company, period);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             wb.write(out);
             return out.toByteArray();
@@ -473,20 +476,48 @@ public class GSTR1ExportService {
         );
     }
 
-    private void writeSheet1B2BSales(Workbook wb, List<B2BRow> rows) {
+    private static int writeShopHeader(Sheet sheet, CompanyDetailsResponse company, String period, CellStyle bold) {
+        int r = 0;
+        Row n = sheet.createRow(r++);
+        Cell l0 = n.createCell(0);
+        l0.setCellValue("Shop name");
+        l0.setCellStyle(bold);
+        n.createCell(1).setCellValue(company != null && company.getCompanyName() != null ? company.getCompanyName() : "");
+        Row g = sheet.createRow(r++);
+        Cell l1 = g.createCell(0);
+        l1.setCellValue("GSTIN");
+        l1.setCellStyle(bold);
+        g.createCell(1).setCellValue(company != null && company.getGstNumber() != null ? company.getGstNumber() : "");
+        Row a = sheet.createRow(r++);
+        Cell l2 = a.createCell(0);
+        l2.setCellValue("Address");
+        l2.setCellStyle(bold);
+        a.createCell(1).setCellValue(company != null && company.getAddress() != null ? company.getAddress() : "");
+        if (period != null && !period.isBlank()) {
+            Row p = sheet.createRow(r++);
+            Cell l3 = p.createCell(0);
+            l3.setCellValue("Period");
+            l3.setCellStyle(bold);
+            p.createCell(1).setCellValue(period);
+        }
+        sheet.createRow(r++);
+        return r;
+    }
+
+    private void writeSheet1B2BSales(Workbook wb, List<B2BRow> rows, CompanyDetailsResponse company, String period) {
         Sheet sheet = wb.createSheet("B2B_SALES");
         String[] headers = {"buyer_gstin", "buyer_state_code", "invoice_no", "invoice_date", "gst_rate", "taxable_value", "cgst_amount", "sgst_amount", "igst_amount", "invoice_total", "remarks"};
-        Row headerRow = sheet.createRow(0);
         CellStyle headerStyle = wb.createCellStyle();
         Font font = wb.createFont();
         font.setBold(true);
         headerStyle.setFont(font);
+        int rowNum = writeShopHeader(sheet, company, period, headerStyle);
+        Row headerRow = sheet.createRow(rowNum++);
         for (int i = 0; i < headers.length; i++) {
             Cell c = headerRow.createCell(i);
             c.setCellValue(headers[i]);
             c.setCellStyle(headerStyle);
         }
-        int rowNum = 1;
         for (B2BRow r : rows) {
             Row row = sheet.createRow(rowNum++);
             row.createCell(0).setCellValue(r.buyerGstin);
@@ -506,20 +537,20 @@ public class GSTR1ExportService {
         }
     }
 
-    private void writeSheet2B2CSummary(Workbook wb, List<B2CSummaryRow> rows) {
+    private void writeSheet2B2CSummary(Workbook wb, List<B2CSummaryRow> rows, CompanyDetailsResponse company, String period) {
         Sheet sheet = wb.createSheet("B2C_SUMMARY");
         String[] headers = {"gst_rate", "taxable_value", "cgst_amount", "sgst_amount", "total_tax"};
-        Row headerRow = sheet.createRow(0);
         CellStyle headerStyle = wb.createCellStyle();
         Font font = wb.createFont();
         font.setBold(true);
         headerStyle.setFont(font);
+        int rowNum = writeShopHeader(sheet, company, period, headerStyle);
+        Row headerRow = sheet.createRow(rowNum++);
         for (int i = 0; i < headers.length; i++) {
             Cell c = headerRow.createCell(i);
             c.setCellValue(headers[i]);
             c.setCellStyle(headerStyle);
         }
-        int rowNum = 1;
         for (B2CSummaryRow r : rows) {
             Row row = sheet.createRow(rowNum++);
             row.createCell(0).setCellValue(r.gstRate);
@@ -533,20 +564,20 @@ public class GSTR1ExportService {
         }
     }
 
-    private void writeSheet3MonthlySummary(Workbook wb, MonthlySummary s) {
+    private void writeSheet3MonthlySummary(Workbook wb, MonthlySummary s, CompanyDetailsResponse company, String period) {
         Sheet sheet = wb.createSheet("MONTHLY_SUMMARY");
         String[] headers = {"sale_type", "taxable_value", "cgst", "sgst", "igst", "total_tax"};
-        Row headerRow = sheet.createRow(0);
         CellStyle headerStyle = wb.createCellStyle();
         Font font = wb.createFont();
         font.setBold(true);
         headerStyle.setFont(font);
+        int rowNum = writeShopHeader(sheet, company, period, headerStyle);
+        Row headerRow = sheet.createRow(rowNum++);
         for (int i = 0; i < headers.length; i++) {
             Cell c = headerRow.createCell(i);
             c.setCellValue(headers[i]);
             c.setCellStyle(headerStyle);
         }
-        int rowNum = 1;
         writeSummaryRow(sheet, rowNum++, "B2B – Same State", s.b2bSameTaxable, s.b2bSameCgst, s.b2bSameSgst, s.b2bSameIgst);
         writeSummaryRow(sheet, rowNum++, "B2B – Other State", s.b2bOtherTaxable, s.b2bOtherCgst, s.b2bOtherSgst, s.b2bOtherIgst);
         writeSummaryRow(sheet, rowNum++, "B2C – Local", s.b2cTaxable, s.b2cCgst, s.b2cSgst, s.b2cIgst);

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ml">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Shop reports</title>
+  <title>ബോസ് റിപ്പോർട്ട്</title>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; }
+    body { margin: 0; font-family: system-ui, "Noto Sans Malayalam", sans-serif; background: #0f172a; color: #f8fafc; }
     .wrap { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; }
     h1 { font-size: 1.35rem; margin: 0 0 12px; }
     label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: #cbd5e1; }
@@ -27,6 +27,13 @@
   <script>
     const money = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const n = (v) => Number(v || 0);
+    const payMl = (m) => {
+      const u = String(m || '').toUpperCase();
+      if (u === 'CASH') return 'ക്യാഷ്';
+      if (u === 'CARD') return 'കാർഡ്';
+      if (u === 'UPI') return 'യുപിഐ';
+      return m || '';
+    };
     const today = () => new Date().toISOString().slice(0, 10);
     let token = sessionStorage.getItem('bossToken') || '';
     let shops = [];
@@ -38,19 +45,19 @@
       if (token) headers.Authorization = 'Bearer ' + token;
       const res = await fetch(path, { ...opts, headers });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 401) { token = ''; sessionStorage.removeItem('bossToken'); throw new Error('Login expired'); }
-      if (!res.ok) throw new Error(data.error || 'Request failed');
+      if (res.status === 401) { token = ''; sessionStorage.removeItem('bossToken'); throw new Error('വീണ്ടും ലോഗിൻ ചെയ്യുക'); }
+      if (!res.ok) throw new Error(data.error === 'Wrong PIN' ? 'തെറ്റായ പിൻ' : (data.error || 'പിശക്'));
       return data;
     }
 
     function renderLogin(err) {
       document.getElementById('app').innerHTML = `
-        <h1>Boss reports</h1>
-        <p class="muted">Daily sales from each shop PC. Billing stays in the shop.</p>
+        <h1>ബോസ് റിപ്പോർട്ട്</h1>
+        <p class="muted">ഓരോ ഷോപ്പിലെയും ദിവസ വിൽപ്പന. ബില്ലിങ് ഷോപ്പിൽ തന്നെ.</p>
         ${err ? `<p class="err">${err}</p>` : ''}
-        <label>PIN</label>
+        <label>പിൻ</label>
         <input id="pin" type="password" inputmode="numeric" />
-        <button id="go">Open</button>`;
+        <button id="go">തുറക്കുക</button>`;
       document.getElementById('go').onclick = async () => {
         try {
           const out = await api('/api/login', { method: 'POST', body: JSON.stringify({ pin: document.getElementById('pin').value }) });
@@ -71,63 +78,63 @@
       const d = pack.snapshot;
       const shopOpts = shops.map((s) => `<option value="${s.shop_id}" ${s.shop_id === shopId ? 'selected' : ''}>${s.display_name}</option>`).join('');
       const expHtml = (pack.expenses || []).length
-        ? pack.expenses.map((e) => `<div class="row"><span>${e.item_name} <span class="muted">${e.payment_method || ''}</span></span><span>${money(e.amount)}</span></div>`).join('')
-        : '<p class="muted">No expenses on this snapshot.</p>';
+        ? pack.expenses.map((e) => `<div class="row"><span>${e.item_name} <span class="muted">${payMl(e.payment_method)}</span></span><span>${money(e.amount)}</span></div>`).join('')
+        : '<p class="muted">ഈ ദിവസം ചെലവ് ഇല്ല.</p>';
       const empHtml = (pack.employees || []).length
-        ? pack.employees.map((e) => `<div class="row" style="flex-direction:column;align-items:stretch;gap:2px"><strong>${e.employee_name}</strong><span class="muted">${e.designation || ''} ${e.phone || ''}</span><span>Salary ${money(e.salary)} · Taken ${money(e.taken)} · Net ${money(e.net_pay)}</span></div>`).join('')
-        : '<p class="muted">No staff rows on this snapshot.</p>';
+        ? pack.employees.map((e) => `<div class="row" style="flex-direction:column;align-items:stretch;gap:2px"><strong>${e.employee_name}</strong><span class="muted">${e.designation || ''} ${e.phone || ''}</span><span>ശമ്പളം ${money(e.salary)} · എടുത്തത് ${money(e.taken)} · നെറ്റ് ${money(e.net_pay)}</span></div>`).join('')
+        : '<p class="muted">ജീവനക്കാർ ഇല്ല.</p>';
       const order = pack.order || [];
       const pays = pack.payments || [];
       const systemSales = d ? (n(d.system_sales) || (n(d.billing_book_sales) ? 0 : n(d.total_sales))) : 0;
       const billingBook = d ? n(d.billing_book_sales) : 0;
       const totalSales = d ? (n(d.system_sales) || n(d.billing_book_sales) ? systemSales + billingBook : n(d.total_sales)) : 0;
       const payHtml = pays.length
-        ? pays.map((p) => `<div class="row"><span>${p.item_name} (${p.payment_method || ''})</span><span>${money(p.amount)}</span></div>`).join('')
-        : `<div class="row"><span>Card</span><span>${d ? money(d.payment_card) : '—'}</span></div>
-           <div class="row"><span>UPI</span><span>${d ? money(d.payment_upi) : '—'}</span></div>`;
+        ? pays.map((p) => `<div class="row"><span>${p.item_name} (${payMl(p.payment_method)})</span><span>${money(p.amount)}</span></div>`).join('')
+        : `<div class="row"><span>കാർഡ്</span><span>${d ? money(d.payment_card) : '—'}</span></div>
+           <div class="row"><span>യുപിഐ</span><span>${d ? money(d.payment_upi) : '—'}</span></div>`;
       const payTotal = d ? n(d.payment_card) + n(d.payment_upi) + n(d.closing_cash) + n(d.closing_upi) : 0;
       const bal = d ? n(d.balance_result) : 0;
-      const balWord = bal < 0 ? 'more' : bal > 0 ? 'shortage' : 'tally';
+      const balWord = bal < 0 ? 'കൂടുതൽ' : bal > 0 ? 'കുറവ്' : 'ശരി';
       document.getElementById('app').innerHTML = `
-        <h1>Boss reports</h1>
-        <label>Shop</label>
+        <h1>ബോസ് റിപ്പോർട്ട്</h1>
+        <label>ഷോപ്പ്</label>
         <select id="shop">${shopOpts}</select>
-        <label>Date</label>
+        <label>തീയതി</label>
         <input id="dt" type="date" value="${date}" />
         <div class="card">
-          <strong>Accounting &amp; Day Close</strong>
-          <p class="muted">Date ${date}${d && d.company_name ? ' · ' + d.company_name : ''}</p>
-          <div class="muted" style="margin-top:10px">Sales</div>
-          <div class="row"><span>System Sales</span><span>${d ? money(systemSales) : '—'}</span></div>
-          <div class="row"><span>Billing Book</span><span>${d ? money(billingBook) : '—'}</span></div>
-          <div class="row"><span><strong>Total Sales</strong></span><span style="font-size:1.25rem;font-weight:800">${d ? money(totalSales) : '—'}</span></div>
-          <div class="muted" style="margin-top:10px">Opening Balance</div>
-          <div class="row"><span>Cash</span><span>${d ? money(d.opening_cash) : '—'}</span></div>
-          ${d && n(d.opening_upi) ? `<div class="row"><span>UPI</span><span>${money(d.opening_upi)}</span></div>` : ''}
-          <div class="muted" style="margin-top:10px">Expenses</div>
+          <strong>അക്കൗണ്ടിങ് &amp; ദിവസം അടയ്ക്കൽ</strong>
+          <p class="muted">തീയതി ${date}${d && d.company_name ? ' · ' + d.company_name : ''}</p>
+          <div class="muted" style="margin-top:10px">വിൽപ്പന</div>
+          <div class="row"><span>സിസ്റ്റം വിൽപ്പന</span><span>${d ? money(systemSales) : '—'}</span></div>
+          <div class="row"><span>ബില്ലിങ് ബുക്ക്</span><span>${d ? money(billingBook) : '—'}</span></div>
+          <div class="row"><span><strong>ആകെ വിൽപ്പന</strong></span><span style="font-size:1.25rem;font-weight:800">${d ? money(totalSales) : '—'}</span></div>
+          <div class="muted" style="margin-top:10px">ഓപ്പണിങ് ബാലൻസ്</div>
+          <div class="row"><span>ക്യാഷ്</span><span>${d ? money(d.opening_cash) : '—'}</span></div>
+          ${d && n(d.opening_upi) ? `<div class="row"><span>യുപിഐ</span><span>${money(d.opening_upi)}</span></div>` : ''}
+          <div class="muted" style="margin-top:10px">ചെലവ്</div>
           ${expHtml}
-          <div class="row"><span><strong>Total Expenses</strong></span><span>${d ? money(d.expenses) : '—'}</span></div>
-          <div class="muted" style="margin-top:10px">Payments (Card+GPay+Cash)</div>
+          <div class="row"><span><strong>ആകെ ചെലവ്</strong></span><span>${d ? money(d.expenses) : '—'}</span></div>
+          <div class="muted" style="margin-top:10px">പേയ്‌മെന്റ് (കാർഡ് + യുപിഐ + ക്യാഷ്)</div>
           ${payHtml}
-          <div class="row"><span>Cash Balance</span><span>${d ? money(d.closing_cash) : '—'}</span></div>
-          ${d && n(d.closing_upi) ? `<div class="row"><span>UPI Balance</span><span>${money(d.closing_upi)}</span></div>` : ''}
-          <div class="row"><span><strong>Total</strong></span><span>${d ? money(payTotal) : '—'}</span></div>
+          <div class="row"><span>ക്യാഷ് ബാലൻസ്</span><span>${d ? money(d.closing_cash) : '—'}</span></div>
+          ${d && n(d.closing_upi) ? `<div class="row"><span>യുപിഐ ബാലൻസ്</span><span>${money(d.closing_upi)}</span></div>` : ''}
+          <div class="row"><span><strong>ആകെ</strong></span><span>${d ? money(payTotal) : '—'}</span></div>
           <p style="text-align:center;font-weight:800;margin:12px 0 0">${d ? balWord + ': ' + money(Math.abs(bal)) : ''}</p>
-          ${d ? '' : '<p class="muted">No snapshot yet. Print day-close at the shop after the hub update.</p>'}
+          ${d ? '' : '<p class="muted">ഷോപ്പിൽ ദിവസം അടയ്ക്കൽ പ്രിന്റ് ചെയ്താൽ ഇവിടെ കാണാം.</p>'}
         </div>
         <div class="card">
-          <strong>Employees &amp; salary</strong>
+          <strong>ജീവനക്കാരും ശമ്പളവും</strong>
           ${empHtml}
         </div>
         <div class="card">
-          <strong>Required order</strong>
-          ${order.length ? order.map((o) => `<div class="row"><span>${o.product_name}</span><span>${o.quantity} / min ${o.min_stock_level}</span></div>`).join('') : '<p class="muted">None on this snapshot.</p>'}
+          <strong>ഓർഡർ വേണ്ടവ</strong>
+          ${order.length ? order.map((o) => `<div class="row"><span>${o.product_name}</span><span>${o.quantity} / മിനിമം ${o.min_stock_level}</span></div>`).join('') : '<p class="muted">ഈ ദിവസം ഇല്ല.</p>'}
         </div>
         <div class="card">
-          <strong>Monthly ${year}</strong>
-          ${monthly.length ? monthly.map((m) => `<div style="margin:10px 0"><div class="row"><span>M${m.month}</span><span>${money(m.sales)}</span></div><div class="bar"><i style="width:${Math.round(100 * (m.sales || 0) / maxSales)}%"></i></div></div>`).join('') : '<p class="muted">Graphs fill after shops sync.</p>'}
+          <strong>മാസ വിൽപ്പന ${year}</strong>
+          ${monthly.length ? monthly.map((m) => `<div style="margin:10px 0"><div class="row"><span>മാസം ${m.month}</span><span>${money(m.sales)}</span></div><div class="bar"><i style="width:${Math.round(100 * (m.sales || 0) / maxSales)}%"></i></div></div>`).join('') : '<p class="muted">ഷോപ്പ് അയച്ചാൽ ഗ്രാഫ് വരും.</p>'}
         </div>
-        <button class="secondary" id="out">Log out</button>`;
+        <button class="secondary" id="out">ലോഗ് ഔട്ട്</button>`;
       document.getElementById('shop').onchange = (e) => { shopId = e.target.value; loadHome(); };
       document.getElementById('dt').onchange = (e) => { date = e.target.value; loadHome(); };
       document.getElementById('out').onclick = () => { token = ''; sessionStorage.removeItem('bossToken'); renderLogin(); };

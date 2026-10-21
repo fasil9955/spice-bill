@@ -1,5 +1,6 @@
 package com.spicesshop.billing.service;
 
+import com.spicesshop.billing.dto.CompanyDetailsResponse;
 import com.spicesshop.billing.model.B2BCustomer;
 import com.spicesshop.billing.model.Invoice;
 import java.io.ByteArrayOutputStream;
@@ -38,6 +39,8 @@ public class MonthlySalesExcelService {
 
     @Autowired
     private InvoiceService invoiceService;
+    @Autowired
+    private AuthService authService;
 
     public String getFileName(int year, int month) {
         return getFileName(year, month, "all");
@@ -93,6 +96,8 @@ public class MonthlySalesExcelService {
         List<Map<String, Object>> b2c = (List<Map<String, Object>>) data.get("b2c");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> b2b = (List<Map<String, Object>>) data.get("b2b");
+        CompanyDetailsResponse company = authService.getCompanyDetails(companyName);
+        String period = getFileName(year, month).replace("Monthly_Sales_", "").replace(".xlsx", "").replace("_", " ");
 
         try (Workbook wb = new XSSFWorkbook()) {
             CellStyle headerStyle = wb.createCellStyle();
@@ -104,14 +109,14 @@ public class MonthlySalesExcelService {
 
             String which = kind == null ? "all" : kind.trim().toLowerCase();
             if ("b2c".equals(which)) {
-                writeB2cBillsSheet(wb, b2c, headerStyle, moneyStyle);
+                writeB2cBillsSheet(wb, b2c, headerStyle, moneyStyle, company, period);
             } else if ("b2b".equals(which)) {
-                writeBillsSheet(wb, "B2B_BILLS", b2b, headerStyle, moneyStyle);
+                writeBillsSheet(wb, "B2B_BILLS", b2b, headerStyle, moneyStyle, company, period);
             } else {
-                writeBillsSheet(wb, "ALL_BILLS", all, headerStyle, moneyStyle);
-                writeB2cBillsSheet(wb, b2c, headerStyle, moneyStyle);
-                writeBillsSheet(wb, "B2B_BILLS", b2b, headerStyle, moneyStyle);
-                writeTotalsSheet(wb, data, headerStyle, moneyStyle);
+                writeBillsSheet(wb, "ALL_BILLS", all, headerStyle, moneyStyle, company, period);
+                writeB2cBillsSheet(wb, b2c, headerStyle, moneyStyle, company, period);
+                writeBillsSheet(wb, "B2B_BILLS", b2b, headerStyle, moneyStyle, company, period);
+                writeTotalsSheet(wb, data, headerStyle, moneyStyle, company, period);
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -252,21 +257,51 @@ public class MonthlySalesExcelService {
         return out;
     }
 
+    private static int writeShopHeader(Sheet sheet, CompanyDetailsResponse company, String period, CellStyle bold) {
+        int r = 0;
+        Row n = sheet.createRow(r++);
+        Cell l0 = n.createCell(0);
+        l0.setCellValue("Shop name");
+        l0.setCellStyle(bold);
+        n.createCell(1).setCellValue(company != null && company.getCompanyName() != null ? company.getCompanyName() : "");
+        Row g = sheet.createRow(r++);
+        Cell l1 = g.createCell(0);
+        l1.setCellValue("GSTIN");
+        l1.setCellStyle(bold);
+        g.createCell(1).setCellValue(company != null && company.getGstNumber() != null ? company.getGstNumber() : "");
+        Row a = sheet.createRow(r++);
+        Cell l2 = a.createCell(0);
+        l2.setCellValue("Address");
+        l2.setCellStyle(bold);
+        a.createCell(1).setCellValue(company != null && company.getAddress() != null ? company.getAddress() : "");
+        if (period != null && !period.isBlank()) {
+            Row p = sheet.createRow(r++);
+            Cell l3 = p.createCell(0);
+            l3.setCellValue("Period");
+            l3.setCellStyle(bold);
+            p.createCell(1).setCellValue(period);
+        }
+        sheet.createRow(r++);
+        return r;
+    }
+
     private static void writeBillsSheet(
         Workbook wb,
         String name,
         List<Map<String, Object>> rows,
         CellStyle headerStyle,
-        CellStyle moneyStyle
+        CellStyle moneyStyle,
+        CompanyDetailsResponse company,
+        String period
     ) {
         Sheet sheet = wb.createSheet(name);
-        Row header = sheet.createRow(0);
+        int r = writeShopHeader(sheet, company, period, headerStyle);
+        Row header = sheet.createRow(r++);
         for (int i = 0; i < BILL_HEADERS.length; i++) {
             Cell c = header.createCell(i);
             c.setCellValue(BILL_HEADERS[i]);
             c.setCellStyle(headerStyle);
         }
-        int r = 1;
         for (Map<String, Object> row : rows) {
             Row excel = sheet.createRow(r++);
             excel.createCell(0).setCellValue(str(row.get("date")));
@@ -305,17 +340,19 @@ public class MonthlySalesExcelService {
         Workbook wb,
         List<Map<String, Object>> rows,
         CellStyle headerStyle,
-        CellStyle moneyStyle
+        CellStyle moneyStyle,
+        CompanyDetailsResponse company,
+        String period
     ) {
         Sheet sheet = wb.createSheet("B2C_BILLS");
         String[] headers = { "Date", "Invoice No", "Total" };
-        Row header = sheet.createRow(0);
+        int r = writeShopHeader(sheet, company, period, headerStyle);
+        Row header = sheet.createRow(r++);
         for (int i = 0; i < headers.length; i++) {
             Cell c = header.createCell(i);
             c.setCellValue(headers[i]);
             c.setCellStyle(headerStyle);
         }
-        int r = 1;
         for (Map<String, Object> row : rows) {
             Row excel = sheet.createRow(r++);
             excel.createCell(0).setCellValue(str(row.get("date")));
@@ -338,19 +375,22 @@ public class MonthlySalesExcelService {
         Workbook wb,
         Map<String, Object> data,
         CellStyle headerStyle,
-        CellStyle moneyStyle
+        CellStyle moneyStyle,
+        CompanyDetailsResponse company,
+        String period
     ) {
         Sheet sheet = wb.createSheet("TOTALS");
         String[] headers = {"Group", "Bills", "Active", "Taxable", "Discount", "CGST", "SGST", "Total"};
-        Row header = sheet.createRow(0);
+        int start = writeShopHeader(sheet, company, period, headerStyle);
+        Row header = sheet.createRow(start);
         for (int i = 0; i < headers.length; i++) {
             Cell c = header.createCell(i);
             c.setCellValue(headers[i]);
             c.setCellStyle(headerStyle);
         }
-        writeTotalRow(sheet, 1, "All sales", (Map<?, ?>) data.get("totals"), moneyStyle);
-        writeTotalRow(sheet, 2, "B2C (retail)", (Map<?, ?>) data.get("b2cTotals"), moneyStyle);
-        writeTotalRow(sheet, 3, "B2B", (Map<?, ?>) data.get("b2bTotals"), moneyStyle);
+        writeTotalRow(sheet, start + 1, "All sales", (Map<?, ?>) data.get("totals"), moneyStyle);
+        writeTotalRow(sheet, start + 2, "B2C (retail)", (Map<?, ?>) data.get("b2cTotals"), moneyStyle);
+        writeTotalRow(sheet, start + 3, "B2B", (Map<?, ?>) data.get("b2bTotals"), moneyStyle);
         for (int i = 0; i < headers.length; i++) {
             sheet.autoSizeColumn(i);
         }
