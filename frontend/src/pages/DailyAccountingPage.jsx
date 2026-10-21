@@ -56,6 +56,10 @@ const DailyAccountingPage = () => {
   const [employees, setEmployees] = useState([]);
 
   const [openingCash, setOpeningCash] = useState('');
+  const [openingUpi, setOpeningUpi] = useState('');
+  const [showOpeningUpi, setShowOpeningUpi] = useState(false);
+  const [cbUpi, setCbUpi] = useState('');
+  const [showCbUpi, setShowCbUpi] = useState(false);
 
   const [cardEntries, setCardEntries] = useState([]);
   const [gpayEntries, setGpayEntries] = useState([]);
@@ -98,7 +102,13 @@ const DailyAccountingPage = () => {
       const sumData = sumRes?.data;
       setBillingBookSales(sumData?.billingBookSales != null ? String(sumData.billingBookSales) : '');
       setOpeningCash(sumData?.openingCash != null ? String(sumData.openingCash) : '');
+      const openUpi = sumData?.openingUpi != null ? String(sumData.openingUpi) : '';
+      setOpeningUpi(openUpi);
+      setShowOpeningUpi((parseFloat(openUpi) || 0) > 0);
       setCashBalance(sumData?.closingCash != null ? String(sumData.closingCash) : '');
+      const closeUpi = sumData?.closingUpi != null ? String(sumData.closingUpi) : '';
+      setCbUpi(closeUpi);
+      setShowCbUpi((parseFloat(closeUpi) || 0) > 0);
 
       let nextCards = [];
       let nextUpis = [];
@@ -212,10 +222,12 @@ const DailyAccountingPage = () => {
   const totalCardManual = cardEntries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const totalGpayManual = gpayEntries.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const cashBalanceNum = parseFloat(cashBalance) || 0;
-  const totalPayments = totalCardManual + totalGpayManual + cashBalanceNum;
+  const cbUpiNum = parseFloat(cbUpi) || 0;
+  const totalPayments = totalCardManual + totalGpayManual + cashBalanceNum + cbUpiNum;
 
   const openingCashNum = parseFloat(openingCash) || 0;
-  const balanceResult = totalSales + openingCashNum - totalExpenses - totalPayments;
+  const openingUpiNum = parseFloat(openingUpi) || 0;
+  const balanceResult = totalSales + openingCashNum + openingUpiNum - totalExpenses - totalPayments;
 
   const preventNumberScroll = (e) => {
     e.target.blur();
@@ -232,6 +244,7 @@ const DailyAccountingPage = () => {
     upis,
     closingCashOverride,
     closingGpayOverride,
+    closingUpiOverride,
     sendCustomerPhones,
   } = {}) => {
     const c = cards ?? cardEntries;
@@ -241,6 +254,7 @@ const DailyAccountingPage = () => {
     const closingCashVal = closingCashOverride !== undefined ? closingCashOverride : (parseFloat(cashBalance) || 0);
     const closingGpayVal =
       closingGpayOverride !== undefined ? closingGpayOverride : u.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const closingUpiVal = closingUpiOverride !== undefined ? closingUpiOverride : (parseFloat(cbUpi) || 0);
     const paymentDetailsJson = JSON.stringify({
       cards: c.map((e) => ({ name: e.name || 'Card', amount: String(e.amount ?? '') })),
       upis: u.map((e) => ({ name: e.name || 'GPay/UPI', amount: String(e.amount ?? '') })),
@@ -250,6 +264,7 @@ const DailyAccountingPage = () => {
         billingBookSales: billingVal,
         closingCash: closingCashVal,
         closingGpayTotal: closingGpayVal,
+        closingUpi: closingUpiVal,
         paymentDetailsJson,
         sendCustomerPhones: sendCustomerPhones === true,
       });
@@ -416,6 +431,7 @@ const DailyAccountingPage = () => {
       <p class="print-row"><strong>Total Sales:</strong><span class="print-amount">₹${totalSales.toFixed(2)}</span></p>
       <h2>Opening Balance</h2>
       <p class="print-row">Cash:<span class="print-amount">₹${openingCashNum.toFixed(2)}</span></p>
+      ${openingUpiNum ? `<p class="print-row">UPI:<span class="print-amount">₹${openingUpiNum.toFixed(2)}</span></p>` : ''}
       <h2>Expenses</h2>
       ${expensesListHtml}
       <p class="print-row"><strong>Total Expenses:</strong><span class="print-amount">₹${totalExpenses.toFixed(2)}</span></p>
@@ -449,6 +465,7 @@ const DailyAccountingPage = () => {
               : '')
       }
       <p class="print-row">Cash Balance:<span class="print-amount">₹${cashBalanceNum.toFixed(2)}</span></p>
+      ${cbUpiNum ? `<p class="print-row">UPI Balance:<span class="print-amount">₹${cbUpiNum.toFixed(2)}</span></p>` : ''}
       <p class="print-row"><strong>Total:</strong><span class="print-amount">₹${totalPayments.toFixed(2)}</span></p>
       <p class="last-row">${moreOrShortage}</p>
       </body></html>
@@ -608,6 +625,29 @@ const DailyAccountingPage = () => {
                   className="daily-accounting-input"
                 />
               </div>
+              {showOpeningUpi ? (
+                <div className="daily-accounting-opening-row">
+                  <label>UPI</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={openingUpi}
+                    onChange={(e) => setOpeningUpi(e.target.value)}
+                    placeholder="0.00"
+                    onWheel={preventNumberScroll}
+                    className="daily-accounting-input"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="daily-accounting-add-gpay-btn"
+                  onClick={() => setShowOpeningUpi(true)}
+                >
+                  + Add UPI (optional)
+                </button>
+              )}
             </div>
             )}
           </div>
@@ -856,6 +896,31 @@ const DailyAccountingPage = () => {
                       className="daily-accounting-payment-input daily-accounting-payment-amount"
                     />
                   </div>
+                  {showCbUpi && (
+                    <div className="daily-accounting-payment-row">
+                      <label className="daily-accounting-payment-label">UPI Balance</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={cbUpi}
+                        onChange={(e) => setCbUpi(e.target.value)}
+                        onBlur={() => persistAccountingSummary()}
+                        onWheel={preventNumberScroll}
+                        className="daily-accounting-payment-input daily-accounting-payment-amount"
+                      />
+                    </div>
+                  )}
+                  {!dayCloseCleared && !showCbUpi && (
+                    <button
+                      type="button"
+                      className="daily-accounting-add-gpay-btn"
+                      onClick={() => setShowCbUpi(true)}
+                    >
+                      + Add UPI as cash balance (optional)
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -870,7 +935,7 @@ const DailyAccountingPage = () => {
               </div>
               <div className="daily-accounting-balance-row">
                 <span>+ Opening Balance:</span>
-                <span>₹{openingCashNum.toFixed(2)}</span>
+                <span>₹{(openingCashNum + openingUpiNum).toFixed(2)}</span>
               </div>
               <div className="daily-accounting-balance-row">
                 <span>− Total Expenses:</span>

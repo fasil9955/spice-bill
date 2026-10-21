@@ -1,5 +1,6 @@
 package com.spicesshop.billing.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.spicesshop.billing.model.AccountingDaySummary;
 import com.spicesshop.billing.model.DailySalesReport;
@@ -207,15 +208,61 @@ public class BossHubSyncService {
                 upiIn = upiIn.add(nz(inv.getUpiAmount()));
             }
 
-            BigDecimal leftoverCash = cashIn.subtract(expCash);
-            BigDecimal leftoverCard = cardIn.subtract(expCard);
-            BigDecimal leftoverUpi = upiIn.subtract(expUpi);
-            BigDecimal leftoverTotal = nz(daily.getTotalSales()).subtract(expenseTotal);
-
-            BigDecimal closingCash = this.accountingDaySummaryRepository
+            AccountingDaySummary summary = this.accountingDaySummaryRepository
                 .findByCompanyNameAndReportDate(companyName, date)
-                .map(AccountingDaySummary::getClosingCash)
-                .orElse(BigDecimal.ZERO);
+                .orElse(null);
+            AccountingDaySummary yesterday = this.accountingDaySummaryRepository
+                .findByCompanyNameAndReportDate(companyName, date.minusDays(1))
+                .orElse(null);
+
+            BigDecimal systemSales = nz(daily.getTotalSales());
+            BigDecimal billingBook = summary != null ? nz(summary.getBillingBookSales()) : BigDecimal.ZERO;
+            BigDecimal totalSales = systemSales.add(billingBook);
+            BigDecimal closingCash = summary != null ? nz(summary.getClosingCash()) : BigDecimal.ZERO;
+            BigDecimal closingUpi = summary != null ? nz(summary.getClosingUpi()) : BigDecimal.ZERO;
+            BigDecimal openingCash = yesterday != null ? nz(yesterday.getClosingCash()) : BigDecimal.ZERO;
+            BigDecimal openingUpi = yesterday != null ? nz(yesterday.getClosingUpi()) : BigDecimal.ZERO;
+
+            BigDecimal paymentCard = BigDecimal.ZERO;
+            BigDecimal paymentUpi = BigDecimal.ZERO;
+            List<Map<String, Object>> paymentLines = new ArrayList<>();
+            if (summary != null && summary.getPaymentDetailsJson() != null && !summary.getPaymentDetailsJson().isBlank()) {
+                try {
+                    JsonNode pd = objectMapper.readTree(summary.getPaymentDetailsJson());
+                    if (pd.has("cards") && pd.get("cards").isArray()) {
+                        for (JsonNode c : pd.get("cards")) {
+                            BigDecimal amt = jsonMoney(c.get("amount"));
+                            paymentCard = paymentCard.add(amt);
+                            Map<String, Object> line = new LinkedHashMap<>();
+                            line.put("name", c.has("name") ? c.get("name").asText("Card") : "Card");
+                            line.put("paymentMethod", "CARD");
+                            line.put("amount", amt);
+                            paymentLines.add(line);
+                        }
+                    }
+                    if (pd.has("upis") && pd.get("upis").isArray()) {
+                        for (JsonNode u : pd.get("upis")) {
+                            BigDecimal amt = jsonMoney(u.get("amount"));
+                            paymentUpi = paymentUpi.add(amt);
+                            Map<String, Object> line = new LinkedHashMap<>();
+                            line.put("name", u.has("name") ? u.get("name").asText("UPI") : "UPI");
+                            line.put("paymentMethod", "UPI");
+                            line.put("amount", amt);
+                            paymentLines.add(line);
+                        }
+                    }
+                } catch (Exception ignore) {
+                    /* keep zeros */
+                }
+            }
+
+            BigDecimal balanceResult = totalSales.add(openingCash).add(openingUpi)
+                .subtract(expenseTotal)
+                .subtract(paymentCard)
+                .subtract(paymentUpi)
+                .subtract(closingCash)
+                .subtract(closingUpi);
+            String balanceLabel = balanceResult.signum() < 0 ? "more" : (balanceResult.signum() > 0 ? "shortage" : "tally");
 
             List<Map<String, Object>> lowStock = new ArrayList<>();
             int n = 0;
@@ -258,7 +305,9 @@ public class BossHubSyncService {
             body.put("companyName", companyName);
             body.put("date", date.toString());
             body.put("totalInvoices", daily.getTotalInvoices());
-            body.put("totalSales", daily.getTotalSales());
+            body.put("totalSales", totalSales);
+            body.put("systemSales", systemSales);
+            body.put("billingBookSales", billingBook);
             body.put("totalTax", daily.getTotalTax());
             body.put("totalDiscount", daily.getTotalDiscount());
             body.put("totalItemsSold", daily.getTotalItemsSold());
@@ -267,11 +316,19 @@ public class BossHubSyncService {
             body.put("upiSales", upiIn);
             body.put("mixedSales", daily.getMixedSales());
             body.put("expenses", expenseTotal);
-            body.put("leftoverTotal", leftoverTotal);
-            body.put("leftoverCash", leftoverCash);
-            body.put("leftoverCard", leftoverCard);
-            body.put("leftoverUpi", leftoverUpi);
-            body.put("closingCash", nz(closingCash));
+            body.put("paymentCard", paymentCard);
+            body.put("paymentUpi", paymentUpi);
+            body.put("paymentLines", paymentLines);
+            body.put("openingCash", openingCash);
+            body.put("openingUpi", openingUpi);
+            body.put("closingCash", closingCash);
+            body.put("closingUpi", closingUpi);
+            body.put("balanceResult", balanceResult);
+            body.put("balanceLabel", balanceLabel);
+            body.put("leftoverTotal", BigDecimal.ZERO);
+            body.put("leftoverCash", BigDecimal.ZERO);
+            body.put("leftoverCard", BigDecimal.ZERO);
+            body.put("leftoverUpi", BigDecimal.ZERO);
             body.put("expenseLines", expenseLines);
             body.put("employees", employees);
             body.put("lowStock", lowStock);
@@ -350,5 +407,16 @@ public class BossHubSyncService {
 
     private static BigDecimal nz(BigDecimal v) {
         return v != null ? v : BigDecimal.ZERO;
+    }
+
+    private static BigDecimal jsonMoney(JsonNode n) {
+        if (n == null || n.isNull()) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(n.asText("0"));
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
     }
 }

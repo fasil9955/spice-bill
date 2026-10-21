@@ -76,8 +76,10 @@ app.post('/api/ingest', async (req, res) => {
       `INSERT INTO daily_snapshots (
          shop_id, company_name, report_date, total_invoices, total_sales, total_tax, total_discount,
          total_items_sold, cash_sales, card_sales, upi_sales, mixed_sales, expenses,
-         leftover_total, leftover_cash, leftover_card, leftover_upi, closing_cash, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
+         leftover_total, leftover_cash, leftover_card, leftover_upi, closing_cash,
+         system_sales, billing_book_sales, payment_card, payment_upi,
+         opening_cash, opening_upi, closing_upi, balance_result, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW())
        ON CONFLICT (shop_id, company_name, report_date) DO UPDATE SET
          total_invoices = EXCLUDED.total_invoices,
          total_sales = EXCLUDED.total_sales,
@@ -94,6 +96,14 @@ app.post('/api/ingest', async (req, res) => {
          leftover_card = EXCLUDED.leftover_card,
          leftover_upi = EXCLUDED.leftover_upi,
          closing_cash = EXCLUDED.closing_cash,
+         system_sales = EXCLUDED.system_sales,
+         billing_book_sales = EXCLUDED.billing_book_sales,
+         payment_card = EXCLUDED.payment_card,
+         payment_upi = EXCLUDED.payment_upi,
+         opening_cash = EXCLUDED.opening_cash,
+         opening_upi = EXCLUDED.opening_upi,
+         closing_upi = EXCLUDED.closing_upi,
+         balance_result = EXCLUDED.balance_result,
          updated_at = NOW()`,
       [
         shopId, companyName, reportDate,
@@ -102,6 +112,8 @@ app.post('/api/ingest', async (req, res) => {
         num(b.mixedSales), num(b.expenses),
         num(b.leftoverTotal), num(b.leftoverCash), num(b.leftoverCard), num(b.leftoverUpi),
         num(b.closingCash),
+        num(b.systemSales), num(b.billingBookSales), num(b.paymentCard), num(b.paymentUpi),
+        num(b.openingCash), num(b.openingUpi), num(b.closingUpi), num(b.balanceResult),
       ]
     );
     await client.query(
@@ -124,6 +136,23 @@ app.post('/api/ingest', async (req, res) => {
       'DELETE FROM expense_lines WHERE shop_id = $1 AND company_name = $2 AND report_date = $3',
       [shopId, companyName, reportDate]
     );
+    await client.query(
+      'DELETE FROM payment_lines WHERE shop_id = $1 AND company_name = $2 AND report_date = $3',
+      [shopId, companyName, reportDate]
+    );
+    const paymentLines = Array.isArray(b.paymentLines) ? b.paymentLines.slice(0, 80) : [];
+    for (const line of paymentLines) {
+      await client.query(
+        `INSERT INTO payment_lines (shop_id, company_name, report_date, item_name, amount, payment_method)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [
+          shopId, companyName, reportDate,
+          String(line.name || 'Payment').slice(0, 200),
+          num(line.amount),
+          String(line.paymentMethod || '').slice(0, 20),
+        ]
+      );
+    }
     const expenseLines = Array.isArray(b.expenseLines) ? b.expenseLines.slice(0, 200) : [];
     for (const line of expenseLines) {
       await client.query(
@@ -242,7 +271,7 @@ app.get('/api/day-pack', async (req, res) => {
   const shopId = String(req.query.shopId || '');
   const date = String(req.query.date || '').slice(0, 10);
   try {
-    const [snap, expenses, employees, order] = await Promise.all([
+    const [snap, expenses, employees, order, payments] = await Promise.all([
       pool.query(
         `SELECT * FROM daily_snapshots WHERE shop_id = $1 AND report_date = $2 ORDER BY company_name`,
         [shopId, date]
@@ -262,12 +291,18 @@ app.get('/api/day-pack', async (req, res) => {
          FROM stock_lines WHERE shop_id = $1 AND report_date = $2 ORDER BY product_name`,
         [shopId, date]
       ),
+      pool.query(
+        `SELECT item_name, amount, payment_method
+         FROM payment_lines WHERE shop_id = $1 AND report_date = $2 ORDER BY payment_method, item_name`,
+        [shopId, date]
+      ),
     ]);
     res.json({
       snapshot: snap.rows[0] || null,
       expenses: expenses.rows,
       employees: employees.rows,
       order: order.rows,
+      payments: payments.rows,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -285,6 +320,14 @@ async function migrate() {
     'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_card NUMERIC(12,2) NOT NULL DEFAULT 0',
     'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_upi NUMERIC(12,2) NOT NULL DEFAULT 0',
     'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS closing_cash NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS system_sales NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS billing_book_sales NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS payment_card NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS payment_upi NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS opening_cash NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS opening_upi NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS closing_upi NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS balance_result NUMERIC(12,2) NOT NULL DEFAULT 0',
   ];
   for (const sql of alts) {
     await pool.query(sql);
@@ -298,6 +341,15 @@ async function migrate() {
       amount NUMERIC(12,2) NOT NULL DEFAULT 0,
       payment_method TEXT,
       account_type TEXT
+    )`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payment_lines (
+      shop_id TEXT NOT NULL,
+      company_name TEXT NOT NULL,
+      report_date DATE NOT NULL,
+      item_name TEXT NOT NULL,
+      amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+      payment_method TEXT
     )`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS employee_lines (

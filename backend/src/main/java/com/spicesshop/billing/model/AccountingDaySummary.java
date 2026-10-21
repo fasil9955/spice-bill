@@ -29,6 +29,10 @@ public class AccountingDaySummary {
     @Column(name = "closing_gpay_total", precision = 12, scale = 2)
     private BigDecimal closingGpayTotal;
 
+    /** Optional UPI kept with cash balance; next day's opening UPI. */
+    @Column(name = "closing_upi", precision = 12, scale = 2)
+    private BigDecimal closingUpi;
+
     /** JSON: {"cards":[{"name":"...","amount":"..."}],"upis":[...]} */
     @Column(name = "payment_details_json", columnDefinition = "TEXT")
     private String paymentDetailsJson;
@@ -81,6 +85,10 @@ public class AccountingDaySummary {
         this.closingGpayTotal = closingGpayTotal;
     }
 
+    public void setClosingUpi(BigDecimal closingUpi) {
+        this.closingUpi = closingUpi;
+    }
+
     public void setPaymentDetailsJson(String paymentDetailsJson) {
         this.paymentDetailsJson = paymentDetailsJson;
     }
@@ -119,6 +127,10 @@ public class AccountingDaySummary {
 
     public BigDecimal getClosingGpayTotal() {
         return this.closingGpayTotal;
+    }
+
+    public BigDecimal getClosingUpi() {
+        return this.closingUpi;
     }
 
     public String getPaymentDetailsJson() {

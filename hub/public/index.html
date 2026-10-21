@@ -25,7 +25,8 @@
 <body>
   <div class="wrap" id="app"></div>
   <script>
-    const money = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const money = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const n = (v) => Number(v || 0);
     const today = () => new Date().toISOString().slice(0, 10);
     let token = sessionStorage.getItem('bossToken') || '';
     let shops = [];
@@ -63,7 +64,7 @@
     async function loadHome() {
       shops = await api('/api/shops');
       shopId = shopId || (shops[0] && shops[0].shop_id) || '';
-      const pack = shopId ? await api(`/api/day-pack?shopId=${encodeURIComponent(shopId)}&date=${date}`) : { snapshot: null, expenses: [], employees: [], order: [] };
+      const pack = shopId ? await api(`/api/day-pack?shopId=${encodeURIComponent(shopId)}&date=${date}`) : { snapshot: null, expenses: [], employees: [], order: [], payments: [] };
       const year = date.slice(0, 4);
       const monthly = shopId ? await api(`/api/monthly?shopId=${encodeURIComponent(shopId)}&year=${year}`) : [];
       const maxSales = Math.max(1, ...monthly.map((m) => m.sales || 0));
@@ -76,6 +77,17 @@
         ? pack.employees.map((e) => `<div class="row" style="flex-direction:column;align-items:stretch;gap:2px"><strong>${e.employee_name}</strong><span class="muted">${e.designation || ''} ${e.phone || ''}</span><span>Salary ${money(e.salary)} · Taken ${money(e.taken)} · Net ${money(e.net_pay)}</span></div>`).join('')
         : '<p class="muted">No staff rows on this snapshot.</p>';
       const order = pack.order || [];
+      const pays = pack.payments || [];
+      const systemSales = d ? (n(d.system_sales) || (n(d.billing_book_sales) ? 0 : n(d.total_sales))) : 0;
+      const billingBook = d ? n(d.billing_book_sales) : 0;
+      const totalSales = d ? (n(d.system_sales) || n(d.billing_book_sales) ? systemSales + billingBook : n(d.total_sales)) : 0;
+      const payHtml = pays.length
+        ? pays.map((p) => `<div class="row"><span>${p.item_name} (${p.payment_method || ''})</span><span>${money(p.amount)}</span></div>`).join('')
+        : `<div class="row"><span>Card</span><span>${d ? money(d.payment_card) : '—'}</span></div>
+           <div class="row"><span>UPI</span><span>${d ? money(d.payment_upi) : '—'}</span></div>`;
+      const payTotal = d ? n(d.payment_card) + n(d.payment_upi) + n(d.closing_cash) + n(d.closing_upi) : 0;
+      const bal = d ? n(d.balance_result) : 0;
+      const balWord = bal < 0 ? 'more' : bal > 0 ? 'shortage' : 'tally';
       document.getElementById('app').innerHTML = `
         <h1>Boss reports</h1>
         <label>Shop</label>
@@ -83,20 +95,25 @@
         <label>Date</label>
         <input id="dt" type="date" value="${date}" />
         <div class="card">
-          <div class="muted">Total sales ${date}</div>
-          <div style="font-size:1.8rem;font-weight:800">${d ? money(d.total_sales) : '—'}</div>
-          <div class="row"><span>Bills</span><span>${d ? d.total_invoices : '—'}</span></div>
-          <div class="row"><span>Expenses</span><span>${d ? money(d.expenses) : '—'}</span></div>
-          <div class="row"><span>After expenses</span><span>${d ? money(d.leftover_total) : '—'}</span></div>
-          <div class="row"><span>Cash left</span><span>${d ? money(d.leftover_cash) : '—'}</span></div>
-          <div class="row"><span>Card left</span><span>${d ? money(d.leftover_card) : '—'}</span></div>
-          <div class="row"><span>UPI left</span><span>${d ? money(d.leftover_upi) : '—'}</span></div>
-          <div class="row"><span>Cash balance (drawer)</span><span>${d ? money(d.closing_cash) : '—'}</span></div>
-          ${d && d.company_name ? `<p class="muted">${d.company_name}</p>` : '<p class="muted">No snapshot yet. Print day-close at the shop.</p>'}
-        </div>
-        <div class="card">
-          <strong>All expenses</strong>
+          <strong>Accounting &amp; Day Close</strong>
+          <p class="muted">Date ${date}${d && d.company_name ? ' · ' + d.company_name : ''}</p>
+          <div class="muted" style="margin-top:10px">Sales</div>
+          <div class="row"><span>System Sales</span><span>${d ? money(systemSales) : '—'}</span></div>
+          <div class="row"><span>Billing Book</span><span>${d ? money(billingBook) : '—'}</span></div>
+          <div class="row"><span><strong>Total Sales</strong></span><span style="font-size:1.25rem;font-weight:800">${d ? money(totalSales) : '—'}</span></div>
+          <div class="muted" style="margin-top:10px">Opening Balance</div>
+          <div class="row"><span>Cash</span><span>${d ? money(d.opening_cash) : '—'}</span></div>
+          ${d && n(d.opening_upi) ? `<div class="row"><span>UPI</span><span>${money(d.opening_upi)}</span></div>` : ''}
+          <div class="muted" style="margin-top:10px">Expenses</div>
           ${expHtml}
+          <div class="row"><span><strong>Total Expenses</strong></span><span>${d ? money(d.expenses) : '—'}</span></div>
+          <div class="muted" style="margin-top:10px">Payments (Card+GPay+Cash)</div>
+          ${payHtml}
+          <div class="row"><span>Cash Balance</span><span>${d ? money(d.closing_cash) : '—'}</span></div>
+          ${d && n(d.closing_upi) ? `<div class="row"><span>UPI Balance</span><span>${money(d.closing_upi)}</span></div>` : ''}
+          <div class="row"><span><strong>Total</strong></span><span>${d ? money(payTotal) : '—'}</span></div>
+          <p style="text-align:center;font-weight:800;margin:12px 0 0">${d ? balWord + ': ' + money(Math.abs(bal)) : ''}</p>
+          ${d ? '' : '<p class="muted">No snapshot yet. Print day-close at the shop after the hub update.</p>'}
         </div>
         <div class="card">
           <strong>Employees &amp; salary</strong>

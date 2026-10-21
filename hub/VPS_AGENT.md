@@ -101,4 +101,4 @@ sudo systemctl restart spices-boss-hub
 curl -s http://127.0.0.1:8081/api/health
 ```
 
-Phone UI: https://billing.spicesbazar.org — after a shop clicks **Print Report** on Accounting & Day Close, the date shows total sales, bill count, all expenses, leftover cash/card/UPI, employees and salary.
+Phone UI: https://billing.spicesbazar.org — after **Print Report**, the date shows system sales + billing book, bills, opening cash/UPI, expenses, payment card/UPI, cash/UPI balance, shortage or more, employees. Restart **only** `spices-boss-hub` after pull; Node migrate() adds the new snapshot columns.

@@ -66,10 +66,12 @@ public class AccountingController {
             LocalDate yesterday = date.minusDays(1);
             Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
             BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingUpi).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
             AccountingDaySummaryResponse body = new AccountingDaySummaryResponse(
-                date.toString(), billingBookSales, openingCash, BigDecimal.ZERO, closingCash, closingGpayTotal);
+                date.toString(), billingBookSales, openingCash, openingUpi, closingCash, closingGpayTotal);
             body.setPaymentDetailsJson(paymentDetailsJson);
+            body.setClosingUpi(summary != null ? summary.getClosingUpi() : null);
             body.setDayCloseCleared(summary != null && Boolean.TRUE.equals(summary.getDayCloseCleared()));
             return ResponseEntity.ok(body);
         } catch (Exception e) {
@@ -94,6 +96,7 @@ public class AccountingController {
             }
             BigDecimal closingCash = toBigDecimal(payload.get("closingCash"));
             BigDecimal closingGpayTotal = toBigDecimal(payload.get("closingGpayTotal"));
+            BigDecimal closingUpi = toBigDecimal(payload.get("closingUpi"));
             String paymentDetailsJson = null;
             Object pd = payload.get("paymentDetailsJson");
             if (pd != null) {
@@ -101,7 +104,7 @@ public class AccountingController {
             }
 
             AccountingDaySummary summary = this.accountingDaySummaryService.upsertSummary(
-                companyName, date, billingBookSales, closingCash, closingGpayTotal, paymentDetailsJson);
+                companyName, date, billingBookSales, closingCash, closingGpayTotal, paymentDetailsJson, closingUpi);
 
             String customerNumbersEmail = null;
             Object sendPhones = payload.get("sendCustomerPhones");
@@ -114,11 +117,13 @@ public class AccountingController {
             LocalDate yesterday = date.minusDays(1);
             Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
             BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
+            BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingUpi).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
             AccountingDaySummaryResponse body = new AccountingDaySummaryResponse(
-                date.toString(), summary.getBillingBookSales(), openingCash, BigDecimal.ZERO,
+                date.toString(), summary.getBillingBookSales(), openingCash, openingUpi,
                 summary.getClosingCash(), summary.getClosingGpayTotal());
             body.setPaymentDetailsJson(summary.getPaymentDetailsJson());
+            body.setClosingUpi(summary.getClosingUpi());
             body.setCustomerNumbersEmail(customerNumbersEmail);
             body.setDayCloseCleared(Boolean.TRUE.equals(summary.getDayCloseCleared()));
             return ResponseEntity.ok(body);

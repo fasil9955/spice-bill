@@ -13,6 +13,8 @@ public class AccountingDaySummaryResponse {
     private BigDecimal closingCash;
     /** This day's closing GPay total. */
     private BigDecimal closingGpayTotal;
+    /** Optional UPI kept with cash balance. */
+    private BigDecimal closingUpi;
 
     /** JSON string: manual card / UPI lines for this day. */
     private String paymentDetailsJson;
@@ -85,6 +87,14 @@ public class AccountingDaySummaryResponse {
 
     public void setClosingGpayTotal(BigDecimal closingGpayTotal) {
         this.closingGpayTotal = closingGpayTotal;
+    }
+
+    public BigDecimal getClosingUpi() {
+        return this.closingUpi;
+    }
+
+    public void setClosingUpi(BigDecimal closingUpi) {
+        this.closingUpi = closingUpi;
     }
 
     public String getPaymentDetailsJson() {
