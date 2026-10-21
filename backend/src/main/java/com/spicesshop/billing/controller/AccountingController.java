@@ -64,10 +64,9 @@ public class AccountingController {
             LocalDate yesterday = date.minusDays(1);
             Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
             BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
-            BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingGpayTotal).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
             AccountingDaySummaryResponse body = new AccountingDaySummaryResponse(
-                date.toString(), billingBookSales, openingCash, openingUpi, closingCash, closingGpayTotal);
+                date.toString(), billingBookSales, openingCash, BigDecimal.ZERO, closingCash, closingGpayTotal);
             body.setPaymentDetailsJson(paymentDetailsJson);
             body.setDayCloseCleared(summary != null && Boolean.TRUE.equals(summary.getDayCloseCleared()));
             return ResponseEntity.ok(body);
@@ -113,10 +112,9 @@ public class AccountingController {
             LocalDate yesterday = date.minusDays(1);
             Optional<AccountingDaySummary> yesterdaySummary = this.accountingDaySummaryService.getSummary(companyName, yesterday);
             BigDecimal openingCash = yesterdaySummary.map(AccountingDaySummary::getClosingCash).filter(v -> v != null).orElse(BigDecimal.ZERO);
-            BigDecimal openingUpi = yesterdaySummary.map(AccountingDaySummary::getClosingGpayTotal).filter(v -> v != null).orElse(BigDecimal.ZERO);
 
             AccountingDaySummaryResponse body = new AccountingDaySummaryResponse(
-                date.toString(), summary.getBillingBookSales(), openingCash, openingUpi,
+                date.toString(), summary.getBillingBookSales(), openingCash, BigDecimal.ZERO,
                 summary.getClosingCash(), summary.getClosingGpayTotal());
             body.setPaymentDetailsJson(summary.getPaymentDetailsJson());
             body.setCustomerNumbersEmail(customerNumbersEmail);
@@ -149,13 +147,62 @@ public class AccountingController {
                 ));
             }
             boolean hubSent = this.bossHubSyncService.pushDayClose(companyName, date);
-            int expensesCleared = this.expenseService.deleteExpensesForDate(companyName, date);
-            this.accountingDaySummaryService.markDayCloseCleared(companyName, date);
+            int staffMoved = this.expenseService.moveEmployeeExpensesToStaffForDate(companyName, date);
+            int otherExpensesCleared = this.expenseService.deleteNonEmployeeExpensesForDate(companyName, date);
+            this.accountingDaySummaryService.clearEnteredValues(companyName, date, true);
+            boolean queued = !hubSent && this.bossHubSyncService.isConfigured()
+                && this.bossHubSyncService.isQueued(companyName, date);
             return ResponseEntity.ok(Map.of(
                 "ok", true,
                 "hubSent", hubSent,
-                "expensesCleared", expensesCleared,
+                "queued", queued,
+                "expensesCleared", otherExpensesCleared,
+                "staffMoved", staffMoved,
                 "alreadyCleared", false
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Settings: wipe typed accounting for one date. Keeps system sales, cash, employee expenses. */
+    @PostMapping({"/clear-entered"})
+    public ResponseEntity<?> clearEntered(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            int staffMoved = this.expenseService.moveEmployeeExpensesToStaffForDate(companyName, date);
+            int otherExpenses = this.expenseService.deleteNonEmployeeExpensesForDate(companyName, date);
+            this.accountingDaySummaryService.clearEnteredValues(companyName, date, false);
+            return ResponseEntity.ok(Map.of(
+                "ok", true,
+                "otherExpensesCleared", otherExpenses,
+                "staffMoved", staffMoved
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping({"/clear-entered-all"})
+    public ResponseEntity<?> clearEnteredAll(HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            int staffMoved = this.expenseService.moveAllEmployeeExpensesToStaff(companyName);
+            int otherExpenses = this.expenseService.deleteAllNonEmployeeExpenses(companyName);
+            int days = this.accountingDaySummaryService.clearEnteredValuesAllDates(companyName);
+            return ResponseEntity.ok(Map.of(
+                "ok", true,
+                "otherExpensesCleared", otherExpenses,
+                "staffMoved", staffMoved,
+                "daysCleared", days
             ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

@@ -13,4 +13,6 @@ public interface ExpenseRepository extends JpaRepository<ExpenseRecord, Integer>
     List<ExpenseRecord> findByCompanyNameAndAccountTypeAndEmployeeIdOrderByCreatedAtDesc(String companyName, String accountType, Integer employeeId);
 
     void deleteByCompanyNameAndExpenseDate(String companyName, LocalDate expenseDate);
+
+    List<ExpenseRecord> findByCompanyNameAndAccountTypeIgnoreCase(String companyName, String accountType);
 }

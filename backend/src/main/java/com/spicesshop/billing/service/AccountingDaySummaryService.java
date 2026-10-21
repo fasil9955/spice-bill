@@ -49,4 +49,44 @@ public class AccountingDaySummaryService {
         summary.setDayCloseCleared(true);
         return this.accountingDaySummaryRepository.save(summary);
     }
+
+    /** Wipe typed day-close fields. Keeps cash balance and does not touch invoices. */
+    @Transactional
+    public void clearEnteredValues(String companyName, LocalDate reportDate, boolean markCleared) {
+        AccountingDaySummary summary = this.accountingDaySummaryRepository
+            .findByCompanyNameAndReportDate(companyName, reportDate)
+            .orElse(null);
+        if (summary == null) {
+            if (!markCleared) {
+                return;
+            }
+            summary = new AccountingDaySummary();
+            summary.setCompanyName(companyName);
+            summary.setReportDate(reportDate);
+            summary.setBillingBookSales(BigDecimal.ZERO);
+        }
+        summary.setBillingBookSales(BigDecimal.ZERO);
+        summary.setClosingGpayTotal(BigDecimal.ZERO);
+        summary.setPaymentDetailsJson("{\"cards\":[],\"upis\":[]}");
+        if (markCleared) {
+            summary.setDayCloseCleared(true);
+        } else {
+            summary.setDayCloseCleared(false);
+        }
+        this.accountingDaySummaryRepository.save(summary);
+    }
+
+    @Transactional
+    public int clearEnteredValuesAllDates(String companyName) {
+        int n = 0;
+        for (AccountingDaySummary summary : this.accountingDaySummaryRepository.findByCompanyName(companyName)) {
+            summary.setBillingBookSales(BigDecimal.ZERO);
+            summary.setClosingGpayTotal(BigDecimal.ZERO);
+            summary.setPaymentDetailsJson("{\"cards\":[],\"upis\":[]}");
+            summary.setDayCloseCleared(false);
+            this.accountingDaySummaryRepository.save(summary);
+            n++;
+        }
+        return n;
+    }
 }

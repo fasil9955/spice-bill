@@ -6,6 +6,7 @@ import com.spicesshop.billing.model.DailySalesReport;
 import com.spicesshop.billing.model.Employee;
 import com.spicesshop.billing.model.EmployeeSalaryClearance;
 import com.spicesshop.billing.model.ExpenseRecord;
+import com.spicesshop.billing.model.HubOutbox;
 import com.spicesshop.billing.model.Invoice;
 import com.spicesshop.billing.model.Product;
 import com.spicesshop.billing.model.User;
@@ -13,6 +14,7 @@ import com.spicesshop.billing.repository.AccountingDaySummaryRepository;
 import com.spicesshop.billing.repository.EmployeeRepository;
 import com.spicesshop.billing.repository.EmployeeSalaryClearanceRepository;
 import com.spicesshop.billing.repository.ExpenseRepository;
+import com.spicesshop.billing.repository.HubOutboxRepository;
 import com.spicesshop.billing.repository.InvoiceRepository;
 import com.spicesshop.billing.repository.ProductRepository;
 import com.spicesshop.billing.repository.UserRepository;
@@ -53,6 +55,7 @@ public class BossHubSyncService {
     private final EmployeeRepository employeeRepository;
     private final EmployeeSalaryClearanceRepository salaryClearanceRepository;
     private final AccountingDaySummaryRepository accountingDaySummaryRepository;
+    private final HubOutboxRepository hubOutboxRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(4))
@@ -79,6 +82,7 @@ public class BossHubSyncService {
         EmployeeRepository employeeRepository,
         EmployeeSalaryClearanceRepository salaryClearanceRepository,
         AccountingDaySummaryRepository accountingDaySummaryRepository,
+        HubOutboxRepository hubOutboxRepository,
         ObjectMapper objectMapper
     ) {
         this.reportService = reportService;
@@ -89,6 +93,7 @@ public class BossHubSyncService {
         this.employeeRepository = employeeRepository;
         this.salaryClearanceRepository = salaryClearanceRepository;
         this.accountingDaySummaryRepository = accountingDaySummaryRepository;
+        this.hubOutboxRepository = hubOutboxRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -105,6 +110,7 @@ public class BossHubSyncService {
             if (!isConfigured()) {
                 return;
             }
+            flushOutbox();
             for (String company : companyNames()) {
                 pushCompany(company, LocalDate.now());
             }
@@ -113,13 +119,29 @@ public class BossHubSyncService {
         }
     }
 
-    /** Day-close print: send this date now. Never throws. */
+    @Scheduled(initialDelay = 45_000, fixedDelay = 60_000)
+    public void flushOutboxQuietly() {
+        try {
+            if (!isConfigured()) {
+                return;
+            }
+            flushOutbox();
+        } catch (Exception e) {
+            log.warn("Boss hub outbox flush skipped: {}", e.getMessage());
+        }
+    }
+
+    /** Day-close print: send now, or keep in queue until internet is back. Never throws. */
     public boolean pushDayClose(String companyName, LocalDate date) {
         if (!isConfigured()) {
             log.info("Boss hub not enabled — skip day-close send");
             return false;
         }
         return pushCompany(companyName, date);
+    }
+
+    public boolean isQueued(String companyName, LocalDate date) {
+        return this.hubOutboxRepository.findByCompanyNameAndReportDate(companyName, date).isPresent();
     }
 
     private List<String> companyNames() {
@@ -255,6 +277,58 @@ public class BossHubSyncService {
             body.put("lowStock", lowStock);
 
             String json = objectMapper.writeValueAsString(body);
+            if (postIngest(json)) {
+                this.hubOutboxRepository.findByCompanyNameAndReportDate(companyName, date)
+                    .ifPresent(this.hubOutboxRepository::delete);
+                return true;
+            }
+            enqueue(companyName, date, json, "ingest failed");
+            return false;
+        } catch (Exception e) {
+            log.warn("Boss hub ingest failed for {}: {}", companyName, e.getMessage());
+            return false;
+        }
+    }
+
+    private void enqueue(String companyName, LocalDate date, String json, String error) {
+        HubOutbox row = this.hubOutboxRepository
+            .findByCompanyNameAndReportDate(companyName, date)
+            .orElseGet(HubOutbox::new);
+        row.setCompanyName(companyName);
+        row.setReportDate(date);
+        row.setPayloadJson(json);
+        row.setLastError(error != null && error.length() > 500 ? error.substring(0, 500) : error);
+        row.setLastAttemptAt(java.time.LocalDateTime.now());
+        int prev = row.getAttempts() == null ? 0 : row.getAttempts();
+        row.setAttempts(prev + 1);
+        this.hubOutboxRepository.save(row);
+        log.info("Boss hub queued day-close for {} {}", companyName, date);
+    }
+
+    private void flushOutbox() {
+        for (HubOutbox row : this.hubOutboxRepository.findAllByOrderByCreatedAtAsc()) {
+            try {
+                if (postIngest(row.getPayloadJson())) {
+                    this.hubOutboxRepository.delete(row);
+                    log.info("Boss hub sent queued day-close for {} {}", row.getCompanyName(), row.getReportDate());
+                } else {
+                    row.setAttempts((row.getAttempts() == null ? 0 : row.getAttempts()) + 1);
+                    row.setLastAttemptAt(java.time.LocalDateTime.now());
+                    row.setLastError("ingest failed");
+                    this.hubOutboxRepository.save(row);
+                }
+            } catch (Exception e) {
+                row.setAttempts((row.getAttempts() == null ? 0 : row.getAttempts()) + 1);
+                row.setLastAttemptAt(java.time.LocalDateTime.now());
+                String msg = e.getMessage();
+                row.setLastError(msg != null && msg.length() > 500 ? msg.substring(0, 500) : msg);
+                this.hubOutboxRepository.save(row);
+            }
+        }
+    }
+
+    private boolean postIngest(String json) {
+        try {
             String base = hubUrl.trim().replaceAll("/+$", "");
             HttpRequest req = HttpRequest.newBuilder()
                 .uri(URI.create(base + "/api/ingest"))
@@ -264,12 +338,12 @@ public class BossHubSyncService {
                 .build();
             HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             if (res.statusCode() >= 300) {
-                log.warn("Boss hub ingest HTTP {} for {}", res.statusCode(), companyName);
+                log.warn("Boss hub ingest HTTP {}", res.statusCode());
                 return false;
             }
             return true;
         } catch (Exception e) {
-            log.warn("Boss hub ingest failed for {}: {}", companyName, e.getMessage());
+            log.warn("Boss hub ingest offline: {}", e.getMessage());
             return false;
         }
     }

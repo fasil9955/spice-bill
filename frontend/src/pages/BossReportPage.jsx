@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
@@ -9,10 +9,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  AreaChart,
-  Area,
 } from 'recharts';
-import { ArrowLeft, TrendingUp, Package, CalendarDays, Search, X } from 'lucide-react';
+import { ArrowLeft, Package, Search, X, AlertTriangle } from 'lucide-react';
 import { reportService, productService } from '../services/api';
 import './BossReportPage.css';
 
@@ -44,23 +42,18 @@ const BossReportPage = () => {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [loading, setLoading] = useState(true);
   const [topItems, setTopItems] = useState([]);
-  const [monthlyData, setMonthlyData] = useState([]);
   const [reportDate, setReportDate] = useState(() => toIsoDate(now));
-  const [daily, setDaily] = useState(null);
-  const [dailyLoading, setDailyLoading] = useState(false);
   const [watchList, setWatchList] = useState(loadWatchList);
   const [watchSales, setWatchSales] = useState([]);
+  const [watchLoading, setWatchLoading] = useState(false);
   const [allProducts, setAllProducts] = useState([]);
   const [productQuery, setProductQuery] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const fetchData = async () => {
+  const fetchTopItems = async () => {
     setLoading(true);
     try {
-      const [topRes, monthlyRes] = await Promise.all([
-        reportService.getTopSellingItems(year, month, 15),
-        reportService.getMonthlyByYear(year),
-      ]);
+      const topRes = await reportService.getTopSellingItems(year, month, 15);
       const items = Array.isArray(topRes?.data) ? topRes.data : [];
       setTopItems(items.map((i) => ({
         name: (i.productName || 'Unknown').length > 18 ? (i.productName || '').slice(0, 18) + '…' : (i.productName || 'Unknown'),
@@ -68,26 +61,16 @@ const BossReportPage = () => {
         quantity: parseFloat(i.quantity) || 0,
         revenue: parseFloat(i.totalRevenue) || 0,
       })));
-
-      const raw = Array.isArray(monthlyRes?.data) ? monthlyRes.data : [];
-      setMonthlyData(raw.map((m) => ({
-        month: MONTH_NAMES[(m.month || 1) - 1],
-        monthNum: m.month || 0,
-        sales: parseFloat(m.totalSales) || 0,
-        invoices: m.totalInvoices || 0,
-        itemsSold: m.totalItemsSold || 0,
-      })));
     } catch (err) {
       console.error('Boss report fetch failed', err);
       setTopItems([]);
-      setMonthlyData([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchTopItems();
   }, [year, month]);
 
   useEffect(() => {
@@ -102,28 +85,24 @@ const BossReportPage = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const loadDaily = async () => {
-      setDailyLoading(true);
+    const loadWatch = async () => {
+      const ids = watchList.map((p) => p.productId);
+      if (!ids.length) {
+        setWatchSales([]);
+        return;
+      }
+      setWatchLoading(true);
       try {
-        const ids = watchList.map((p) => p.productId);
-        const [dayRes, prodRes] = await Promise.all([
-          reportService.getDaily(reportDate),
-          ids.length ? reportService.getDailyProductSales(reportDate, ids) : Promise.resolve({ data: [] }),
-        ]);
-        if (cancelled) return;
-        setDaily(dayRes?.data || null);
-        setWatchSales(Array.isArray(prodRes?.data) ? prodRes.data : []);
+        const prodRes = await reportService.getDailyProductSales(reportDate, ids);
+        if (!cancelled) setWatchSales(Array.isArray(prodRes?.data) ? prodRes.data : []);
       } catch (err) {
-        console.error('Daily boss report failed', err);
-        if (!cancelled) {
-          setDaily(null);
-          setWatchSales([]);
-        }
+        console.error('Selected products sales failed', err);
+        if (!cancelled) setWatchSales([]);
       } finally {
-        if (!cancelled) setDailyLoading(false);
+        if (!cancelled) setWatchLoading(false);
       }
     };
-    loadDaily();
+    loadWatch();
     return () => { cancelled = true; };
   }, [reportDate, watchList]);
 
@@ -157,12 +136,24 @@ const BossReportPage = () => {
     revenue: parseFloat(i.totalRevenue) || 0,
   }));
 
+  const reorderItems = useMemo(() => {
+    return allProducts
+      .filter((p) => p && p.isActive !== false)
+      .map((p) => {
+        const qty = parseFloat(p.quantity) || 0;
+        const min = parseFloat(p.minStockLevel) || 0;
+        return { ...p, qty, min, short: min - qty };
+      })
+      .filter((p) => p.qty <= p.min)
+      .sort((a, b) => b.short - a.short || a.qty - b.qty);
+  }, [allProducts]);
+
   return (
     <div className="boss-report-page">
       <div className="boss-report-header">
         <div>
           <h1>Boss Report</h1>
-          <p className="boss-report-subtitle">Daily sales, selected products, and month-wise charts</p>
+          <p className="boss-report-subtitle">Most sold items, selected products, and stock to reorder</p>
         </div>
         <button type="button" className="boss-report-back-btn" onClick={() => navigate('/dashboard')}>
           <ArrowLeft size={18} /> Dashboard
@@ -171,7 +162,7 @@ const BossReportPage = () => {
 
       <div className="boss-report-controls">
         <div className="boss-report-field">
-          <label>Day</label>
+          <label>Day (selected products)</label>
           <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
         </div>
         <div className="boss-report-field">
@@ -183,7 +174,7 @@ const BossReportPage = () => {
           </select>
         </div>
         <div className="boss-report-field">
-          <label>Month (for top items)</label>
+          <label>Month (most sale items)</label>
           <select value={month} onChange={(e) => setMonth(Number(e.target.value))}>
             {MONTH_NAMES.map((name, i) => (
               <option key={i} value={i + 1}>{name}</option>
@@ -192,42 +183,41 @@ const BossReportPage = () => {
         </div>
       </div>
 
-      <section className="boss-report-section">
-        <h2 className="boss-report-section-title">
-          <CalendarDays size={22} /> Daily report ({reportDate.split('-').reverse().join('/')})
-        </h2>
-        <p className="boss-report-section-desc">Totals for the selected day, then only the products you pick below</p>
-        {dailyLoading && !daily ? (
-          <p className="boss-report-empty">Loading daily totals…</p>
-        ) : (
-          <div className="boss-daily-cards">
-            <div className="boss-daily-card">
-              <span>Sales</span>
-              <strong>{formatCurrency(daily?.totalSales)}</strong>
-            </div>
-            <div className="boss-daily-card">
-              <span>Bills</span>
-              <strong>{daily?.totalInvoices ?? 0}</strong>
-            </div>
-            <div className="boss-daily-card">
-              <span>Cash</span>
-              <strong>{formatCurrency(daily?.cashSales)}</strong>
-            </div>
-            <div className="boss-daily-card">
-              <span>Card</span>
-              <strong>{formatCurrency(daily?.cardSales)}</strong>
-            </div>
-            <div className="boss-daily-card">
-              <span>UPI</span>
-              <strong>{formatCurrency(daily?.upiSales)}</strong>
-            </div>
-            <div className="boss-daily-card">
-              <span>Mixed</span>
-              <strong>{formatCurrency(daily?.mixedSales)}</strong>
-            </div>
+      {loading ? (
+        <div className="boss-report-loading">Loading most sale items…</div>
+      ) : (
+        <section className="boss-report-section">
+          <h2 className="boss-report-section-title">
+            <Package size={22} /> Most sale items ({MONTH_NAMES[month - 1]} {year})
+          </h2>
+          <p className="boss-report-section-desc">Top 15 products by quantity sold in the selected month</p>
+          <div className="boss-report-chart-wrap">
+            {topItems.length === 0 ? (
+              <p className="boss-report-empty">No sales data for this month.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={topItems} layout="vertical" margin={{ left: 20, right: 30, top: 10, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" tickFormatter={(v) => v} />
+                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value) => [value, 'Quantity']}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName}
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
+                  />
+                  <Bar dataKey="quantity" name="Quantity sold" radius={[0, 4, 4, 0]} maxBarSize={28}>
+                    {topItems.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
-        )}
+        </section>
+      )}
 
+      <section className="boss-report-section">
         <h3 className="boss-watch-heading">Selected products</h3>
         <p className="boss-report-section-desc">Search and add items to watch. The list stays saved on this computer.</p>
         <div className="boss-watch-picker">
@@ -270,7 +260,7 @@ const BossReportPage = () => {
 
         {watchList.length === 0 ? (
           <p className="boss-report-empty">Select products to see how much sold on this day.</p>
-        ) : dailyLoading ? (
+        ) : watchLoading ? (
           <p className="boss-report-empty">Loading selected products…</p>
         ) : (
           <>
@@ -315,95 +305,36 @@ const BossReportPage = () => {
         )}
       </section>
 
-      {loading ? (
-        <div className="boss-report-loading">Loading month charts…</div>
-      ) : (
-        <>
-          <section className="boss-report-section">
-            <h2 className="boss-report-section-title">
-              <Package size={22} /> Most sale items ({MONTH_NAMES[month - 1]} {year})
-            </h2>
-            <p className="boss-report-section-desc">Top 15 products by quantity sold in the selected month</p>
-            <div className="boss-report-chart-wrap">
-              {topItems.length === 0 ? (
-                <p className="boss-report-empty">No sales data for this month.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={topItems} layout="vertical" margin={{ left: 20, right: 30, top: 10, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis type="number" tickFormatter={(v) => v} />
-                    <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
-                    <Tooltip
-                      formatter={(value) => [value, 'Quantity']}
-                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName}
-                      contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                    />
-                    <Bar dataKey="quantity" name="Quantity sold" radius={[0, 4, 4, 0]} maxBarSize={28}>
-                      {topItems.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </section>
-
-          <section className="boss-report-section">
-            <h2 className="boss-report-section-title">
-              <TrendingUp size={22} /> Month-wise sales ({year})
-            </h2>
-            <p className="boss-report-section-desc">Total sales (₹) for each month of the selected year</p>
-            <div className="boss-report-chart-wrap">
-              {monthlyData.length === 0 ? (
-                <p className="boss-report-empty">No monthly data for this year.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={360}>
-                  <AreaChart data={monthlyData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-                    <defs>
-                      <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#667eea" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#764ba2" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                    <YAxis tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`} tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(value) => [formatCurrency(value), 'Sales']}
-                      labelFormatter={(label) => label}
-                      contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                    />
-                    <Area type="monotone" dataKey="sales" name="Sales" stroke="#667eea" strokeWidth={2} fill="url(#salesGradient)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </section>
-
-          <section className="boss-report-section boss-report-bar-month">
-            <h2 className="boss-report-section-title">Month-wise sales (bar view)</h2>
-            <div className="boss-report-chart-wrap">
-              {monthlyData.length === 0 ? (
-                <p className="boss-report-empty">No monthly data.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={340}>
-                  <BarChart data={monthlyData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`} tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(value) => [formatCurrency(value), 'Sales']}
-                      contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                    />
-                    <Bar dataKey="sales" name="Sales" fill="#667eea" radius={[4, 4, 0, 0]} maxBarSize={48} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </section>
-        </>
-      )}
+      <section className="boss-report-section">
+        <h2 className="boss-report-section-title">
+          <AlertTriangle size={22} /> Less stock — reorder
+        </h2>
+        <p className="boss-report-section-desc">Active products at or below their minimum stock. Order these next.</p>
+        {reorderItems.length === 0 ? (
+          <p className="boss-report-empty">No items below minimum stock.</p>
+        ) : (
+          <table className="boss-watch-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th className="num">In stock</th>
+                <th className="num">Min</th>
+                <th className="num">To order</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reorderItems.map((p) => (
+                <tr key={p.productId}>
+                  <td>{p.productName}{p.barcode ? ` · ${p.barcode}` : ''}</td>
+                  <td className="num">{p.qty}</td>
+                  <td className="num">{p.min}</td>
+                  <td className="num">{p.short > 0 ? p.short : 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
     </div>
   );
 };

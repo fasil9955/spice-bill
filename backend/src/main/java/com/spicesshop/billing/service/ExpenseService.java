@@ -21,6 +21,9 @@ public class ExpenseService {
     @Autowired
     private EmployeeRepository employeeRepository;
 
+    @Autowired
+    private EmployeeAccountService employeeAccountService;
+
     public List<ExpenseRecord> getExpensesByDate(String companyName, String date) {
         LocalDate expenseDate = (date != null && !date.isBlank()) ? LocalDate.parse(date) : LocalDate.now();
         return this.expenseRepository.findByCompanyNameAndExpenseDateOrderByCreatedAtDesc(companyName, expenseDate);
@@ -96,6 +99,70 @@ public class ExpenseService {
             .findByCompanyNameAndExpenseDateOrderByCreatedAtDesc(companyName, date);
         int n = list.size();
         if (n > 0) {
+            this.expenseRepository.deleteAll(list);
+        }
+        return n;
+    }
+
+    /** Other (shop) expenses only — employee salary/advance lines stay. */
+    @Transactional
+    public int deleteNonEmployeeExpensesForDate(String companyName, LocalDate date) {
+        List<ExpenseRecord> list = this.expenseRepository
+            .findByCompanyNameAndExpenseDateOrderByCreatedAtDesc(companyName, date)
+            .stream()
+            .filter(e -> !"EMPLOYEE".equalsIgnoreCase(e.getAccountType()))
+            .toList();
+        int n = list.size();
+        if (n > 0) {
+            this.expenseRepository.deleteAll(list);
+        }
+        return n;
+    }
+
+    @Transactional
+    public int deleteAllNonEmployeeExpenses(String companyName) {
+        List<ExpenseRecord> list = this.expenseRepository
+            .findByCompanyNameAndAccountTypeIgnoreCase(companyName, "OTHER");
+        int n = list.size();
+        if (n > 0) {
+            this.expenseRepository.deleteAll(list);
+        }
+        return n;
+    }
+
+    /** Move employee payouts to Staff accounts, then remove them from day-close expenses. */
+    @Transactional
+    public int moveEmployeeExpensesToStaffForDate(String companyName, LocalDate date) {
+        List<ExpenseRecord> list = this.expenseRepository
+            .findByCompanyNameAndExpenseDateOrderByCreatedAtDesc(companyName, date)
+            .stream()
+            .filter(e -> "EMPLOYEE".equalsIgnoreCase(e.getAccountType()))
+            .toList();
+        return moveEmployeeExpensesToStaff(companyName, list);
+    }
+
+    @Transactional
+    public int moveAllEmployeeExpensesToStaff(String companyName) {
+        List<ExpenseRecord> list = this.expenseRepository
+            .findByCompanyNameAndAccountTypeIgnoreCase(companyName, "EMPLOYEE");
+        return moveEmployeeExpensesToStaff(companyName, list);
+    }
+
+    private int moveEmployeeExpensesToStaff(String companyName, List<ExpenseRecord> list) {
+        int n = 0;
+        for (ExpenseRecord e : list) {
+            if (e.getEmployeeId() != null && e.getAmount() != null) {
+                this.employeeAccountService.recordTakenFromDayClose(
+                    companyName,
+                    e.getEmployeeId(),
+                    e.getAmount(),
+                    e.getPaymentMethod(),
+                    e.getExpenseDate()
+                );
+            }
+            n++;
+        }
+        if (!list.isEmpty()) {
             this.expenseRepository.deleteAll(list);
         }
         return n;

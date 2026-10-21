@@ -113,7 +113,7 @@ const Dashboard = () => {
     { path: '/dashboard/attendance', displayIcon: '📅', label: 'Attendance', description: 'View and mark daily attendance' },
     { path: '/dashboard/courier', displayIcon: '🚚', label: 'Courier', description: 'Track courier requests' },
     { path: '/dashboard/accounting', displayIcon: '💰', label: 'Accounting & Day Close', description: 'Daily accounting and payment splits' },
-    { path: '/dashboard/boss-report', displayIcon: '📈', label: 'Boss Report', description: 'Most sale items & month-wise sales charts' },
+    { path: '/dashboard/boss-report', displayIcon: '📈', label: 'Boss Report', description: 'Most sale items, selected products and reorder stock' },
     { path: '/dashboard/reports', displayIcon: '📊', label: 'Reports', description: 'Sales, GST and accounting reports' },
     { path: '/dashboard/settings', displayIcon: '⚙️', label: 'Settings', description: 'Company and system configuration' },
     { path: '/dashboard/utilities', displayIcon: '🧰', label: 'Utilities', description: 'Check for updates and report a problem' },

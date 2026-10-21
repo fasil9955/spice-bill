@@ -57,7 +57,6 @@ const DailyAccountingPage = () => {
   const [employees, setEmployees] = useState([]);
 
   const [openingCash, setOpeningCash] = useState('');
-  const [openingUpi, setOpeningUpi] = useState('');
 
   const [cardEntries, setCardEntries] = useState([]);
   const [gpayEntries, setGpayEntries] = useState([]);
@@ -102,7 +101,6 @@ const DailyAccountingPage = () => {
       const sumData = sumRes?.data;
       setBillingBookSales(sumData?.billingBookSales != null ? String(sumData.billingBookSales) : '');
       setOpeningCash(sumData?.openingCash != null ? String(sumData.openingCash) : '');
-      setOpeningUpi(sumData?.openingUpi != null ? String(sumData.openingUpi) : '');
       setCashBalance(sumData?.closingCash != null ? String(sumData.closingCash) : '');
 
       let nextCards = [];
@@ -134,7 +132,9 @@ const DailyAccountingPage = () => {
 
       const cleared = !!sumData?.dayCloseCleared;
       setDayCloseCleared(cleared);
-      setExpenses(cleared ? [] : (Array.isArray(expRes?.data) ? expRes.data : []));
+      const allExp = Array.isArray(expRes?.data) ? expRes.data : [];
+      const otherOnly = allExp.filter((e) => String(e.accountType || '').toUpperCase() !== 'EMPLOYEE');
+      setExpenses(cleared ? [] : otherOnly);
       setEmployees(Array.isArray(empRes?.data) ? empRes.data : []);
     } catch (err) {
       console.error('Load data failed', err);
@@ -234,8 +234,7 @@ const DailyAccountingPage = () => {
   const totalPayments = totalCardManual + totalGpayManual + cashBalanceNum;
 
   const openingCashNum = parseFloat(openingCash) || 0;
-  const openingUpiNum = parseFloat(openingUpi) || 0;
-  const balanceResult = totalSales + openingCashNum + openingUpiNum - totalExpenses - totalPayments;
+  const balanceResult = totalSales + openingCashNum - totalExpenses - totalPayments;
 
   const preventNumberScroll = (e) => {
     e.target.blur();
@@ -436,7 +435,6 @@ const DailyAccountingPage = () => {
       <p class="print-row"><strong>Total Sales:</strong><span class="print-amount">₹${totalSales.toFixed(2)}</span></p>
       <h2>Opening Balance</h2>
       <p class="print-row">Cash:<span class="print-amount">₹${openingCashNum.toFixed(2)}</span></p>
-      <p class="print-row">UPI:<span class="print-amount">₹${openingUpiNum.toFixed(2)}</span></p>
       <h2>Expenses</h2>
       ${expensesListHtml}
       <p class="print-row"><strong>Total Expenses:</strong><span class="print-amount">₹${totalExpenses.toFixed(2)}</span></p>
@@ -481,12 +479,18 @@ const DailyAccountingPage = () => {
     setPrintBusy(true);
     try {
       await persistAccountingSummary();
-      await accountingService.dayClosePrint(isoDate);
+      const res = await accountingService.dayClosePrint(isoDate);
       setDayCloseCleared(true);
       setExpenses([]);
+      setCardEntries([]);
+      setGpayEntries([]);
+      setBillingBookSales('');
+      if (res?.data?.queued) {
+        /* printed locally; boss pack is waiting for internet */
+      }
     } catch (err) {
       console.error('Day close send failed', err);
-      window.alert(err.response?.data?.error || 'Printed, but sending to boss phone failed. Try Print Report again.');
+      window.alert(err.response?.data?.error || 'Printed. Could not save day-close clear. Try Print Report again when the shop computer is ready.');
     } finally {
       setPrintBusy(false);
     }
@@ -637,6 +641,7 @@ const DailyAccountingPage = () => {
                 <label>System Sales:</label>
                 <input type="text" readOnly value={systemSales.toFixed(2)} className="daily-accounting-input-readonly" />
               </div>
+              {!dayCloseCleared && (
               <div className="daily-accounting-sales-row">
                 <label>Sales on Billing Book:</label>
                 <input
@@ -650,12 +655,16 @@ const DailyAccountingPage = () => {
                   className="daily-accounting-input"
                 />
               </div>
+              )}
+              {!dayCloseCleared && (
               <div className="daily-accounting-total-sales-card">
                 <span>TOTAL SALES</span>
                 <span className="daily-accounting-total-sales-amount">₹{totalSales.toFixed(2)}</span>
               </div>
+              )}
             </div>
 
+            {!dayCloseCleared && (
             <div className="daily-accounting-opening-card">
               <h3 className="daily-accounting-section-title">Opening Balance</h3>
               <div className="daily-accounting-opening-row">
@@ -671,20 +680,8 @@ const DailyAccountingPage = () => {
                   className="daily-accounting-input"
                 />
               </div>
-              <div className="daily-accounting-opening-row">
-                <label>UPI</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={openingUpi}
-                  onChange={(e) => setOpeningUpi(e.target.value)}
-                  placeholder="0.00"
-                  onWheel={preventNumberScroll}
-                  className="daily-accounting-input"
-                />
-              </div>
             </div>
+            )}
           </div>
 
           {!dayCloseCleared && <div className="daily-accounting-card daily-accounting-breakdown-card">
@@ -945,7 +942,7 @@ const DailyAccountingPage = () => {
               </div>
               <div className="daily-accounting-balance-row">
                 <span>+ Opening Balance:</span>
-                <span>₹{(openingCashNum + openingUpiNum).toFixed(2)}</span>
+                <span>₹{openingCashNum.toFixed(2)}</span>
               </div>
               <div className="daily-accounting-balance-row">
                 <span>− Total Expenses:</span>

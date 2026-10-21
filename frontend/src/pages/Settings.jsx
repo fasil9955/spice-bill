@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authService, invoiceService } from '../services/api';
+import { authService, invoiceService, accountingService } from '../services/api';
 import AppUpdateCard from '../components/AppUpdateCard';
 import { broadcastDataUpdate } from '../utils/dataSync';
 import { normalizeUpiAccounts } from '../utils/upiAccounts';
-import { ArrowLeft, Building2, Hash, Lock, Percent, Save } from 'lucide-react';
+import { ArrowLeft, Building2, Hash, Lock, Percent, Save, Trash2 } from 'lucide-react';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -13,6 +13,8 @@ const Settings = () => {
   const [savingPassword, setSavingPassword] = useState(false);
   const [aligningRetail, setAligningRetail] = useState(false);
   const [recalculatingGst, setRecalculatingGst] = useState(false);
+  const [clearingAccounting, setClearingAccounting] = useState(false);
+  const [clearAccountingDate, setClearAccountingDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [message, setMessage] = useState({ type: '', text: '' });
 
   const [company, setCompany] = useState({
@@ -196,6 +198,53 @@ const Settings = () => {
       });
     } finally {
       setRecalculatingGst(false);
+    }
+  };
+
+  const handleClearAccountingDay = async () => {
+    if (clearingAccounting) return;
+    const date = (clearAccountingDate || '').slice(0, 10);
+    if (!date) return;
+    const ok = window.confirm(
+      `Clear typed Accounting & Day Close values for ${date}?\n\nKeeps: system sales (bills) and cash balance.\nEmployee payouts are moved to Staff → employee account.\nDeletes from this page: billing book, payment split, and other expenses.`
+    );
+    if (!ok) return;
+    setClearingAccounting(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const res = await accountingService.clearEntered(date);
+      const n = res.data?.otherExpensesCleared ?? 0;
+      setMessage({
+        type: 'success',
+        text: `Cleared day-close entries for ${date}. Moved ${res.data?.staffMoved ?? 0} employee payout(s) to Staff. Other expenses removed: ${n}. System bills were not changed.`,
+      });
+      broadcastDataUpdate();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to clear accounting entries' });
+    } finally {
+      setClearingAccounting(false);
+    }
+  };
+
+  const handleClearAccountingAll = async () => {
+    if (clearingAccounting) return;
+    const ok = window.confirm(
+      'Clear typed Accounting & Day Close values for EVERY date?\n\nKeeps: all system bills and cash balances.\nEmployee payouts are moved to Staff → employee account.\nDeletes from accounting: billing book, payment splits, and other expenses.\n\nThis cannot be undone.'
+    );
+    if (!ok) return;
+    setClearingAccounting(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const res = await accountingService.clearEnteredAll();
+      setMessage({
+        type: 'success',
+        text: `Cleared day-close entries on ${res.data?.daysCleared ?? 0} day(s). Moved ${res.data?.staffMoved ?? 0} employee payout(s) to Staff. Other expenses removed: ${res.data?.otherExpensesCleared ?? 0}. System bills were kept.`,
+      });
+      broadcastDataUpdate();
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.error || 'Failed to clear accounting entries' });
+    } finally {
+      setClearingAccounting(false);
     }
   };
 
@@ -481,6 +530,41 @@ const Settings = () => {
               onClick={handleRecalculateRetailGst}
             >
               <Percent size={18} /> {recalculatingGst ? 'Recalculating GST…' : 'Recalculate GST from product categories'}
+            </button>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h2><Trash2 size={20} /> Clear Accounting &amp; Day Close entries</h2>
+          <p className="settings-field-hint">
+            Removes values you typed on Accounting &amp; Day Close: billing book, card/UPI payment split, and
+            other expenses. <strong>System bill totals stay.</strong> Employee payouts are moved to
+            <strong>Staff → employee account</strong> and removed from this page. Cash balance stays.
+          </p>
+          <div className="form-group" style={{ marginTop: 12, maxWidth: 280 }}>
+            <label>Date</label>
+            <input
+              type="date"
+              value={clearAccountingDate}
+              onChange={(e) => setClearAccountingDate(e.target.value)}
+            />
+          </div>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="submit-btn"
+              disabled={clearingAccounting}
+              onClick={handleClearAccountingDay}
+            >
+              <Trash2 size={18} /> {clearingAccounting ? 'Clearing…' : 'Clear this date'}
+            </button>
+            <button
+              type="button"
+              className="back-button"
+              disabled={clearingAccounting}
+              onClick={handleClearAccountingAll}
+            >
+              Clear all dates
             </button>
           </div>
         </section>

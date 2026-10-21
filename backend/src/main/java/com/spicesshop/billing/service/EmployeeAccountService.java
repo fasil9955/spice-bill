@@ -114,6 +114,18 @@ public class EmployeeAccountService {
         return this.employeeAdvanceRepository.save(advance);
     }
 
+    /** Copy an accounting employee payout onto the staff account (advance). */
+    @Transactional
+    public EmployeeAdvance recordTakenFromDayClose(
+            String companyName, Integer employeeId, BigDecimal amount, String paymentMethod, LocalDate recordDate) {
+        EmployeeAdvanceRequest req = new EmployeeAdvanceRequest();
+        req.setEmployeeId(employeeId);
+        req.setAmount(amount);
+        req.setPaymentMethod(paymentMethod != null ? paymentMethod : "CASH");
+        req.setRecordDate(recordDate != null ? recordDate.toString() : LocalDate.now().toString());
+        return createAdvance(companyName, req);
+    }
+
     @Transactional
     public void deleteAdvance(String companyName, Integer advanceId) {
         EmployeeAdvance advance = this.employeeAdvanceRepository.findById(advanceId)
