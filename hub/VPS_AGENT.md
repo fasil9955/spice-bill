@@ -64,3 +64,41 @@ sudo certbot --nginx -d billing.spicesbazar.org
 After: `curl -s http://127.0.0.1:8081/api/health` and `https://billing.spicesbazar.org/api/health`.
 
 Confirm Spice Bazar still up: `curl -sI https://spicesbazar.org` and PM2 `nextjs-app` still online. If nginx -t fails, **do not reload**; revert only the new site file.
+
+## Update hub only (day pack: expenses, leftover cash/card/UPI, employees)
+
+Do **not** restart Spice Bazar. Pull spice-bill, copy `hub/` into the hub folder, restart **only** `spices-boss-hub`. Node migrate() adds leftover columns and expense/employee tables on start.
+
+```bash
+# find where spice-bill is cloned (adjust path if different)
+# example if repo is at /home/fasil/projects/spice-bill:
+cd /home/fasil/projects/spice-bill
+sudo -u fasil git pull
+
+# copy hub files over the running hub (overwrite code only, not .env)
+sudo -u fasil rsync -a --exclude node_modules /home/fasil/projects/spice-bill/hub/ /home/fasil/projects/spices-boss-hub/
+
+cd /home/fasil/projects/spices-boss-hub
+sudo -u fasil npm install --omit=dev
+
+sudo systemctl restart spices-boss-hub
+sleep 2
+curl -s http://127.0.0.1:8081/api/health
+journalctl -u spices-boss-hub -n 40 --no-pager
+
+# prove live shop still up
+curl -sI https://spicesbazar.org | head -n 5
+pm2 status
+```
+
+If git is only the hub folder (not full spice-bill), then:
+
+```bash
+cd /home/fasil/projects/spices-boss-hub
+sudo -u fasil git pull
+sudo -u fasil npm install --omit=dev
+sudo systemctl restart spices-boss-hub
+curl -s http://127.0.0.1:8081/api/health
+```
+
+Phone UI: https://billing.spicesbazar.org — after a shop clicks **Print Report** on Accounting & Day Close, the date shows total sales, bill count, all expenses, leftover cash/card/UPI, employees and salary.

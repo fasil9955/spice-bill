@@ -11,4 +11,6 @@ public interface EmployeeSalaryClearanceRepository extends JpaRepository<Employe
     List<EmployeeSalaryClearance> findByCompanyNameAndEmployeeIdOrderByClearedAtDesc(String companyName, Integer employeeId);
     
     Optional<EmployeeSalaryClearance> findByCompanyNameAndEmployeeIdAndSalaryMonth(String companyName, Integer employeeId, String salaryMonth);
+
+    List<EmployeeSalaryClearance> findByCompanyNameAndSalaryMonth(String companyName, String salaryMonth);
 }

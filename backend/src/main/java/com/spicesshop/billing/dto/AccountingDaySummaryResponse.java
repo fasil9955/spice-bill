@@ -20,6 +20,8 @@ public class AccountingDaySummaryResponse {
     /** sent | already_sent | none_collected | mail_not_configured | failed */
     private String customerNumbersEmail;
 
+    private Boolean dayCloseCleared;
+
     public AccountingDaySummaryResponse() {}
 
     public AccountingDaySummaryResponse(String reportDate, BigDecimal billingBookSales) {
@@ -99,6 +101,14 @@ public class AccountingDaySummaryResponse {
 
     public void setCustomerNumbersEmail(String customerNumbersEmail) {
         this.customerNumbersEmail = customerNumbersEmail;
+    }
+
+    public Boolean getDayCloseCleared() {
+        return this.dayCloseCleared;
+    }
+
+    public void setDayCloseCleared(Boolean dayCloseCleared) {
+        this.dayCloseCleared = dayCloseCleared;
     }
 
     @Override

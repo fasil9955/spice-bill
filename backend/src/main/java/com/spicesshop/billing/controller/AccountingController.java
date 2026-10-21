@@ -3,7 +3,9 @@ package com.spicesshop.billing.controller;
 import com.spicesshop.billing.dto.AccountingDaySummaryResponse;
 import com.spicesshop.billing.model.AccountingDaySummary;
 import com.spicesshop.billing.service.AccountingDaySummaryService;
+import com.spicesshop.billing.service.BossHubSyncService;
 import com.spicesshop.billing.service.DailyCustomerNumbersMailService;
+import com.spicesshop.billing.service.ExpenseService;
 import com.spicesshop.billing.util.CompanyExtractor;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
@@ -31,6 +33,12 @@ public class AccountingController {
 
     @Autowired
     private DailyCustomerNumbersMailService dailyCustomerNumbersMailService;
+
+    @Autowired
+    private BossHubSyncService bossHubSyncService;
+
+    @Autowired
+    private ExpenseService expenseService;
 
     @Autowired
     private CompanyExtractor companyExtractor;
@@ -61,6 +69,7 @@ public class AccountingController {
             AccountingDaySummaryResponse body = new AccountingDaySummaryResponse(
                 date.toString(), billingBookSales, openingCash, openingUpi, closingCash, closingGpayTotal);
             body.setPaymentDetailsJson(paymentDetailsJson);
+            body.setDayCloseCleared(summary != null && Boolean.TRUE.equals(summary.getDayCloseCleared()));
             return ResponseEntity.ok(body);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -111,7 +120,43 @@ public class AccountingController {
                 summary.getClosingCash(), summary.getClosingGpayTotal());
             body.setPaymentDetailsJson(summary.getPaymentDetailsJson());
             body.setCustomerNumbersEmail(customerNumbersEmail);
+            body.setDayCloseCleared(Boolean.TRUE.equals(summary.getDayCloseCleared()));
             return ResponseEntity.ok(body);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Print day-close: send snapshot to boss phone, then clear expenses on this page. */
+    @PostMapping({"/day-close-print"})
+    public ResponseEntity<?> dayClosePrint(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            HttpServletRequest request) {
+        try {
+            String companyName = this.companyExtractor.extractCompanyFromRequest(request);
+            if (companyName == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Unauthorized"));
+            }
+            boolean alreadyCleared = this.accountingDaySummaryService.getSummary(companyName, date)
+                .map(s -> Boolean.TRUE.equals(s.getDayCloseCleared()))
+                .orElse(false);
+            if (alreadyCleared) {
+                return ResponseEntity.ok(Map.of(
+                    "ok", true,
+                    "hubSent", false,
+                    "expensesCleared", 0,
+                    "alreadyCleared", true
+                ));
+            }
+            boolean hubSent = this.bossHubSyncService.pushDayClose(companyName, date);
+            int expensesCleared = this.expenseService.deleteExpensesForDate(companyName, date);
+            this.accountingDaySummaryService.markDayCloseCleared(companyName, date);
+            return ResponseEntity.ok(Map.of(
+                "ok", true,
+                "hubSent", hubSent,
+                "expensesCleared", expensesCleared,
+                "alreadyCleared", false
+            ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

@@ -35,4 +35,18 @@ public class AccountingDaySummaryService {
 
         return this.accountingDaySummaryRepository.save(summary);
     }
+
+    @Transactional
+    public AccountingDaySummary markDayCloseCleared(String companyName, LocalDate reportDate) {
+        AccountingDaySummary summary = this.accountingDaySummaryRepository
+            .findByCompanyNameAndReportDate(companyName, reportDate)
+            .orElseGet(AccountingDaySummary::new);
+        summary.setCompanyName(companyName);
+        summary.setReportDate(reportDate);
+        if (summary.getBillingBookSales() == null) {
+            summary.setBillingBookSales(BigDecimal.ZERO);
+        }
+        summary.setDayCloseCleared(true);
+        return this.accountingDaySummaryRepository.save(summary);
+    }
 }

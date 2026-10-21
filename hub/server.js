@@ -20,7 +20,7 @@ const pool = new Pool({ connectionString: DATABASE_URL, max: 5 });
 const sessions = new Map();
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 function num(v) {
@@ -75,8 +75,9 @@ app.post('/api/ingest', async (req, res) => {
     await client.query(
       `INSERT INTO daily_snapshots (
          shop_id, company_name, report_date, total_invoices, total_sales, total_tax, total_discount,
-         total_items_sold, cash_sales, card_sales, upi_sales, mixed_sales, expenses, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+         total_items_sold, cash_sales, card_sales, upi_sales, mixed_sales, expenses,
+         leftover_total, leftover_cash, leftover_card, leftover_upi, closing_cash, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
        ON CONFLICT (shop_id, company_name, report_date) DO UPDATE SET
          total_invoices = EXCLUDED.total_invoices,
          total_sales = EXCLUDED.total_sales,
@@ -88,12 +89,19 @@ app.post('/api/ingest', async (req, res) => {
          upi_sales = EXCLUDED.upi_sales,
          mixed_sales = EXCLUDED.mixed_sales,
          expenses = EXCLUDED.expenses,
+         leftover_total = EXCLUDED.leftover_total,
+         leftover_cash = EXCLUDED.leftover_cash,
+         leftover_card = EXCLUDED.leftover_card,
+         leftover_upi = EXCLUDED.leftover_upi,
+         closing_cash = EXCLUDED.closing_cash,
          updated_at = NOW()`,
       [
         shopId, companyName, reportDate,
         num(b.totalInvoices), num(b.totalSales), num(b.totalTax), num(b.totalDiscount),
         num(b.totalItemsSold), num(b.cashSales), num(b.cardSales), num(b.upiSales),
         num(b.mixedSales), num(b.expenses),
+        num(b.leftoverTotal), num(b.leftoverCash), num(b.leftoverCard), num(b.leftoverUpi),
+        num(b.closingCash),
       ]
     );
     await client.query(
@@ -109,6 +117,46 @@ app.post('/api/ingest', async (req, res) => {
           shopId, companyName, reportDate,
           String(line.name || '').slice(0, 200) || 'Item',
           num(line.quantity), num(line.minStockLevel),
+        ]
+      );
+    }
+    await client.query(
+      'DELETE FROM expense_lines WHERE shop_id = $1 AND company_name = $2 AND report_date = $3',
+      [shopId, companyName, reportDate]
+    );
+    const expenseLines = Array.isArray(b.expenseLines) ? b.expenseLines.slice(0, 200) : [];
+    for (const line of expenseLines) {
+      await client.query(
+        `INSERT INTO expense_lines (shop_id, company_name, report_date, item_name, amount, payment_method, account_type)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          shopId, companyName, reportDate,
+          String(line.name || 'Expense').slice(0, 200),
+          num(line.amount),
+          String(line.paymentMethod || 'CASH').slice(0, 20),
+          String(line.accountType || '').slice(0, 40),
+        ]
+      );
+    }
+    await client.query(
+      'DELETE FROM employee_lines WHERE shop_id = $1 AND company_name = $2 AND report_date = $3',
+      [shopId, companyName, reportDate]
+    );
+    const empLines = Array.isArray(b.employees) ? b.employees.slice(0, 80) : [];
+    for (const line of empLines) {
+      await client.query(
+        `INSERT INTO employee_lines (
+           shop_id, company_name, report_date, employee_name, employee_code, phone, designation,
+           salary_month, salary, taken, net_pay, closing_balance
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          shopId, companyName, reportDate,
+          String(line.name || '').slice(0, 200),
+          String(line.code || '').slice(0, 50),
+          String(line.phone || '').slice(0, 30),
+          String(line.designation || '').slice(0, 100),
+          String(line.salaryMonth || '').slice(0, 7),
+          num(line.salary), num(line.taken), num(line.netPay), num(line.closingBalance),
         ]
       );
     }
@@ -189,10 +237,92 @@ app.get('/api/monthly', async (req, res) => {
   }
 });
 
+app.get('/api/day-pack', async (req, res) => {
+  if (!bossOk(req)) return res.status(401).json({ error: 'Login required' });
+  const shopId = String(req.query.shopId || '');
+  const date = String(req.query.date || '').slice(0, 10);
+  try {
+    const [snap, expenses, employees, order] = await Promise.all([
+      pool.query(
+        `SELECT * FROM daily_snapshots WHERE shop_id = $1 AND report_date = $2 ORDER BY company_name`,
+        [shopId, date]
+      ),
+      pool.query(
+        `SELECT item_name, amount, payment_method, account_type
+         FROM expense_lines WHERE shop_id = $1 AND report_date = $2 ORDER BY item_name`,
+        [shopId, date]
+      ),
+      pool.query(
+        `SELECT employee_name, employee_code, phone, designation, salary_month, salary, taken, net_pay, closing_balance
+         FROM employee_lines WHERE shop_id = $1 AND report_date = $2 ORDER BY employee_name`,
+        [shopId, date]
+      ),
+      pool.query(
+        `SELECT product_name, quantity, min_stock_level
+         FROM stock_lines WHERE shop_id = $1 AND report_date = $2 ORDER BY product_name`,
+        [shopId, date]
+      ),
+    ]);
+    res.json({
+      snapshot: snap.rows[0] || null,
+      expenses: expenses.rows,
+      employees: employees.rows,
+      order: order.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`spices-boss-hub listening 127.0.0.1:${PORT}`);
-});
+async function migrate() {
+  const alts = [
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_total NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_cash NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_card NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_upi NUMERIC(12,2) NOT NULL DEFAULT 0',
+    'ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS closing_cash NUMERIC(12,2) NOT NULL DEFAULT 0',
+  ];
+  for (const sql of alts) {
+    await pool.query(sql);
+  }
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS expense_lines (
+      shop_id TEXT NOT NULL,
+      company_name TEXT NOT NULL,
+      report_date DATE NOT NULL,
+      item_name TEXT NOT NULL,
+      amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+      payment_method TEXT,
+      account_type TEXT
+    )`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS employee_lines (
+      shop_id TEXT NOT NULL,
+      company_name TEXT NOT NULL,
+      report_date DATE NOT NULL,
+      employee_name TEXT NOT NULL,
+      employee_code TEXT,
+      phone TEXT,
+      designation TEXT,
+      salary_month TEXT,
+      salary NUMERIC(12,2) NOT NULL DEFAULT 0,
+      taken NUMERIC(12,2) NOT NULL DEFAULT 0,
+      net_pay NUMERIC(12,2) NOT NULL DEFAULT 0,
+      closing_balance NUMERIC(12,2) NOT NULL DEFAULT 0
+    )`);
+}
+
+migrate()
+  .then(() => {
+    app.listen(PORT, '127.0.0.1', () => {
+      console.log(`spices-boss-hub listening 127.0.0.1:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('migrate failed', err);
+    process.exit(1);
+  });

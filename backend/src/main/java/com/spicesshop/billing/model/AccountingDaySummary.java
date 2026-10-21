@@ -33,6 +33,10 @@ public class AccountingDaySummary {
     @Column(name = "payment_details_json", columnDefinition = "TEXT")
     private String paymentDetailsJson;
 
+    /** After Print Report: expenses list and payment breakdown are hidden on the shop page. */
+    @Column(name = "day_close_cleared")
+    private Boolean dayCloseCleared;
+
     @Column(name = "customer_numbers_emailed_at")
     private LocalDateTime customerNumbersEmailedAt;
 
@@ -119,6 +123,14 @@ public class AccountingDaySummary {
 
     public String getPaymentDetailsJson() {
         return this.paymentDetailsJson;
+    }
+
+    public Boolean getDayCloseCleared() {
+        return this.dayCloseCleared;
+    }
+
+    public void setDayCloseCleared(Boolean dayCloseCleared) {
+        this.dayCloseCleared = dayCloseCleared;
     }
 
     public LocalDateTime getCustomerNumbersEmailedAt() {

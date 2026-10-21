@@ -146,6 +146,7 @@ export const fileUploadService = {
 export const accountingService = {
   getDaySummary: (date) => api.get(`/accounting/summary?date=${date}`),
   updateDaySummary: (date, data) => api.post(`/accounting/summary?date=${date}`, data),
+  dayClosePrint: (date) => api.post(`/accounting/day-close-print?date=${date}`),
 };
 
 export const expenseService = {
@@ -172,7 +173,7 @@ export const courierService = {
 export const appUpdateService = {
   status: () => api.get('/app/update-status'),
   download: () => api.post('/app/update-download', {}, { timeout: 600000 }),
-  restart: () => api.post('/app/update-restart'),
+  restart: () => api.post('/app/update-restart', {}, { timeout: 15000 }),
   reportProblem: (note) => api.post('/app/problem-report', { note }),
 };
 

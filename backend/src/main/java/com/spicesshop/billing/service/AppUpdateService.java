@@ -168,10 +168,17 @@ public class AppUpdateService {
         String script = """
             @echo off
             cd /d "%~dp0"
-            timeout /t 4 /nobreak >nul
+            timeout /t 6 /nobreak >nul
+            set TRIES=0
+            :copyjar
+            set /a TRIES+=1
             if exist "spices-billing-update.jar" (
-              copy /y "spices-billing-update.jar" "spices-billing.jar"
-              del "spices-billing-update.jar"
+              copy /y "spices-billing-update.jar" "spices-billing.jar" >nul
+              if errorlevel 1 if %TRIES% LSS 8 (
+                timeout /t 2 /nobreak >nul
+                goto copyjar
+              )
+              if not errorlevel 1 del "spices-billing-update.jar"
             )
             if exist "start-billing.bat" (
               start "" "start-billing.bat"
@@ -185,7 +192,7 @@ public class AppUpdateService {
             .start();
         Thread restarter = new Thread(() -> {
             try {
-                Thread.sleep(800);
+                Thread.sleep(2500);
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }

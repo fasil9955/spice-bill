@@ -68,17 +68,19 @@ public class ReportService {
             if (invoice.getStatus() != null && invoice.getStatus() != Invoice.InvoiceStatus.ACTIVE) {
                 continue;
             }
-            totalSales = totalSales.add(invoice.getTotalAmount());
-            totalTax = totalTax.add(invoice.getTaxAmount());
-            totalDiscount = totalDiscount.add(invoice.getDiscountAmount());
-            totalItems += invoice.getItems().size();
+            totalSales = totalSales.add(nzMoney(invoice.getTotalAmount()));
+            totalTax = totalTax.add(nzMoney(invoice.getTaxAmount()));
+            totalDiscount = totalDiscount.add(nzMoney(invoice.getDiscountAmount()));
+            if (invoice.getItems() != null) {
+                totalItems += invoice.getItems().size();
+            }
 
             if (invoice.getPaymentMethod() != null) {
                 switch (invoice.getPaymentMethod()) {
-                    case CASH -> cashSales = cashSales.add(invoice.getTotalAmount());
-                    case CARD -> cardSales = cardSales.add(invoice.getTotalAmount());
-                    case UPI -> upiSales = upiSales.add(invoice.getTotalAmount());
-                    case MIXED -> mixedSales = mixedSales.add(invoice.getTotalAmount());
+                    case CASH -> cashSales = cashSales.add(nzMoney(invoice.getTotalAmount()));
+                    case CARD -> cardSales = cardSales.add(nzMoney(invoice.getTotalAmount()));
+                    case UPI -> upiSales = upiSales.add(nzMoney(invoice.getTotalAmount()));
+                    case MIXED -> mixedSales = mixedSales.add(nzMoney(invoice.getTotalAmount()));
                 }
             }
         }
@@ -130,10 +132,12 @@ public class ReportService {
                 continue;
             }
             activeInvoiceCount++;
-            totalSales = totalSales.add(invoice.getTotalAmount());
-            totalTax = totalTax.add(invoice.getTaxAmount());
-            totalDiscount = totalDiscount.add(invoice.getDiscountAmount());
-            totalItems += invoice.getItems().size();
+            totalSales = totalSales.add(nzMoney(invoice.getTotalAmount()));
+            totalTax = totalTax.add(nzMoney(invoice.getTaxAmount()));
+            totalDiscount = totalDiscount.add(nzMoney(invoice.getDiscountAmount()));
+            if (invoice.getItems() != null) {
+                totalItems += invoice.getItems().size();
+            }
         }
 
         summary.setTotalInvoices(activeInvoiceCount);
@@ -295,5 +299,9 @@ public class ReportService {
         }
 
         return new ArrayList<>(byMonth.values());
+    }
+
+    private static BigDecimal nzMoney(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 }

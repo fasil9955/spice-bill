@@ -63,13 +63,19 @@
     async function loadHome() {
       shops = await api('/api/shops');
       shopId = shopId || (shops[0] && shops[0].shop_id) || '';
-      const daily = shopId ? await api(`/api/daily?shopId=${encodeURIComponent(shopId)}&date=${date}`) : [];
-      const order = shopId ? await api(`/api/order?shopId=${encodeURIComponent(shopId)}&date=${date}`) : [];
+      const pack = shopId ? await api(`/api/day-pack?shopId=${encodeURIComponent(shopId)}&date=${date}`) : { snapshot: null, expenses: [], employees: [], order: [] };
       const year = date.slice(0, 4);
       const monthly = shopId ? await api(`/api/monthly?shopId=${encodeURIComponent(shopId)}&year=${year}`) : [];
       const maxSales = Math.max(1, ...monthly.map((m) => m.sales || 0));
-      const d = daily[0] || null;
+      const d = pack.snapshot;
       const shopOpts = shops.map((s) => `<option value="${s.shop_id}" ${s.shop_id === shopId ? 'selected' : ''}>${s.display_name}</option>`).join('');
+      const expHtml = (pack.expenses || []).length
+        ? pack.expenses.map((e) => `<div class="row"><span>${e.item_name} <span class="muted">${e.payment_method || ''}</span></span><span>${money(e.amount)}</span></div>`).join('')
+        : '<p class="muted">No expenses on this snapshot.</p>';
+      const empHtml = (pack.employees || []).length
+        ? pack.employees.map((e) => `<div class="row" style="flex-direction:column;align-items:stretch;gap:2px"><strong>${e.employee_name}</strong><span class="muted">${e.designation || ''} ${e.phone || ''}</span><span>Salary ${money(e.salary)} · Taken ${money(e.taken)} · Net ${money(e.net_pay)}</span></div>`).join('')
+        : '<p class="muted">No staff rows on this snapshot.</p>';
+      const order = pack.order || [];
       document.getElementById('app').innerHTML = `
         <h1>Boss reports</h1>
         <label>Shop</label>
@@ -77,15 +83,24 @@
         <label>Date</label>
         <input id="dt" type="date" value="${date}" />
         <div class="card">
-          <div class="muted">Sales ${date}</div>
+          <div class="muted">Total sales ${date}</div>
           <div style="font-size:1.8rem;font-weight:800">${d ? money(d.total_sales) : '—'}</div>
           <div class="row"><span>Bills</span><span>${d ? d.total_invoices : '—'}</span></div>
-          <div class="row"><span>Cash</span><span>${d ? money(d.cash_sales) : '—'}</span></div>
-          <div class="row"><span>Card</span><span>${d ? money(d.card_sales) : '—'}</span></div>
-          <div class="row"><span>UPI</span><span>${d ? money(d.upi_sales) : '—'}</span></div>
-          <div class="row"><span>Mixed</span><span>${d ? money(d.mixed_sales) : '—'}</span></div>
           <div class="row"><span>Expenses</span><span>${d ? money(d.expenses) : '—'}</span></div>
-          ${d && d.company_name ? `<p class="muted">${d.company_name}${daily.length > 1 ? ' +' + (daily.length - 1) : ''}</p>` : '<p class="muted">No snapshot yet for this date.</p>'}
+          <div class="row"><span>After expenses</span><span>${d ? money(d.leftover_total) : '—'}</span></div>
+          <div class="row"><span>Cash left</span><span>${d ? money(d.leftover_cash) : '—'}</span></div>
+          <div class="row"><span>Card left</span><span>${d ? money(d.leftover_card) : '—'}</span></div>
+          <div class="row"><span>UPI left</span><span>${d ? money(d.leftover_upi) : '—'}</span></div>
+          <div class="row"><span>Cash balance (drawer)</span><span>${d ? money(d.closing_cash) : '—'}</span></div>
+          ${d && d.company_name ? `<p class="muted">${d.company_name}</p>` : '<p class="muted">No snapshot yet. Print day-close at the shop.</p>'}
+        </div>
+        <div class="card">
+          <strong>All expenses</strong>
+          ${expHtml}
+        </div>
+        <div class="card">
+          <strong>Employees &amp; salary</strong>
+          ${empHtml}
         </div>
         <div class="card">
           <strong>Required order</strong>

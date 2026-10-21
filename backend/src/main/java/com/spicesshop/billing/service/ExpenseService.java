@@ -91,6 +91,17 @@ public class ExpenseService {
     }
 
     @Transactional
+    public int deleteExpensesForDate(String companyName, LocalDate date) {
+        List<ExpenseRecord> list = this.expenseRepository
+            .findByCompanyNameAndExpenseDateOrderByCreatedAtDesc(companyName, date);
+        int n = list.size();
+        if (n > 0) {
+            this.expenseRepository.deleteAll(list);
+        }
+        return n;
+    }
+
+    @Transactional
     public ExpenseRecord updateExpense(String companyName, Integer expenseId, ExpenseRequest request) {
         ExpenseRecord record = this.expenseRepository.findById(expenseId)
             .orElseThrow(() -> new RuntimeException("Expense not found"));

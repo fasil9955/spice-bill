@@ -77,6 +77,8 @@ const DailyAccountingPage = () => {
   const [cashDeleteChecked, setCashDeleteChecked] = useState(false);
   const [cashDeleteBusy, setCashDeleteBusy] = useState(false);
   const [cashDeleteError, setCashDeleteError] = useState('');
+  const [dayCloseCleared, setDayCloseCleared] = useState(false);
+  const [printBusy, setPrintBusy] = useState(false);
 
   const navigate = useNavigate();
 
@@ -130,7 +132,9 @@ const DailyAccountingPage = () => {
       setCardEntries(nextCards);
       setGpayEntries(nextUpis);
 
-      setExpenses(Array.isArray(expRes?.data) ? expRes.data : []);
+      const cleared = !!sumData?.dayCloseCleared;
+      setDayCloseCleared(cleared);
+      setExpenses(cleared ? [] : (Array.isArray(expRes?.data) ? expRes.data : []));
       setEmployees(Array.isArray(empRes?.data) ? empRes.data : []);
     } catch (err) {
       console.error('Load data failed', err);
@@ -387,7 +391,7 @@ const DailyAccountingPage = () => {
     persistAccountingSummary({ upis: next, closingGpayOverride: newTotal });
   };
 
-  const handlePrintReport = () => {
+  const handlePrintReport = async () => {
     const printWindow = window.open('', '_blank', 'width=320,height=600');
     if (!printWindow) return;
     const resultLabel = balanceResult < 0 ? 'more' : balanceResult > 0 ? 'shortage' : 'tally';
@@ -473,6 +477,19 @@ const DailyAccountingPage = () => {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
+    if (dayCloseCleared || printBusy) return;
+    setPrintBusy(true);
+    try {
+      await persistAccountingSummary();
+      await accountingService.dayClosePrint(isoDate);
+      setDayCloseCleared(true);
+      setExpenses([]);
+    } catch (err) {
+      console.error('Day close send failed', err);
+      window.alert(err.response?.data?.error || 'Printed, but sending to boss phone failed. Try Print Report again.');
+    } finally {
+      setPrintBusy(false);
+    }
   };
 
   return (
@@ -540,8 +557,8 @@ const DailyAccountingPage = () => {
           </div>
         </div>
         <div className="daily-accounting-header-actions">
-          <button type="button" className="daily-accounting-print-btn" onClick={handlePrintReport}>
-            <Printer size={18} /> Print Report
+          <button type="button" className="daily-accounting-print-btn" onClick={handlePrintReport} disabled={printBusy}>
+            <Printer size={18} /> {printBusy ? 'Sending…' : 'Print Report'}
           </button>
           <button type="button" className="daily-accounting-back-btn" onClick={() => navigate('/dashboard')}>
             <ArrowLeft size={18} /> Dashboard
@@ -670,7 +687,7 @@ const DailyAccountingPage = () => {
             </div>
           </div>
 
-          <div className="daily-accounting-card daily-accounting-breakdown-card">
+          {!dayCloseCleared && <div className="daily-accounting-card daily-accounting-breakdown-card">
             <h3 className="daily-accounting-section-title">System Bills Payment Breakdown</h3>
             <div className="daily-accounting-breakdown-panels">
               <div className="daily-accounting-breakdown-panel">
@@ -686,10 +703,10 @@ const DailyAccountingPage = () => {
                 <span>₹{paymentBreakdown.CASH.toFixed(2)}</span>
               </div>
             </div>
-          </div>
+          </div>}
 
           <div className="daily-accounting-two-col">
-            <div className="daily-accounting-card daily-accounting-expenses-card">
+            {!dayCloseCleared && <div className="daily-accounting-card daily-accounting-expenses-card">
               <div className="daily-accounting-expenses-header">
                 <h3 className="daily-accounting-section-title">Expenses</h3>
                 <form onSubmit={handleAddExpense} className="daily-accounting-add-expense-form daily-accounting-add-expense-form-stacked">
@@ -807,13 +824,13 @@ const DailyAccountingPage = () => {
                   <p className="daily-accounting-total-row">Total: ₹{totalExpenses.toFixed(2)}</p>
                 )}
               </div>
-            </div>
+            </div>}
 
             <div className="daily-accounting-card daily-accounting-payment-totals-card">
               <h3 className="daily-accounting-section-title">Payment Totals</h3>
 
               <div className="daily-accounting-payment-blocks">
-                <div className="daily-accounting-payment-block">
+                {!dayCloseCleared && <div className="daily-accounting-payment-block">
                   <div className="daily-accounting-payment-block-header">
                     <span className="daily-accounting-payment-block-title">Card</span>
                     <span className="daily-accounting-payment-total">Total: ₹{totalCardManual.toFixed(2)}</span>
@@ -854,9 +871,9 @@ const DailyAccountingPage = () => {
                       ))}
                     </ul>
                   )}
-                </div>
+                </div>}
 
-                <div className="daily-accounting-payment-block">
+                {!dayCloseCleared && <div className="daily-accounting-payment-block">
                   <div className="daily-accounting-payment-block-header">
                     <span className="daily-accounting-payment-block-title">GPay / UPI</span>
                     <span className="daily-accounting-payment-total">Total: ₹{totalGpayManual.toFixed(2)}</span>
@@ -897,7 +914,7 @@ const DailyAccountingPage = () => {
                       ))}
                     </ul>
                   )}
-                </div>
+                </div>}
 
                 <div className="daily-accounting-payment-block daily-accounting-payment-block-cash">
                   <div className="daily-accounting-payment-row">
@@ -919,7 +936,7 @@ const DailyAccountingPage = () => {
             </div>
           </div>
 
-          <div className="daily-accounting-card daily-accounting-balance-card">
+          {!dayCloseCleared && <div className="daily-accounting-card daily-accounting-balance-card">
             <h3 className="daily-accounting-section-title">Balance Check</h3>
             <div className="daily-accounting-balance-rows">
               <div className="daily-accounting-balance-row">
@@ -946,7 +963,7 @@ const DailyAccountingPage = () => {
                 <span>{balanceResult < 0 ? 'more' : balanceResult > 0 ? 'shortage' : 'tally'}</span>
               </div>
             </div>
-          </div>
+          </div>}
         </>
       )}
     </div>

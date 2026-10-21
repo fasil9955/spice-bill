@@ -35,3 +35,34 @@ CREATE TABLE IF NOT EXISTS stock_lines (
 
 CREATE INDEX IF NOT EXISTS stock_lines_lookup
   ON stock_lines (shop_id, company_name, report_date);
+
+ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_total NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_cash NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_card NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS leftover_upi NUMERIC(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE daily_snapshots ADD COLUMN IF NOT EXISTS closing_cash NUMERIC(12,2) NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS expense_lines (
+  shop_id TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  report_date DATE NOT NULL,
+  item_name TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  payment_method TEXT,
+  account_type TEXT
+);
+
+CREATE TABLE IF NOT EXISTS employee_lines (
+  shop_id TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  report_date DATE NOT NULL,
+  employee_name TEXT NOT NULL,
+  employee_code TEXT,
+  phone TEXT,
+  designation TEXT,
+  salary_month TEXT,
+  salary NUMERIC(12,2) NOT NULL DEFAULT 0,
+  taken NUMERIC(12,2) NOT NULL DEFAULT 0,
+  net_pay NUMERIC(12,2) NOT NULL DEFAULT 0,
+  closing_balance NUMERIC(12,2) NOT NULL DEFAULT 0
+);

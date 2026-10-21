@@ -37,8 +37,13 @@ const AppUpdateCard = ({ embedded = false }) => {
         setBusy(false);
         return;
       }
-      setError('Restarting… Wait a few seconds, then refresh this page.');
+      setError('Restarting… Wait about 20 seconds, then refresh this page (F5).');
     } catch (err) {
+      const status = err.response?.status;
+      if (!err.response || status === 500 || err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK') {
+        setError('Billing is restarting. Wait about 20 seconds, then refresh this page (F5).');
+        return;
+      }
       setError(err.response?.data?.error || 'Update failed. Check internet and logs/spices-billing.log');
       setBusy(false);
     }
