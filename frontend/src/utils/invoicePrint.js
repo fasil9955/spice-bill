@@ -76,6 +76,58 @@ export function getStateLabel(code) {
   return STATE_CODES[two] ? `${two}-${STATE_CODES[two]}` : (s.length <= 2 ? s : two);
 }
 
+export function formatGstRate(n) {
+  const x = Number(n) || 0;
+  if (Number.isInteger(x)) return String(x);
+  return String(Math.round(x * 100) / 100);
+}
+
+/** Same-state vs other-state GST (IGST when buyer GSTIN state differs from seller). */
+export function b2bUseIgst(sellerGst, customer = {}) {
+  const sellerCode = (sellerGst || '').substring(0, 2);
+  const buyerCode = (customer.stateCode || (customer.gstNumber || '').substring(0, 2) || '').toString();
+  return sellerCode.length === 2 && buyerCode.length >= 2 && sellerCode !== buyerCode.substring(0, 2);
+}
+
+/** Group B2B line tax by GST rate for invoice totals (5%, 12%, 18%, …). */
+export function b2bGstBreakup(items) {
+  const byRate = new Map();
+  (items || []).forEach((it) => {
+    const qty = Number(it.quantity) || 0;
+    const unitPrice = Number(it.unitPrice ?? it.sellingPricePerUnit ?? 0);
+    const gstPct = Number(it.gstPercentage) || 0;
+    const taxable = unitPrice * qty;
+    const gst = taxable * (gstPct / 100);
+    const prev = byRate.get(gstPct) || { rate: gstPct, taxable: 0, gst: 0 };
+    prev.taxable += taxable;
+    prev.gst += gst;
+    byRate.set(gstPct, prev);
+  });
+  return [...byRate.values()]
+    .filter((row) => row.gst > 0.000001)
+    .sort((a, b) => a.rate - b.rate)
+    .map((row) => {
+      const gst = Math.round(row.gst * 100) / 100;
+      const cgst = Math.round((gst / 2) * 100) / 100;
+      return {
+        rate: row.rate,
+        taxable: Math.round(row.taxable * 100) / 100,
+        gst,
+        cgst,
+        sgst: Math.round((gst - cgst) * 100) / 100,
+      };
+    });
+}
+
+export function b2bGstSummaryLines(items, useIgst) {
+  return b2bGstBreakup(items).map((row) => {
+    if (useIgst) {
+      return { label: `IGST @ ${formatGstRate(row.rate)}%`, amount: row.gst };
+    }
+    return { label: `GST @ ${formatGstRate(row.rate)}%`, amount: row.gst };
+  });
+}
+
 /** Convert number to words for Indian Rupees (integer part only, for display). */
 export function numberToWordsRupees(n) {
   const num = Math.round(Number(n)) || 0;
@@ -240,14 +292,10 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
       </tr>
     `;
 
-    const taxPercent = subtotal > 0 && gstTotal > 0 ? Math.round((gstTotal * 100) / subtotal) : 0;
-    const gstPercentLabel = taxPercent > 0 ? `${taxPercent}%` : (items.length === 1 && items[0].gstPercentage != null
-      ? `${Math.round(Number(items[0].gstPercentage))}%`
-      : 'GST');
-    const sellerCode = (companyGst || '').substring(0, 2);
-    const buyerCode = (customer.stateCode || (customer.gstNumber || '').substring(0, 2) || '').toString();
-    const useIgst = sellerCode.length === 2 && buyerCode.length >= 2 && sellerCode !== buyerCode.substring(0, 2);
-    const taxSummaryLabel = useIgst ? `IGST (${gstPercentLabel})` : `GST (${gstPercentLabel})`;
+    const useIgst = b2bUseIgst(companyGst, customer);
+    const gstSummaryHtml = b2bGstSummaryLines(items, useIgst)
+      .map((line) => `<div class="b2b-summary-line"><span>${line.label}:</span><span>₹${line.amount.toFixed(2)}</span></div>`)
+      .join('');
 
     const amountInWords = numberToWordsRupees(totalAmount);
 
@@ -445,7 +493,6 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               <div class="b2b-company-name">${(companyName || '').replace(/</g, '&lt;')}</div>
               ${companyAddress ? `<div class="b2b-company-address">${formatPrintMultiline(companyAddress)}</div>` : ''}
               ${companyPhone ? `<div class="b2b-company-meta">Phone No.: ${formatPrintMultiline(companyPhone)}</div>` : ''}
-              ${companyPhone ? `<div class="b2b-company-meta">Phone No.: ${companyPhone.replace(/</g, '&lt;')}</div>` : ''}
               ${companyGst ? `<div class="b2b-company-meta">GSTIN: ${companyGst.replace(/</g, '&lt;')}</div>` : ''}
               ${companyState ? `<div class="b2b-company-meta">State: ${companyState.replace(/</g, '&lt;')}</div>` : ''}
             </div>
@@ -502,7 +549,7 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
               </div>
               <div class="b2b-summary-box">
                 <div class="b2b-summary-line"><span>Sub Total (taxable):</span><span>₹${subtotal.toFixed(2)}</span></div>
-                ${gstTotal > 0 ? `<div class="b2b-summary-line"><span>${taxSummaryLabel}:</span><span>₹${gstTotal.toFixed(2)}</span></div>` : ''}
+                ${gstSummaryHtml}
                 ${discountAmt > 0 ? `<div class="b2b-summary-line"><span>Discount:</span><span>- ₹${discountAmt.toFixed(2)}</span></div>` : ''}
                 <div class="b2b-summary-line total"><span>Total:</span><span>₹${totalAmount.toFixed(2)}</span></div>
               </div>
@@ -516,18 +563,6 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         </body>
       </html>
     `;
-    if (twoCopies) {
-      const sheetStart = html.indexOf('<div class="a4-root">');
-      const sheetEnd = html.lastIndexOf('</body>');
-      if (sheetStart >= 0 && sheetEnd > sheetStart) {
-        const sheet = html.slice(sheetStart, sheetEnd);
-        const gate = sheet.replace(
-          `<div class="b2b-title">${docTitle}</div>`,
-          `<p class="b2b-gate-pass-heading">GATE PASS</p><div class="b2b-title">${docTitle}</div>`
-        );
-        return html.replace('</body>', `<div class="b2b-copy-sep"></div>${gate}</body>`);
-      }
-    }
     return html;
   }
 
@@ -597,6 +632,8 @@ export function buildInvoicePrintHtml(invoice, options = {}) {
         <div class="btoc-meta">
           <div class="btoc-meta-row"><span>Invoice #:</span><span>${invoice.invoiceNumber || ''}</span></div>
           <div class="btoc-meta-row"><span>Date:</span><span>${createdAt}</span></div>
+          ${(invoice.customerName || '').trim() ? `<div class="btoc-meta-row"><span>Customer:</span><span>${String(invoice.customerName).trim().replace(/</g, '&lt;')}</span></div>` : ''}
+          ${(invoice.customerPhone || '').trim() ? `<div class="btoc-meta-row"><span>Mobile:</span><span>${String(invoice.customerPhone).trim().replace(/</g, '&lt;')}</span></div>` : ''}
         </div>
         <div class="btoc-divider-dashed"></div>
         <table class="btoc-items">

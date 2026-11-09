@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoiceService, authService, courierService } from '../services/api';
-import { buildInvoicePrintHtml, printHtmlViaIframe, shouldPrintGatePass } from '../utils/invoicePrint';
+import { buildInvoicePrintHtml, printHtmlViaIframe } from '../utils/invoicePrint';
 import { formatInvoicePayment } from '../utils/upiAccounts';
 import { ArrowLeft, Search, Printer, Trash2, Pencil, X, Truck, FileMinus, FilePlus } from 'lucide-react';
 
@@ -74,11 +74,9 @@ const B2BBillsPage = () => {
     try {
       const res = await invoiceService.getById(inv.invoiceId);
       let toPrint = res.data;
-      let printGatePass = true;
       try {
         const companyRes = await authService.getCompanyDetails();
         const company = companyRes?.data || {};
-        printGatePass = shouldPrintGatePass(company);
         toPrint = {
           ...toPrint,
           cashier: {
@@ -89,9 +87,7 @@ const B2BBillsPage = () => {
           }
         };
       } catch (e) { /* print with invoice data only */ }
-      const html = buildInvoicePrintHtml(toPrint, {
-        twoCopies: printGatePass && (toPrint.invoiceType || 'B2B') === 'B2B'
-      });
+      const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
       if (html) printHtmlViaIframe(html);
     } catch (err) {
       console.error('Failed to load invoice for print', err);

@@ -1016,6 +1016,8 @@ const Billing = () => {
         <div class="btoc-meta">
           <div class="btoc-meta-row"><span>Invoice #:</span><span>${invoice.invoiceNumber || ''}</span></div>
           <div class="btoc-meta-row"><span>Date:</span><span>${createdAt}</span></div>
+          ${(invoice.customerName || '').trim() ? `<div class="btoc-meta-row"><span>Customer:</span><span>${String(invoice.customerName).trim().replace(/</g, '&lt;')}</span></div>` : ''}
+          ${(invoice.customerPhone || '').trim() ? `<div class="btoc-meta-row"><span>Mobile:</span><span>${String(invoice.customerPhone).trim().replace(/</g, '&lt;')}</span></div>` : ''}
         </div>
         <div class="btoc-divider-dashed"></div>
         <table class="btoc-items">
@@ -2005,6 +2007,18 @@ const Billing = () => {
                   <span>Date:</span>
                   <span>{new Date(display.createdAt).toLocaleString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}</span>
                 </div>
+                {(display.customerName || '').trim() && (
+                  <div className="btoc-meta-row">
+                    <span>Customer:</span>
+                    <span>{display.customerName.trim()}</span>
+                  </div>
+                )}
+                {(display.customerPhone || '').trim() && (
+                  <div className="btoc-meta-row">
+                    <span>Mobile:</span>
+                    <span>{display.customerPhone.trim()}</span>
+                  </div>
+                )}
               </div>
               <div className="btoc-divider-dashed" />
               <table className="btoc-items-table">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { productService, invoiceService, authService, b2bCustomerService } from '../services/api';
-import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees, shouldPrintGatePass } from '../utils/invoicePrint';
+import { buildInvoicePrintHtml, printHtmlViaIframe, getStateLabel, numberToWordsRupees, b2bGstSummaryLines, b2bUseIgst } from '../utils/invoicePrint';
 import { broadcastDataUpdate } from '../utils/dataSync';
 import { encodeUpiAccountField, normalizeUpiAccounts } from '../utils/upiAccounts';
 import './Billing.css';
@@ -48,6 +48,7 @@ const B2BBilling = () => {
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [upiAccount, setUpiAccount] = useState('');
   const [upiAccounts, setUpiAccounts] = useState([]);
+  const [sellerGstNumber, setSellerGstNumber] = useState('');
   const [amounts, setAmounts] = useState({ cash: 0, card: 0, upi: 0 });
   const [discountType, setDiscountType] = useState('percent');
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -142,6 +143,7 @@ const B2BBilling = () => {
     if (!editMode) fetchNextBillNumber();
     authService.getCompanyDetails().then((res) => {
       setUpiAccounts(normalizeUpiAccounts(res?.data?.upiAccounts));
+      setSellerGstNumber((res?.data?.gstNumber || '').trim());
     }).catch(() => {});
   }, [editMode, noteKind]);
 
@@ -714,11 +716,9 @@ const B2BBilling = () => {
   const handlePrintInvoice = async (invoice) => {
     if (!invoice) return;
     let toPrint = invoice;
-    let printGatePass = true;
     try {
       const companyRes = await authService.getCompanyDetails();
       const company = companyRes?.data || {};
-      printGatePass = shouldPrintGatePass(company);
       const cashier = invoice.cashier || {};
       toPrint = {
         ...invoice,
@@ -735,9 +735,7 @@ const B2BBilling = () => {
         }
       };
     } catch {}
-    const html = buildInvoicePrintHtml(toPrint, {
-      twoCopies: printGatePass && (toPrint.invoiceType || 'B2B') === 'B2B'
-    });
+    const html = buildInvoicePrintHtml(toPrint, { twoCopies: false });
     if (html) printHtmlViaIframe(html);
   };
 
@@ -965,7 +963,7 @@ const B2BBilling = () => {
         discountAmount: parseFloat(discountVal.toFixed(2)),
         totalAmount: parseFloat(total.toFixed(2))
       };
-      const html = buildInvoicePrintHtml(draft, { twoCopies: shouldPrintGatePass(company) });
+      const html = buildInvoicePrintHtml(draft, { twoCopies: false });
       if (html) printHtmlViaIframe(html);
     } catch (err) {
       alert(err?.message || 'Failed to print');
@@ -974,7 +972,7 @@ const B2BBilling = () => {
     }
   };
 
-  const cartGstB2B = calculateCartGstB2B();
+  const cartGstLines = b2bGstSummaryLines(cart, b2bUseIgst(sellerGstNumber, selectedCustomer || {}));
   const isDraft = !!previewDraft;
 
   if ((editMode || noteMode) && editLoading) {
@@ -1289,12 +1287,12 @@ const B2BBilling = () => {
                 <span>Subtotal (taxable)</span>
                 <span>₹{calculateSubtotalB2B().toFixed(2)}</span>
               </div>
-              {cartGstB2B > 0 && (
-                <div className="totals-row">
-                  <span>GST</span>
-                  <span>₹{cartGstB2B.toFixed(2)}</span>
+              {cartGstLines.map((line) => (
+                <div className="totals-row" key={line.label}>
+                  <span>{line.label}</span>
+                  <span>₹{line.amount.toFixed(2)}</span>
                 </div>
-              )}
+              ))}
               {getDiscountValue() > 0 && (
                 <div className="totals-row totals-discount">
                   <span>Discount{discountType === 'percent' ? ` (${Math.min(Number(discountPercent) || 0, DISCOUNT_PERCENT_MAX)}%)` : ''}</span>
@@ -1512,10 +1510,7 @@ const B2BBilling = () => {
         const gstTotal = Math.round(calcGstTotal * 100) / 100;
         const discountAmt = Number(draft.discountAmount) || 0;
         const totalAmt = Math.round((subtotal + gstTotal - discountAmt) * 100) / 100;
-        const taxPct = subtotal > 0 && gstTotal > 0 ? Math.round((gstTotal * 100) / subtotal) : 0;
-        const sellerCode = (draft.cashier?.gstNumber || '').substring(0, 2);
-        const buyerCode = (cust?.stateCode || (cust?.gstNumber || '').substring(0, 2) || '').toString();
-        const useIgst = sellerCode.length === 2 && buyerCode.length >= 2 && sellerCode !== buyerCode.substring(0, 2);
+        const gstLines = b2bGstSummaryLines(draft.items || [], b2bUseIgst(draft.cashier?.gstNumber, cust || {}));
         const origDateRaw = draft.originalInvoiceDate ? String(draft.originalInvoiceDate) : '';
         const origDateDisp = /^\d{4}-\d{2}-\d{2}/.test(origDateRaw)
           ? origDateRaw.slice(0, 10).split('-').reverse().join('/')
@@ -1645,9 +1640,12 @@ const B2BBilling = () => {
                     </div>
                     <div className="b2b-old-summary-box">
                       <div className="b2b-old-summary-line"><span>Sub Total (taxable):</span><span>₹{subtotal.toFixed(2)}</span></div>
-                      {gstTotal > 0 && (
-                        <div className="b2b-old-summary-line"><span>{useIgst ? `IGST (${taxPct}%)` : `GST (${taxPct}%)`}:</span><span>₹{gstTotal.toFixed(2)}</span></div>
-                      )}
+                      {gstLines.map((line) => (
+                        <div className="b2b-old-summary-line" key={line.label}>
+                          <span>{line.label}:</span>
+                          <span>₹{line.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
                       {discountAmt > 0 && (
                         <div className="b2b-old-summary-line"><span>Discount:</span><span>- ₹{discountAmt.toFixed(2)}</span></div>
                       )}
