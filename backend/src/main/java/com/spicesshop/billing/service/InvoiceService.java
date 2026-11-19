@@ -9,6 +9,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -681,7 +682,7 @@ public class InvoiceService {
         if (date == null) {
             throw new RuntimeException("Date is required");
         }
-        return deleteRetailCashInvoicesForDates(companyName, date, date);
+        return deleteRetailInvoicesForDates(companyName, date, date, 0, true, false, false);
     }
 
     /**
@@ -690,21 +691,48 @@ public class InvoiceService {
      */
     @Transactional(timeout = 180)
     public Map<String, Object> deleteRetailCashInvoicesForDates(String companyName, LocalDate from, LocalDate to) {
+        return deleteRetailInvoicesForDates(companyName, from, to, 0, true, false, false);
+    }
+
+    /**
+     * Permanently removes matching retail (B2C) bills in the date range, keeping the
+     * {@code keepSmallestPerDay} smallest bills on each calendar day. B2B is never touched.
+     * Stock is not restored.
+     */
+    @Transactional(timeout = 180)
+    public Map<String, Object> deleteRetailInvoicesForDates(
+        String companyName,
+        LocalDate from,
+        LocalDate to,
+        int keepSmallestPerDay,
+        boolean cash,
+        boolean card,
+        boolean upi
+    ) {
         if (from == null || to == null) {
             throw new RuntimeException("From date and to date are required");
         }
         if (to.isBefore(from)) {
             throw new RuntimeException("To date cannot be before from date");
         }
+        if (!cash && !card && !upi) {
+            throw new RuntimeException("Select at least one payment type: cash, card, or UPI");
+        }
+        if (keepSmallestPerDay < 0 || keepSmallestPerDay > 50) {
+            throw new RuntimeException("Keep smallest per day must be between 0 and 50");
+        }
         List<Invoice> rangeInvoices = this.invoiceRepository.findByCompanyNameAndDateRange(
             companyName,
             from.atStartOfDay(),
             to.plusDays(1).atStartOfDay().minusNanos(1)
         );
-        Map<String, Object> result = removeRetailCashAndRenumber(companyName, rangeInvoices);
+        Map<String, Object> result = removeRetailBillsKeepSmallest(
+            companyName, rangeInvoices, keepSmallestPerDay, cash, card, upi
+        );
         result.put("from", from.toString());
         result.put("to", to.toString());
         result.put("date", from.toString());
+        result.put("keepSmallestPerDay", keepSmallestPerDay);
         return result;
     }
 
@@ -721,11 +749,42 @@ public class InvoiceService {
     }
 
     private Map<String, Object> removeRetailCashAndRenumber(String companyName, List<Invoice> pool) {
-        List<Invoice> cashBills = pool.stream().filter(this::isRetailCashOnly).toList();
-        List<Invoice> mixedWithCash = pool.stream().filter(this::isRetailMixedWithCash).toList();
-        if (cashBills.isEmpty() && mixedWithCash.isEmpty()) {
+        return removeRetailBillsKeepSmallest(companyName, pool, 0, true, false, false);
+    }
+
+    private Map<String, Object> removeRetailBillsKeepSmallest(
+        String companyName,
+        List<Invoice> pool,
+        int keepSmallestPerDay,
+        boolean cash,
+        boolean card,
+        boolean upi
+    ) {
+        List<Invoice> eligible = pool.stream()
+            .filter(inv -> isRetailPaymentTarget(inv, cash, card, upi))
+            .toList();
+        Map<LocalDate, List<Invoice>> byDay = new java.util.TreeMap<>();
+        for (Invoice invoice : eligible) {
+            LocalDate d = invoice.getCreatedAt() != null ? invoice.getCreatedAt().toLocalDate() : LocalDate.now();
+            byDay.computeIfAbsent(d, k -> new ArrayList<>()).add(invoice);
+        }
+        List<Invoice> toDelete = new ArrayList<>();
+        int kept = 0;
+        for (List<Invoice> dayBills : byDay.values()) {
+            dayBills.sort(Comparator
+                .comparing((Invoice inv) -> nzAmt(inv.getTotalAmount()))
+                .thenComparing(Invoice::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(Invoice::getInvoiceId, Comparator.nullsLast(Comparator.naturalOrder())));
+            int keep = Math.min(keepSmallestPerDay, dayBills.size());
+            kept += keep;
+            if (keep < dayBills.size()) {
+                toDelete.addAll(dayBills.subList(keep, dayBills.size()));
+            }
+        }
+        if (toDelete.isEmpty()) {
             Map<String, Object> empty = new LinkedHashMap<>();
             empty.put("deleted", 0);
+            empty.put("kept", kept);
             empty.put("mixedAdjusted", 0);
             empty.put("stockRestoredBills", 0);
             empty.put("nextPreview", peekNextInvoiceNumber(companyName, "RETAIL"));
@@ -734,17 +793,8 @@ public class InvoiceService {
         }
         java.util.Set<LocalDate> days = new java.util.HashSet<>();
         java.util.Set<String> months = new java.util.HashSet<>();
-        int mixedAdjusted = 0;
         int deleted = 0;
-        for (Invoice invoice : mixedWithCash) {
-            noteCashRemovalDay(invoice, days, months);
-            if (stripCashKeepOtherPayments(invoice)) {
-                deleted++;
-            } else {
-                mixedAdjusted++;
-            }
-        }
-        for (Invoice invoice : cashBills) {
+        for (Invoice invoice : toDelete) {
             noteCashRemovalDay(invoice, days, months);
             permanentlyDeleteRetailInvoice(invoice);
             deleted++;
@@ -762,22 +812,38 @@ public class InvoiceService {
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("deleted", deleted);
-        result.put("mixedAdjusted", mixedAdjusted);
+        result.put("kept", kept);
+        result.put("mixedAdjusted", 0);
         result.put("stockRestoredBills", 0);
         result.put("nextPreview", aligned.get("nextPreview"));
         result.put("renumbered", aligned.get("updated"));
         return result;
     }
 
-    private boolean isRetailCashOnly(Invoice invoice) {
-        return !Invoice.isB2bFamily(invoice.getInvoiceType())
-            && invoice.getPaymentMethod() == Invoice.PaymentMethod.CASH;
-    }
-
-    private boolean isRetailMixedWithCash(Invoice invoice) {
-        return !Invoice.isB2bFamily(invoice.getInvoiceType())
-            && invoice.getPaymentMethod() == Invoice.PaymentMethod.MIXED
-            && nzAmt(invoice.getCashAmount()).compareTo(BigDecimal.ZERO) > 0;
+    private boolean isRetailPaymentTarget(Invoice invoice, boolean cash, boolean card, boolean upi) {
+        if (invoice == null || Invoice.isB2bFamily(invoice.getInvoiceType())) {
+            return false;
+        }
+        if (invoice.getStatus() != null && invoice.getStatus() != Invoice.InvoiceStatus.ACTIVE) {
+            return false;
+        }
+        Invoice.PaymentMethod method = invoice.getPaymentMethod();
+        if (method == Invoice.PaymentMethod.CASH) {
+            return cash;
+        }
+        if (method == Invoice.PaymentMethod.CARD) {
+            return card;
+        }
+        if (method == Invoice.PaymentMethod.UPI) {
+            return upi;
+        }
+        if (method == Invoice.PaymentMethod.MIXED) {
+            boolean mixedCash = cash && nzAmt(invoice.getCashAmount()).compareTo(BigDecimal.ZERO) > 0;
+            boolean mixedCard = card && nzAmt(invoice.getCardAmount()).compareTo(BigDecimal.ZERO) > 0;
+            boolean mixedUpi = upi && nzAmt(invoice.getUpiAmount()).compareTo(BigDecimal.ZERO) > 0;
+            return mixedCash || mixedCard || mixedUpi;
+        }
+        return false;
     }
 
     private static void noteCashRemovalDay(Invoice invoice, java.util.Set<LocalDate> days, java.util.Set<String> months) {

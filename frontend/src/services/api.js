@@ -91,12 +91,21 @@ export const invoiceService = {
   alignRetailGstNumbers: () => api.post('/invoices/retail/align-gst-numbers', {}, { timeout: 180000 }),
   recalculateRetailGst: () => api.post('/invoices/retail/recalculate-gst', {}, { timeout: 180000 }),
   deleteCashBillsForDate: (date) => api.post(`/invoices/retail/cash-bills/delete?date=${encodeURIComponent(date)}`, {}, { timeout: 180000 }),
-  deleteCashBillsForDates: (from, to) =>
-    api.post(
-      `/invoices/retail/cash-bills/delete?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-      {},
-      { timeout: 180000 }
-    ),
+  deleteCashBillsForDates: (from, to, options = {}) => {
+    const keepSmallest = options.keepSmallest ?? 12;
+    const cash = options.cash !== false;
+    const card = options.card !== false;
+    const upi = options.upi !== false;
+    const params = new URLSearchParams({
+      from,
+      to,
+      keepSmallest: String(keepSmallest),
+      cash: String(cash),
+      card: String(card),
+      upi: String(upi),
+    });
+    return api.post(`/invoices/retail/cash-bills/delete?${params.toString()}`, {}, { timeout: 180000 });
+  },
   deleteAllCashBills: () => api.post('/invoices/retail/cash-bills/delete-all', {}, { timeout: 180000 }),
 };
 

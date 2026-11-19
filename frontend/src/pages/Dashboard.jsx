@@ -34,17 +34,30 @@ import UtilitiesPage from './UtilitiesPage';
 import './Dashboard.css';
 
 // Sub-components for the Dashboard Grid – styled like old spices dashboard
-const DashboardHome = ({ user, menuItems }) => {
+const DashboardHome = ({ user, menuItems, hiddenMenuItems = [] }) => {
   const navigate = useNavigate();
   const isAdmin = user.role === 'ADMIN';
   const companyName = user.companyName || user.company || '—';
+  const [showHiddenReports, setShowHiddenReports] = useState(false);
+  const visibleItems = showHiddenReports ? [...menuItems, ...hiddenMenuItems] : menuItems;
 
   return (
     <div className="dashboard-content">
       <div className="dashboard-main-area">
         <div className="dashboard-header-wrap">
           <div className="dashboard-header">
-            <h1>Welcome to your Dashboard!</h1>
+            <div className="dashboard-welcome-row">
+              {isAdmin && hiddenMenuItems.length > 0 && (
+                <button
+                  type="button"
+                  className="dashboard-hidden-reports-hit"
+                  aria-label="Show reports"
+                  title=""
+                  onClick={() => setShowHiddenReports((v) => !v)}
+                />
+              )}
+              <h1>Welcome to your Dashboard!</h1>
+            </div>
             <p className="dashboard-subtitle">Manage your spices business efficiently</p>
           </div>
           <div className="dashboard-header-actions">
@@ -69,7 +82,7 @@ const DashboardHome = ({ user, menuItems }) => {
         </h2>
 
         <div className="dashboard-feature-cards">
-          {menuItems.map((item) => (
+          {visibleItems.map((item) => (
             <div
               key={item.path}
               className="dashboard-feature-card"
@@ -113,8 +126,6 @@ const Dashboard = () => {
     { path: '/dashboard/attendance', displayIcon: '📅', label: 'Attendance', description: 'View and mark daily attendance' },
     { path: '/dashboard/courier', displayIcon: '🚚', label: 'Courier', description: 'Track courier requests' },
     { path: '/dashboard/accounting', displayIcon: '💰', label: 'Accounting & Day Close', description: 'Daily accounting and payment splits' },
-    { path: '/dashboard/boss-report', displayIcon: '📈', label: 'Boss Report', description: 'Most sale items, selected products and reorder stock' },
-    { path: '/dashboard/reports', displayIcon: '📊', label: 'Reports', description: 'Sales, GST and accounting reports' },
     { path: '/dashboard/settings', displayIcon: '⚙️', label: 'Settings', description: 'Company and system configuration' },
     { path: '/dashboard/utilities', displayIcon: '🧰', label: 'Utilities', description: 'Check for updates and report a problem' },
   ];
@@ -131,7 +142,12 @@ const Dashboard = () => {
     { path: '/dashboard/utilities', displayIcon: '🧰', label: 'Utilities', description: 'Check for updates and report a problem' },
   ];
 
+  const hiddenAdminMenu = [
+    { path: '/dashboard/boss-report', displayIcon: '📈', label: 'Boss Report', description: 'Most sale items, selected products and reorder stock' },
+    { path: '/dashboard/reports', displayIcon: '📊', label: 'Reports', description: 'Sales, GST and accounting reports' },
+  ];
   const menuItems = isAdmin ? adminMenu : cashierMenu;
+  const hiddenMenuItems = isAdmin ? hiddenAdminMenu : [];
 
   return (
     <div className="dashboard-container">
@@ -139,7 +155,7 @@ const Dashboard = () => {
         <Routes>
           {/* B2B edit is handled at App level so /dashboard/b2b/edit/:id always renders */}
           <Route path="/dashboard" element={<Outlet />}>
-            <Route index element={<DashboardHome user={user} menuItems={menuItems} />} />
+            <Route index element={<DashboardHome user={user} menuItems={menuItems} hiddenMenuItems={hiddenMenuItems} />} />
             <Route path="b2b" element={<B2BBilling />} />
             <Route path="b2b-bills" element={<B2BBillsPage />} />
             <Route path="billing" element={<Billing />} />
@@ -160,7 +176,7 @@ const Dashboard = () => {
             <Route path="utilities" element={<UtilitiesPage />} />
           </Route>
           {/* Fallback for /dashboard so direct visit to /dashboard shows home */}
-          <Route path="/" element={<DashboardHome user={user} menuItems={menuItems} />} />
+          <Route path="/" element={<DashboardHome user={user} menuItems={menuItems} hiddenMenuItems={hiddenMenuItems} />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/inventory-view" element={<Inventory />} />
           <Route path="/categories" element={<Categories />} />

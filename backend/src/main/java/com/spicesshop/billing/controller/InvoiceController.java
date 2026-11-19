@@ -425,6 +425,10 @@ public class InvoiceController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "12") int keepSmallest,
+            @RequestParam(defaultValue = "true") boolean cash,
+            @RequestParam(defaultValue = "true") boolean card,
+            @RequestParam(defaultValue = "true") boolean upi,
             HttpServletRequest request) {
         try {
             String companyName = this.companyExtractor.extractCompanyFromRequest(request);
@@ -432,10 +436,12 @@ public class InvoiceController {
                 return ResponseEntity.status(401).body(Map.of("error", "Company name not found in token"));
             }
             if (from != null && to != null) {
-                return ResponseEntity.ok(this.invoiceService.deleteRetailCashInvoicesForDates(companyName, from, to));
+                return ResponseEntity.ok(this.invoiceService.deleteRetailInvoicesForDates(
+                    companyName, from, to, keepSmallest, cash, card, upi));
             }
             if (date != null) {
-                return ResponseEntity.ok(this.invoiceService.deleteRetailCashInvoicesForDate(companyName, date));
+                return ResponseEntity.ok(this.invoiceService.deleteRetailInvoicesForDates(
+                    companyName, date, date, keepSmallest, cash, card, upi));
             }
             return ResponseEntity.badRequest().body(Map.of("error", "Select from and to dates"));
         } catch (Exception e) {

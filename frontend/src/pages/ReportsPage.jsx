@@ -35,6 +35,10 @@ const ReportsPage = () => {
   const [toolsBusy, setToolsBusy] = useState(false);
   const [toolsMsg, setToolsMsg] = useState('');
   const [toolsErr, setToolsErr] = useState('');
+  const [keepSmallest, setKeepSmallest] = useState(12);
+  const [delCash, setDelCash] = useState(true);
+  const [delCard, setDelCard] = useState(true);
+  const [delUpi, setDelUpi] = useState(true);
   const [split5, setSplit5] = useState('');
   const [split18, setSplit18] = useState('');
 
@@ -134,31 +138,46 @@ const ReportsPage = () => {
       setToolsErr('To date cannot be before from date.');
       return;
     }
+    if (!delCash && !delCard && !delUpi) {
+      setToolsErr('Tick Cash, Card, or UPI.');
+      return;
+    }
+    const keep = Math.min(50, Math.max(1, parseInt(keepSmallest, 10) || 12));
+    const types = [
+      delCash ? 'Cash' : null,
+      delCard ? 'Card' : null,
+      delUpi ? 'UPI' : null,
+    ].filter(Boolean).join(', ');
+    if (!window.confirm(
+      `Permanently delete retail ${types} bills from ${fromDate} to ${toDate}?\n\n` +
+      `Each day keeps the ${keep} smallest bills. B2B is not deleted. Stock is not added back.\n\n` +
+      `This cannot be undone.`
+    )) {
+      return;
+    }
     setToolsBusy(true);
     setToolsErr('');
     setToolsMsg('');
     try {
-      const res = await invoiceService.deleteCashBillsForDates(fromDate, toDate);
+      const res = await invoiceService.deleteCashBillsForDates(fromDate, toDate, {
+        keepSmallest: keep,
+        cash: delCash,
+        card: delCard,
+        upi: delUpi,
+      });
       const deleted = res.data?.deleted ?? 0;
-      const mixedAdjusted = res.data?.mixedAdjusted ?? 0;
+      const kept = res.data?.kept ?? 0;
       const nextPreview = res.data?.nextPreview || '';
       const renumbered = res.data?.renumbered ?? 0;
-      const parts = [];
-      if (deleted > 0) parts.push(`Deleted ${deleted} cash bill(s)`);
-      if (mixedAdjusted > 0) {
-        parts.push(
-          `removed cash from ${mixedAdjusted} mixed bill(s); those bills now equal card/UPI only`
-        );
-      }
       setToolsMsg(
-        parts.length === 0
-          ? `No cash or mixed-with-cash bills in that date range. You can still re-sequence numbers.`
-          : `${parts.join('. ')}. Remaining retail bills re-numbered (${renumbered}). Next bill: ${nextPreview}`
+        deleted === 0
+          ? `Nothing deleted. Each day already has ${keep} or fewer matching bills (${kept} kept). You can still re-sequence numbers.`
+          : `Deleted ${deleted} bill(s), kept ${kept} small bill(s) (${keep} per day). Remaining retail bills re-numbered (${renumbered}). Next bill: ${nextPreview}`
       );
       broadcastDataUpdate();
       await loadTaxSummary();
     } catch (err) {
-      setToolsErr(err.response?.data?.error || err.message || 'Failed to delete cash bills.');
+      setToolsErr(err.response?.data?.error || err.message || 'Failed to delete bills.');
     } finally {
       setToolsBusy(false);
     }
@@ -577,17 +596,22 @@ const ReportsPage = () => {
         <div className="reports-tools-overlay" role="dialog" aria-modal="true" aria-labelledby="reports-tools-title">
           <div className="reports-tools-modal" onClick={(e) => e.stopPropagation()}>
             <div className="reports-tools-modal-head">
-              <h2 id="reports-tools-title">Cash bills</h2>
+              <h2 id="reports-tools-title">Retail bills</h2>
               <button type="button" className="reports-tools-close" onClick={closeTools} disabled={toolsBusy} aria-label="Close">
                 <X size={20} />
               </button>
             </div>
-            <p className="reports-tools-step">1. Delete cash bills by date</p>
+            <p className="reports-tools-step">1. Delete retail bills by date</p>
             <p className="reports-desc">
-              Permanently deletes retail bills paid fully as <strong>Cash</strong> between the dates.
-              Mixed bills that include cash are kept, with the cash part removed so the bill total
-              matches card/UPI only. Pure card, UPI, and B2B are unchanged. Stock is not added back.
+              Permanently deletes retail (B2C) bills of the ticked payment types between the dates.
+              Each day <strong>keeps the smallest bills</strong> (default 12, use 10–15).
+              B2B is never deleted. Stock is not added back.
             </p>
+            <div className="reports-tools-pays">
+              <label><input type="checkbox" checked={delCash} disabled={toolsBusy} onChange={(e) => setDelCash(e.target.checked)} /> Cash</label>
+              <label><input type="checkbox" checked={delCard} disabled={toolsBusy} onChange={(e) => setDelCard(e.target.checked)} /> Card</label>
+              <label><input type="checkbox" checked={delUpi} disabled={toolsBusy} onChange={(e) => setDelUpi(e.target.checked)} /> UPI</label>
+            </div>
             <div className="reports-tools-dates">
               <label>
                 From
@@ -597,6 +621,17 @@ const ReportsPage = () => {
                 To
                 <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} disabled={toolsBusy} />
               </label>
+              <label>
+                Keep smallest bills each day
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={keepSmallest}
+                  disabled={toolsBusy}
+                  onChange={(e) => setKeepSmallest(e.target.value)}
+                />
+              </label>
             </div>
             <button
               type="button"
@@ -604,7 +639,7 @@ const ReportsPage = () => {
               onClick={handleDeleteCashBillsRange}
               disabled={toolsBusy}
             >
-              {toolsBusy ? 'Working…' : 'Delete cash bills'}
+              {toolsBusy ? 'Working…' : 'Delete bills, keep small ones'}
             </button>
             <p className="reports-tools-step">2. Re-sequence numbers</p>
             <p className="reports-desc">
