@@ -175,16 +175,26 @@ public class GSTR1ExportService {
         out.put("b2cFromBills5", taxableAtRate(fromBills, 5).doubleValue());
         out.put("b2cFromBills18", taxableAtRate(fromBills, 18).doubleValue());
         out.put("b2cFromBillsOther", remaining.subtract(taxableAtRate(fromBills, 5)).subtract(taxableAtRate(fromBills, 18)).doubleValue());
-        boolean applied = b2cGstSplitRepository.findByCompanyNameAndYearAndMonth(companyName, year, month).isPresent();
+        boolean applied = b2cGstSplitRepository.findByCompanyNameAndYearAndMonth(companyName, year, month)
+            .filter(split -> splitMatchesRemaining(split, remaining))
+            .isPresent();
         out.put("b2cSplitApplied", applied);
         out.put("b2cTaxable5", taxableAtRate(usedRows, 5).doubleValue());
         out.put("b2cTaxable18", taxableAtRate(usedRows, 18).doubleValue());
     }
 
     private List<B2CSummaryRow> applyB2cSplitOverride(String companyName, int year, int month, List<B2CSummaryRow> fromBills) {
+        BigDecimal remaining = taxableTotal(fromBills);
         return b2cGstSplitRepository.findByCompanyNameAndYearAndMonth(companyName, year, month)
+            .filter(split -> splitMatchesRemaining(split, remaining))
             .map(split -> rowsFromSplit(nvl(split.getTaxable5()), nvl(split.getTaxable18())))
             .orElse(fromBills);
+    }
+
+    private boolean splitMatchesRemaining(B2cGstSplit split, BigDecimal remaining) {
+        BigDecimal splitTotal = nvl(split.getTaxable5()).add(nvl(split.getTaxable18())).setScale(2, RoundingMode.HALF_UP);
+        return splitTotal.subtract(nvl(remaining).setScale(2, RoundingMode.HALF_UP)).abs()
+            .compareTo(new BigDecimal("0.02")) <= 0;
     }
 
     private List<B2CSummaryRow> rowsFromSplit(BigDecimal taxable5, BigDecimal taxable18) {

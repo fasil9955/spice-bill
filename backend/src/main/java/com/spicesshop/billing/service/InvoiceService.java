@@ -48,6 +48,9 @@ public class InvoiceService {
     @Autowired
     private ReportService reportService;
 
+    @Autowired
+    private B2cGstSplitRepository b2cGstSplitRepository;
+
     private final ReentrantLock retailNumberAlignLock = new ReentrantLock();
     private final ReentrantLock retailGstRecalcLock = new ReentrantLock();
 
@@ -808,7 +811,10 @@ public class InvoiceService {
         }
         for (String ym : months) {
             String[] p = ym.split("-");
-            this.reportService.generateMonthlyReport(Integer.parseInt(p[0]), Integer.parseInt(p[1]), companyName);
+            int y = Integer.parseInt(p[0]);
+            int m = Integer.parseInt(p[1]);
+            this.b2cGstSplitRepository.deleteByCompanyNameAndYearAndMonth(companyName, y, m);
+            this.reportService.generateMonthlyReport(y, m, companyName);
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("deleted", deleted);

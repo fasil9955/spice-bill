@@ -8,4 +8,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface B2cGstSplitRepository extends JpaRepository<B2cGstSplit, Integer> {
     Optional<B2cGstSplit> findByCompanyNameAndYearAndMonth(String companyName, Integer year, Integer month);
+
+    void deleteByCompanyNameAndYearAndMonth(String companyName, Integer year, Integer month);
 }
